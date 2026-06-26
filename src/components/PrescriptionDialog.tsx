@@ -6,8 +6,6 @@ import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Printer, Download, X } from "lucide-react";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { toast } from "sonner";
 
 interface Props {
@@ -34,6 +32,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     if (!ref.current) return;
     toast.loading("Generating PDF...", { id: "pdf" });
     try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
       const canvas = await html2canvas(ref.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
       const img = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
