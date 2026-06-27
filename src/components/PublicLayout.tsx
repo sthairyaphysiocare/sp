@@ -41,9 +41,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {n.label}
               </Link>
             ))}
-            <Link to={user ? "/app" : "/auth"} className="ml-2">
+            <Link to={signedIn ? "/app" : "/auth"} className="ml-2">
               <Button className="brand-gradient text-white border-0">
-                {user ? "Open Dashboard" : "Staff Login"}
+                {signedIn ? "Open Dashboard" : "Staff Login"}
               </Button>
             </Link>
           </nav>
@@ -67,9 +67,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {n.label}
               </Link>
             ))}
-            <Link to={user ? "/app" : "/auth"} onClick={() => setOpen(false)} className="block">
+            <Link to={signedIn ? "/app" : "/auth"} onClick={() => setOpen(false)} className="block">
               <Button className="w-full brand-gradient text-white border-0">
-                {user ? "Open Dashboard" : "Staff Login"}
+                {signedIn ? "Open Dashboard" : "Staff Login"}
               </Button>
             </Link>
           </div>
