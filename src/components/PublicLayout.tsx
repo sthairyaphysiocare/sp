@@ -93,7 +93,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div>
             <h4 className="text-sm font-semibold mb-3">Visit Us</h4>
             <p className="text-sm text-background/70">{CLINIC.address}</p>
-            <p className="text-xs text-background/50 mt-2">Map: {CLINIC.mapRef}</p>
+            <a
+              href={CLINIC.mapUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-2 underline-offset-2 hover:underline"
+            >
+              View on Google Maps <ExternalLink className="size-3" />
+            </a>
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Contact</h4>
