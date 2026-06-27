@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
-import type { Booking, ClinicalNote, Patient, User, Visit, Role } from "./types";
+import type { AppSettings, BlockedSlot, Booking, ClinicalNote, Patient, User, Visit, Role } from "./types";
 
-const KEY = "sthairya.db.v1";
+const KEY = "sthairya.db.v2";
 
 interface DB {
   users: User[];
@@ -9,13 +9,15 @@ interface DB {
   visits: Visit[];
   notes: ClinicalNote[];
   bookings: Booking[];
+  blocked: BlockedSlot[];
+  settings: AppSettings;
   session: { userId: string | null };
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: "u1", email: "admin@sthairya.com", name: "Dr. Admin", role: "admin", password: "password" },
-  { id: "u2", email: "therapist@sthairya.com", name: "Dr. Plinija", role: "therapist", password: "password" },
-  { id: "u3", email: "reception@sthairya.com", name: "Reception Desk", role: "reception", password: "password" },
+  { id: "u1", email: "admin", name: "Dr. Admin", role: "admin", password: "password" },
+  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password" },
+  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password" },
 ];
 
 function seedPatients(): Patient[] {
@@ -63,17 +65,33 @@ function seedVisits(patients: Patient[]): Visit[] {
   return out;
 }
 
+function defaultDb(): DB {
+  const p = seedPatients();
+  return {
+    users: DEFAULT_USERS,
+    patients: p,
+    visits: seedVisits(p),
+    notes: [],
+    bookings: [],
+    blocked: [],
+    settings: { publicStatsEnabled: false },
+    session: { userId: null },
+  };
+}
+
 function load(): DB {
-  if (typeof window === "undefined") {
-    const p = seedPatients();
-    return { users: DEFAULT_USERS, patients: p, visits: seedVisits(p), notes: [], bookings: [], session: { userId: null } };
-  }
+  if (typeof window === "undefined") return defaultDb();
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw) as DB;
+      // backfill new fields
+      if (!parsed.blocked) parsed.blocked = [];
+      if (!parsed.settings) parsed.settings = { publicStatsEnabled: false };
+      return parsed;
+    }
   } catch {}
-  const p = seedPatients();
-  const db: DB = { users: DEFAULT_USERS, patients: p, visits: seedVisits(p), notes: [], bookings: [], session: { userId: null } };
+  const db = defaultDb();
   localStorage.setItem(KEY, JSON.stringify(db));
   return db;
 }
@@ -82,9 +100,7 @@ let state: DB = load();
 const listeners = new Set<() => void>();
 
 function persist() {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  }
+  if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
   listeners.forEach((l) => l());
 }
 
@@ -94,18 +110,14 @@ function subscribe(l: () => void) {
 }
 
 export function useStore<T>(selector: (s: DB) => T): T {
-  const snap = useSyncExternalStore(
-    subscribe,
-    () => state,
-    () => state,
-  );
+  const snap = useSyncExternalStore(subscribe, () => state, () => state);
   return selector(snap);
 }
 
 export const store = {
   get: () => state,
-  login(email: string, password: string): User | null {
-    const u = state.users.find((x) => x.email.toLowerCase() === email.toLowerCase() && x.password === password);
+  login(username: string, password: string): User | null {
+    const u = state.users.find((x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password);
     if (!u) return null;
     state = { ...state, session: { userId: u.id } };
     persist();
@@ -128,6 +140,10 @@ export const store = {
     persist();
     return nu;
   },
+  updateUser(id: string, patch: Partial<Pick<User, "name" | "email" | "role">>) {
+    state = { ...state, users: state.users.map((u) => (u.id === id ? { ...u, ...patch } : u)) };
+    persist();
+  },
   removeUser(id: string) {
     state = { ...state, users: state.users.filter((u) => u.id !== id) };
     persist();
@@ -143,13 +159,7 @@ export const store = {
     return `STP${String(max + 1).padStart(6, "0")}`;
   },
   addPatient(p: Omit<Patient, "id" | "pid" | "sn" | "ts">): Patient {
-    const np: Patient = {
-      ...p,
-      id: `p${Date.now()}`,
-      pid: this.nextPid(),
-      sn: p.n.toLowerCase(),
-      ts: Date.now(),
-    };
+    const np: Patient = { ...p, id: `p${Date.now()}`, pid: this.nextPid(), sn: p.n.toLowerCase(), ts: Date.now() };
     state = { ...state, patients: [...state.patients, np] };
     persist();
     return np;
@@ -158,6 +168,15 @@ export const store = {
     state = {
       ...state,
       patients: state.patients.map((p) => (p.id === id ? { ...p, ...patch, sn: (patch.n ?? p.n).toLowerCase() } : p)),
+    };
+    persist();
+  },
+  deletePatient(id: string) {
+    state = {
+      ...state,
+      patients: state.patients.filter((p) => p.id !== id),
+      visits: state.visits.filter((v) => v.patientId !== id),
+      notes: state.notes.filter((n) => n.patientId !== id),
     };
     persist();
   },
@@ -183,6 +202,47 @@ export const store = {
     state = { ...state, bookings: state.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) };
     persist();
   },
+  addBlocked(b: Omit<BlockedSlot, "id">) {
+    const nb: BlockedSlot = { ...b, id: `bk${Date.now()}` };
+    state = { ...state, blocked: [...state.blocked, nb] };
+    persist();
+  },
+  removeBlocked(id: string) {
+    state = { ...state, blocked: state.blocked.filter((b) => b.id !== id) };
+    persist();
+  },
+  setSettings(patch: Partial<AppSettings>) {
+    state = { ...state, settings: { ...state.settings, ...patch } };
+    persist();
+  },
 };
+
+// Compute taken slots for a date — combines visits' next reviews, scheduled bookings, and blocked.
+export function takenSlotsForDate(s: DB, date: string): string[] {
+  const out = new Set<string>();
+  for (const v of s.visits) {
+    if (v.nxt === date && v.nxtTm) {
+      const dur = v.dur ?? 30;
+      addRange(out, v.nxtTm, dur);
+    }
+  }
+  for (const b of s.bookings) {
+    if (b.status === "scheduled" && b.prefDate === date && b.prefTime) addRange(out, b.prefTime, 30);
+  }
+  for (const bk of s.blocked) {
+    if (bk.date === date) addRange(out, bk.time, bk.dur);
+  }
+  return Array.from(out);
+}
+
+function addRange(out: Set<string>, start: string, dur: number) {
+  const [h, m] = start.split(":").map(Number);
+  let mins = h * 60 + m;
+  const end = mins + dur;
+  while (mins < end) {
+    out.add(`${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`);
+    mins += 30;
+  }
+}
 
 export type { Role };
