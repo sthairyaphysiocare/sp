@@ -69,11 +69,18 @@ function PatientDetail() {
           <h1 className="text-2xl sm:text-3xl font-bold truncate">{patient.n}</h1>
           <p className="text-sm text-muted-foreground">{age} yrs · {patient.g === "M" ? "Male" : patient.g === "F" ? "Female" : "Other"} · {patient.m}</p>
         </div>
-        {canClinical && (
-          <Button onClick={() => setShowRx(true)} className="brand-gradient text-white border-0 shrink-0">
-            <FileText className="size-4" /> Prescription
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {canClinical && (
+            <Button onClick={() => setShowRx(true)} className="brand-gradient text-white border-0">
+              <FileText className="size-4" /> Prescription
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" onClick={onDelete} className="text-destructive border-destructive/40 hover:bg-destructive/10">
+              <Trash2 className="size-4" /> Delete Patient
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-1 border-b">
