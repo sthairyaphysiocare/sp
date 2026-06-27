@@ -18,6 +18,9 @@ const NAV = [
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const signedIn = mounted && !!user;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface">
