@@ -31,6 +31,7 @@ function Patients() {
 
   return (
     <div>
+      <Toaster />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Patients</h1>
