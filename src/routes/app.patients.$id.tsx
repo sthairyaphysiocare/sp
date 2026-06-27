@@ -24,11 +24,21 @@ export const Route = createFileRoute("/app/patients/$id")({
 function PatientDetail() {
   const { id } = useParams({ from: "/app/patients/$id" });
   const { user, hasRole } = useAuth();
+  const navigate = useNavigate();
   const patient = useStore((s) => s.patients.find((p) => p.id === id));
   const visits = useStore((s) => s.visits.filter((v) => v.patientId === id).sort((a, b) => a.vN - b.vN));
   const notes = useStore((s) => s.notes.filter((n) => n.patientId === id));
   const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes">("overview");
   const [showRx, setShowRx] = useState(false);
+  const isAdmin = hasRole("admin");
+
+  function onDelete() {
+    if (!patient) return;
+    if (!confirm(`Permanently delete "${patient.n}" and all associated visits/notes? This cannot be undone.`)) return;
+    store.deletePatient(patient.id);
+    toast.success("Patient record deleted");
+    navigate({ to: "/app/patients" });
+  }
 
   if (!patient) {
     return (
