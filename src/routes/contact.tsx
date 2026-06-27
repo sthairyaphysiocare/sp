@@ -35,9 +35,8 @@ function ContactPage() {
                 <div className="min-w-0">
                   <h3 className="font-semibold">Visit Us</h3>
                   <p className="text-sm text-muted-foreground mt-1">{CLINIC.name}, {CLINIC.address}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Map: {CLINIC.mapRef}</p>
                   <a href={mapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-brand mt-2 hover:underline">
-                    Open in Google Maps <ExternalLink className="size-3" />
+                    View on Google Maps <ExternalLink className="size-3" />
                   </a>
                 </div>
               </div>
