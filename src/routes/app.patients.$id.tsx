@@ -312,7 +312,7 @@ function NotesTab({ patientId, notes, authorName }: { patientId: string; notes: 
           <div key={n.id} className="p-4 rounded-xl bg-card border">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{n.tN}</span>
-              <span>{n.dt} · {n.tm}</span>
+              <span>{fmtDate(n.dt)} · {n.tm}</span>
             </div>
             <div className="mt-2 text-sm">{n.msg}</div>
           </div>
