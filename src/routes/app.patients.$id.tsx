@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { store, useStore } from "@/lib/store";
+import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
+import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useMemo, useState } from "react";
-import { ArrowLeft, FileText, Plus, Activity } from "lucide-react";
+import { ArrowLeft, FileText, Plus, Activity, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,8 @@ import {
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { fmtDate } from "@/lib/date";
+import { slotsForDate } from "@/lib/date";
 
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientDetail,
