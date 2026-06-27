@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useStore } from "@/lib/store";
+import { store, useStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/app/patients/")({
   component: Patients,
@@ -11,10 +14,20 @@ export const Route = createFileRoute("/app/patients/")({
 
 function Patients() {
   const patients = useStore((s) => s.patients);
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [q, setQ] = useState("");
   const filtered = patients.filter((p) =>
     !q || p.sn.includes(q.toLowerCase()) || p.pid.toLowerCase().includes(q.toLowerCase()) || p.m.includes(q),
   );
+
+  function onDelete(id: string, name: string) {
+    if (!isAdmin) return;
+    if (!confirm(`Permanently delete patient "${name}" and all associated visits/notes? This cannot be undone.`)) return;
+    store.deletePatient(id);
+    toast.success("Patient record deleted");
+  }
+
 
   return (
     <div>
