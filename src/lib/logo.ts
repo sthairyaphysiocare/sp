@@ -6,6 +6,7 @@ export const CLINIC = {
   domain: "sthairya-physiocare.co.in",
   address: "Vivekananda College Road, Nehru Nagar, Puttur - 574203",
   mapRef: "Q5HJ+MR Nehru Nagar, Puttur, Karnataka",
+  mapUrl: "https://maps.app.goo.gl/MZ4wvMrzUvT4CGFM8",
   phone: "+91 9900315254",
   whatsapp: "919900315254",
   email: "Gana.Plinija@gmail.com",
