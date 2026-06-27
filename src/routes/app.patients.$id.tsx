@@ -185,14 +185,18 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
     dt: new Date().toISOString().slice(0, 10),
     pS: 5, sym: "", rom: "", str: "", tx: "", adv: "", fi: 50,
     nxt: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    nxtTm: "" as string,
+    dur: 30,
   });
+  const taken = useStore((s) => takenSlotsForDate(s, v.nxt));
+  const slots = slotsForDate(v.nxt);
 
   function save() {
     if (!canEdit) return;
     store.addVisit({ patientId, ...v, tId: therapistId, tN: therapistName });
     toast.success("Visit logged");
     setShow(false);
-    setV({ ...v, sym: "", rom: "", str: "", tx: "", adv: "" });
+    setV({ ...v, sym: "", rom: "", str: "", tx: "", adv: "", nxtTm: "" });
   }
 
   return (
@@ -217,7 +221,30 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
             <div><Label>MMT / Strength</Label><Textarea rows={2} value={v.str} onChange={(e) => setV({ ...v, str: e.target.value })} /></div>
             <div><Label>Treatment</Label><Textarea rows={2} value={v.tx} onChange={(e) => setV({ ...v, tx: e.target.value })} /></div>
             <div className="sm:col-span-2"><Label>Home Exercise / Advice</Label><Textarea rows={2} value={v.adv} onChange={(e) => setV({ ...v, adv: e.target.value })} /></div>
-            <div><Label>Next Review</Label><Input type="date" value={v.nxt} onChange={(e) => setV({ ...v, nxt: e.target.value })} /></div>
+            <div>
+              <Label>Next Review Date</Label>
+              <Input type="date" value={v.nxt} onChange={(e) => setV({ ...v, nxt: e.target.value, nxtTm: "" })} />
+              <div className="text-xs text-muted-foreground mt-1">Displays as {fmtDate(v.nxt)}</div>
+            </div>
+            <div>
+              <Label>Next Review Time Slot</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={v.nxtTm} onChange={(e) => setV({ ...v, nxtTm: e.target.value })}>
+                <option value="">— No slot —</option>
+                {slots.map((s) => (
+                  <option key={s} value={s} disabled={taken.includes(s)}>
+                    {s}{taken.includes(s) ? " (booked)" : ""}
+                  </option>
+                ))}
+              </select>
+              {slots.length === 0 && <div className="text-xs text-destructive mt-1">Clinic closed on this date.</div>}
+            </div>
+            <div>
+              <Label>Slot Duration (min)</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={v.dur} onChange={(e) => setV({ ...v, dur: +e.target.value })}>
+                {[30, 60, 90, 120].map((d) => <option key={d} value={d}>{d} min</option>)}
+              </select>
+              <div className="text-xs text-muted-foreground mt-1">Extended slots block public bookings.</div>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={save} className="brand-gradient text-white border-0">Save Visit</Button>
@@ -234,7 +261,7 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
               <div className="flex items-center gap-3">
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white text-sm font-bold">V{vis.vN}</div>
                 <div>
-                  <div className="font-semibold">{new Date(vis.dt).toLocaleDateString("en-IN")}</div>
+                  <div className="font-semibold">{fmtDate(vis.dt)}</div>
                   <div className="text-xs text-muted-foreground">{vis.tN}</div>
                 </div>
               </div>
