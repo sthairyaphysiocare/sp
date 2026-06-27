@@ -49,6 +49,43 @@ export interface Visit {
   adv: string;
   fi: number;
   nxt: string;
+  nxtTm?: string; // HH:MM next review time slot
+  dur?: number; // minutes, default 30
+}
+
+export interface ClinicalNote {
+  id: string;
+  patientId: string;
+  dt: string;
+  tm: string;
+  tN: string;
+  msg: string;
+}
+
+export interface Booking {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  concern: string;
+  preferred: string; // legacy free-text
+  prefDate?: string; // ISO yyyy-mm-dd
+  prefTime?: string; // HH:MM
+  status: "pending" | "contacted" | "scheduled" | "closed";
+  ts: number;
+}
+
+export interface BlockedSlot {
+  id: string;
+  date: string;
+  time: string;
+  dur: number; // minutes
+  reason: string;
+  by: string;
+}
+
+export interface AppSettings {
+  publicStatsEnabled: boolean;
 }
 
 export interface ClinicalNote {
