@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
 import { LOGO_URL, CLINIC } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
+import { useStore } from "@/lib/store";
 import {
   Activity, HeartPulse, Dumbbell, Stethoscope, ShieldCheck, Sparkles,
-  MapPin, Phone, Mail, MessageCircle, ArrowRight,
+  MapPin, Phone, Mail, MessageCircle, ArrowRight, ExternalLink,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -18,16 +19,32 @@ const SPECS = [
   { icon: Stethoscope, title: "Frozen Shoulder", desc: "Manual therapy and progressive ROM restoration." },
 ];
 
-const STATS = [
-  { label: "Patients Treated", value: "5,000+" },
-  { label: "Years of Practice", value: "10+" },
-  { label: "Recovery Rate", value: "94%" },
-  { label: "Specialised Programs", value: "20+" },
-];
-
 function HomePage() {
+  const settings = useStore((s) => s.settings);
+  const patients = useStore((s) => s.patients);
+  const visits = useStore((s) => s.visits);
+  const stats = [
+    { label: "Patients Treated", value: `${patients.length}+` },
+    { label: "Years of Practice", value: "10+" },
+    { label: "Recovery Rate", value: visits.length ? `${Math.min(99, Math.round(visits.reduce((a, v) => a + v.fi, 0) / visits.length))}%` : "—" },
+    { label: "Specialised Programs", value: "20+" },
+  ];
+
   return (
     <PublicLayout>
+      {/* Fixed background watermark logo */}
+      <div
+        aria-hidden
+        className="fixed inset-0 pointer-events-none z-0 grid place-items-center"
+        style={{
+          backgroundImage: `url(${LOGO_URL})`,
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          backgroundSize: "min(80vw, 900px) auto",
+          opacity: 0.06,
+        }}
+      />
+      <div className="relative z-10">
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 brand-gradient opacity-[0.04]" />
@@ -40,8 +57,8 @@ function HomePage() {
               Move better. <span className="text-brand-gradient">Live stronger.</span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-              At Sthairya Physiocare, evidence-based physiotherapy meets personalised recovery —
-              from sports injuries to post-surgical rehab, right here in Puttur.
+              At Sthairya Physiocare, evidence based physiotherapy meets personalised recovery.
+              From sports injuries to post-surgical rehab, right here in Puttur.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/book">
@@ -55,30 +72,31 @@ function HomePage() {
                 </Button>
               </a>
             </div>
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-6">
-              {STATS.map((s) => (
-                <div key={s.label}>
-                  <div className="text-2xl sm:text-3xl font-bold text-brand">{s.value}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
-                </div>
-              ))}
-            </div>
+            {settings.publicStatsEnabled && (
+              <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-6">
+                {stats.map((s) => (
+                  <div key={s.label}>
+                    <div className="text-2xl sm:text-3xl font-bold text-brand">{s.value}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="relative">
+          <div className="relative hidden lg:block">
             <div className="absolute -inset-8 brand-gradient opacity-10 blur-3xl rounded-full" />
-            <div className="relative aspect-square max-w-md mx-auto rounded-3xl bg-card soft-shadow border p-8 grid place-items-center">
-              <img
-                src={LOGO_URL}
-                alt={`${CLINIC.name} logo`}
-                className="w-full h-full object-contain"
-              />
+            <div className="relative aspect-square max-w-md mx-auto rounded-3xl bg-card/60 backdrop-blur soft-shadow border p-10 grid place-items-center">
+              <div className="text-center space-y-3">
+                <div className="text-brand-gradient text-3xl font-bold">{CLINIC.name}</div>
+                <p className="text-muted-foreground text-sm">{CLINIC.tagline}</p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Specialities */}
-      <section className="py-16 sm:py-20 bg-background">
+      <section className="py-16 sm:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold">Our Specialities</h2>
@@ -104,12 +122,12 @@ function HomePage() {
       </section>
 
       {/* Why us */}
-      <section className="py-16 sm:py-20 bg-surface">
+      <section className="py-16 sm:py-20 bg-surface/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-3 gap-6">
           {[
             { icon: ShieldCheck, t: "Evidence-Based Care", d: "Protocols backed by latest clinical research and outcome tracking." },
             { icon: HeartPulse, t: "Personalised Plans", d: "Every recovery plan is tailored to your goals and lifestyle." },
-            { icon: Activity, t: "Progress You See", d: "Visual dashboards track pain reduction and functional recovery." },
+            { icon: Activity, t: "Progress You See", d: "Practively tracking pain reduction and functional recovery." },
           ].map((x) => (
             <div key={x.t} className="p-6 rounded-2xl bg-card border">
               <x.icon className="size-8 text-brand" />
@@ -121,13 +139,23 @@ function HomePage() {
       </section>
 
       {/* Contact CTA */}
-      <section className="py-16 sm:py-20 bg-background">
+      <section className="py-16 sm:py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 rounded-3xl brand-gradient text-white p-8 sm:p-12 grid md:grid-cols-2 gap-8">
           <div>
             <h2 className="text-3xl font-bold">Ready to start your recovery?</h2>
             <p className="mt-3 text-white/90">Reach out and our team will schedule your first session.</p>
             <div className="mt-6 space-y-3 text-sm">
-              <div className="flex items-start gap-3"><MapPin className="size-4 mt-0.5 shrink-0" /><span>{CLINIC.address}</span></div>
+              <div className="flex items-start gap-3">
+                <MapPin className="size-4 mt-0.5 shrink-0" />
+                <a
+                  href={CLINIC.mapUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+                >
+                  View on Google Maps <ExternalLink className="size-3.5" />
+                </a>
+              </div>
               <div className="flex items-center gap-3"><Phone className="size-4 shrink-0" /><span>{CLINIC.phone}</span></div>
               <div className="flex items-center gap-3"><Mail className="size-4 shrink-0" /><span className="break-all">{CLINIC.email}</span></div>
             </div>
@@ -147,6 +175,7 @@ function HomePage() {
           </div>
         </div>
       </section>
+      </div>
     </PublicLayout>
   );
 }
