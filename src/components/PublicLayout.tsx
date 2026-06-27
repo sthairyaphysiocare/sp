@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { CLINIC } from "@/lib/logo";
 import { useAuth } from "@/lib/auth";
-import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { ExternalLink, Menu, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
