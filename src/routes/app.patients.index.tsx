@@ -68,8 +68,13 @@ function Patients() {
                     <td className="px-4 py-3">{age}/{p.g}</td>
                     <td className="px-4 py-3 hidden md:table-cell">{p.m}</td>
                     <td className="px-4 py-3 hidden lg:table-cell truncate max-w-xs">{p.cc}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline">Open</Link>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline mr-3">Open</Link>
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" onClick={() => onDelete(p.id, p.n)} aria-label={`Delete ${p.n}`}>
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 );
