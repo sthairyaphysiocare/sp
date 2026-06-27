@@ -18,7 +18,7 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CLINIC.mapRef)}`;
+  const mapUrl = CLINIC.mapUrl;
   return (
     <PublicLayout>
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
