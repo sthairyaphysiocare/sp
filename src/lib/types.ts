@@ -49,6 +49,8 @@ export interface Visit {
   adv: string;
   fi: number;
   nxt: string;
+  nxtTm?: string; // HH:MM next review time slot
+  dur?: number; // minutes, default 30
 }
 
 export interface ClinicalNote {
@@ -66,10 +68,26 @@ export interface Booking {
   phone: string;
   email: string;
   concern: string;
-  preferred: string;
+  preferred: string; // legacy free-text
+  prefDate?: string; // ISO yyyy-mm-dd
+  prefTime?: string; // HH:MM
   status: "pending" | "contacted" | "scheduled" | "closed";
   ts: number;
 }
+
+export interface BlockedSlot {
+  id: string;
+  date: string;
+  time: string;
+  dur: number; // minutes
+  reason: string;
+  by: string;
+}
+
+export interface AppSettings {
+  publicStatsEnabled: boolean;
+}
+
 
 export const COMORBIDITIES: Record<number, string> = {
   1: "Diabetes",

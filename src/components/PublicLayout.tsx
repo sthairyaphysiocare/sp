@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { CLINIC } from "@/lib/logo";
 import { useAuth } from "@/lib/auth";
-import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { ExternalLink, Menu, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -18,6 +18,9 @@ const NAV = [
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const signedIn = mounted && !!user;
 
   return (
     <div className="min-h-screen flex flex-col bg-surface">
@@ -38,9 +41,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {n.label}
               </Link>
             ))}
-            <Link to={user ? "/app" : "/auth"} className="ml-2">
+            <Link to={signedIn ? "/app" : "/auth"} className="ml-2">
               <Button className="brand-gradient text-white border-0">
-                {user ? "Open Dashboard" : "Staff Login"}
+                {signedIn ? "Open Dashboard" : "Staff Login"}
               </Button>
             </Link>
           </nav>
@@ -64,9 +67,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 {n.label}
               </Link>
             ))}
-            <Link to={user ? "/app" : "/auth"} onClick={() => setOpen(false)} className="block">
+            <Link to={signedIn ? "/app" : "/auth"} onClick={() => setOpen(false)} className="block">
               <Button className="w-full brand-gradient text-white border-0">
-                {user ? "Open Dashboard" : "Staff Login"}
+                {signedIn ? "Open Dashboard" : "Staff Login"}
               </Button>
             </Link>
           </div>
@@ -90,7 +93,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div>
             <h4 className="text-sm font-semibold mb-3">Visit Us</h4>
             <p className="text-sm text-background/70">{CLINIC.address}</p>
-            <p className="text-xs text-background/50 mt-2">Map: {CLINIC.mapRef}</p>
+            <a
+              href={CLINIC.mapUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-2 underline-offset-2 hover:underline"
+            >
+              View on Google Maps <ExternalLink className="size-3" />
+            </a>
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Contact</h4>

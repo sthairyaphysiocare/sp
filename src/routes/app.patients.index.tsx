@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useStore } from "@/lib/store";
+import { store, useStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/app/patients/")({
   component: Patients,
@@ -11,13 +14,24 @@ export const Route = createFileRoute("/app/patients/")({
 
 function Patients() {
   const patients = useStore((s) => s.patients);
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin");
   const [q, setQ] = useState("");
   const filtered = patients.filter((p) =>
     !q || p.sn.includes(q.toLowerCase()) || p.pid.toLowerCase().includes(q.toLowerCase()) || p.m.includes(q),
   );
 
+  function onDelete(id: string, name: string) {
+    if (!isAdmin) return;
+    if (!confirm(`Permanently delete patient "${name}" and all associated visits/notes? This cannot be undone.`)) return;
+    store.deletePatient(id);
+    toast.success("Patient record deleted");
+  }
+
+
   return (
     <div>
+      <Toaster />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Patients</h1>
@@ -54,8 +68,13 @@ function Patients() {
                     <td className="px-4 py-3">{age}/{p.g}</td>
                     <td className="px-4 py-3 hidden md:table-cell">{p.m}</td>
                     <td className="px-4 py-3 hidden lg:table-cell truncate max-w-xs">{p.cc}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline">Open</Link>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline mr-3">Open</Link>
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" onClick={() => onDelete(p.id, p.n)} aria-label={`Delete ${p.n}`}>
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 );

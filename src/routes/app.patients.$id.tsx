@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { store, useStore } from "@/lib/store";
+import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
+import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useMemo, useState } from "react";
-import { ArrowLeft, FileText, Plus, Activity } from "lucide-react";
+import { ArrowLeft, FileText, Plus, Activity, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,8 @@ import {
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { fmtDate } from "@/lib/date";
+import { slotsForDate } from "@/lib/date";
 
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientDetail,
@@ -22,11 +24,21 @@ export const Route = createFileRoute("/app/patients/$id")({
 function PatientDetail() {
   const { id } = useParams({ from: "/app/patients/$id" });
   const { user, hasRole } = useAuth();
+  const navigate = useNavigate();
   const patient = useStore((s) => s.patients.find((p) => p.id === id));
   const visits = useStore((s) => s.visits.filter((v) => v.patientId === id).sort((a, b) => a.vN - b.vN));
   const notes = useStore((s) => s.notes.filter((n) => n.patientId === id));
   const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes">("overview");
   const [showRx, setShowRx] = useState(false);
+  const isAdmin = hasRole("admin");
+
+  function onDelete() {
+    if (!patient) return;
+    if (!confirm(`Permanently delete "${patient.n}" and all associated visits/notes? This cannot be undone.`)) return;
+    store.deletePatient(patient.id);
+    toast.success("Patient record deleted");
+    navigate({ to: "/app/patients" });
+  }
 
   if (!patient) {
     return (
@@ -57,11 +69,18 @@ function PatientDetail() {
           <h1 className="text-2xl sm:text-3xl font-bold truncate">{patient.n}</h1>
           <p className="text-sm text-muted-foreground">{age} yrs · {patient.g === "M" ? "Male" : patient.g === "F" ? "Female" : "Other"} · {patient.m}</p>
         </div>
-        {canClinical && (
-          <Button onClick={() => setShowRx(true)} className="brand-gradient text-white border-0 shrink-0">
-            <FileText className="size-4" /> Prescription
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {canClinical && (
+            <Button onClick={() => setShowRx(true)} className="brand-gradient text-white border-0">
+              <FileText className="size-4" /> Prescription
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" onClick={onDelete} className="text-destructive border-destructive/40 hover:bg-destructive/10">
+              <Trash2 className="size-4" /> Delete Patient
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-1 border-b">
@@ -166,14 +185,18 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
     dt: new Date().toISOString().slice(0, 10),
     pS: 5, sym: "", rom: "", str: "", tx: "", adv: "", fi: 50,
     nxt: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    nxtTm: "" as string,
+    dur: 30,
   });
+  const taken = useStore((s) => takenSlotsForDate(s, v.nxt));
+  const slots = slotsForDate(v.nxt);
 
   function save() {
     if (!canEdit) return;
     store.addVisit({ patientId, ...v, tId: therapistId, tN: therapistName });
     toast.success("Visit logged");
     setShow(false);
-    setV({ ...v, sym: "", rom: "", str: "", tx: "", adv: "" });
+    setV({ ...v, sym: "", rom: "", str: "", tx: "", adv: "", nxtTm: "" });
   }
 
   return (
@@ -198,7 +221,30 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
             <div><Label>MMT / Strength</Label><Textarea rows={2} value={v.str} onChange={(e) => setV({ ...v, str: e.target.value })} /></div>
             <div><Label>Treatment</Label><Textarea rows={2} value={v.tx} onChange={(e) => setV({ ...v, tx: e.target.value })} /></div>
             <div className="sm:col-span-2"><Label>Home Exercise / Advice</Label><Textarea rows={2} value={v.adv} onChange={(e) => setV({ ...v, adv: e.target.value })} /></div>
-            <div><Label>Next Review</Label><Input type="date" value={v.nxt} onChange={(e) => setV({ ...v, nxt: e.target.value })} /></div>
+            <div>
+              <Label>Next Review Date</Label>
+              <Input type="date" value={v.nxt} onChange={(e) => setV({ ...v, nxt: e.target.value, nxtTm: "" })} />
+              <div className="text-xs text-muted-foreground mt-1">Displays as {fmtDate(v.nxt)}</div>
+            </div>
+            <div>
+              <Label>Next Review Time Slot</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={v.nxtTm} onChange={(e) => setV({ ...v, nxtTm: e.target.value })}>
+                <option value="">— No slot —</option>
+                {slots.map((s) => (
+                  <option key={s} value={s} disabled={taken.includes(s)}>
+                    {s}{taken.includes(s) ? " (booked)" : ""}
+                  </option>
+                ))}
+              </select>
+              {slots.length === 0 && <div className="text-xs text-destructive mt-1">Clinic closed on this date.</div>}
+            </div>
+            <div>
+              <Label>Slot Duration (min)</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={v.dur} onChange={(e) => setV({ ...v, dur: +e.target.value })}>
+                {[30, 60, 90, 120].map((d) => <option key={d} value={d}>{d} min</option>)}
+              </select>
+              <div className="text-xs text-muted-foreground mt-1">Extended slots block public bookings.</div>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button onClick={save} className="brand-gradient text-white border-0">Save Visit</Button>
@@ -215,7 +261,7 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
               <div className="flex items-center gap-3">
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white text-sm font-bold">V{vis.vN}</div>
                 <div>
-                  <div className="font-semibold">{new Date(vis.dt).toLocaleDateString("en-IN")}</div>
+                  <div className="font-semibold">{fmtDate(vis.dt)}</div>
                   <div className="text-xs text-muted-foreground">{vis.tN}</div>
                 </div>
               </div>
@@ -266,7 +312,7 @@ function NotesTab({ patientId, notes, authorName }: { patientId: string; notes: 
           <div key={n.id} className="p-4 rounded-xl bg-card border">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>{n.tN}</span>
-              <span>{n.dt} · {n.tm}</span>
+              <span>{fmtDate(n.dt)} · {n.tm}</span>
             </div>
             <div className="mt-2 text-sm">{n.msg}</div>
           </div>

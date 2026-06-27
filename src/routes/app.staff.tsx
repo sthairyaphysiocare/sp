@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { Trash2, Key } from "lucide-react";
-import type { Role } from "@/lib/types";
+import { Trash2, Key, Pencil, X, Check } from "lucide-react";
+import type { Role, User } from "@/lib/types";
 
 export const Route = createFileRoute("/app/staff")({
   component: Staff,
@@ -17,7 +17,9 @@ export const Route = createFileRoute("/app/staff")({
 function Staff() {
   const { hasRole, user } = useAuth();
   const users = useStore((s) => s.users);
-  const [form, setForm] = useState({ name: "", email: "", role: "therapist" as Role, password: "" });
+  const [form, setForm] = useState({ name: "", username: "", role: "therapist" as Role, password: "" });
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; username: string }>({ name: "", username: "" });
 
   if (!hasRole("admin")) {
     return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
@@ -25,9 +27,12 @@ function Staff() {
 
   function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.email || !form.password) { toast.error("All fields required"); return; }
-    store.addUser(form);
-    setForm({ name: "", email: "", role: "therapist", password: "" });
+    if (!form.name || !form.username || !form.password) { toast.error("All fields required"); return; }
+    if (users.some((u) => u.email.toLowerCase() === form.username.toLowerCase())) {
+      toast.error("Username already exists"); return;
+    }
+    store.addUser({ name: form.name, email: form.username, role: form.role, password: form.password });
+    setForm({ name: "", username: "", role: "therapist", password: "" });
     toast.success("Staff member added");
   }
 
@@ -41,15 +46,30 @@ function Staff() {
     if (confirm("Remove this staff member?")) { store.removeUser(id); toast.success("Removed"); }
   }
 
+  function startEdit(u: User) {
+    setEditing(u.id);
+    setEditForm({ name: u.name, username: u.email });
+  }
+
+  function saveEdit(id: string) {
+    if (!editForm.name.trim() || !editForm.username.trim()) { toast.error("Name and Username required"); return; }
+    if (users.some((u) => u.id !== id && u.email.toLowerCase() === editForm.username.toLowerCase())) {
+      toast.error("Username already in use"); return;
+    }
+    store.updateUser(id, { name: editForm.name.trim(), email: editForm.username.trim() });
+    setEditing(null);
+    toast.success("Staff updated");
+  }
+
   return (
     <div>
       <Toaster />
       <h1 className="text-2xl sm:text-3xl font-bold">Staff & Roles</h1>
-      <p className="text-sm text-muted-foreground mt-1">Manage logins and reset passwords.</p>
+      <p className="text-sm text-muted-foreground mt-1">Manage staff usernames, roles and passwords.</p>
 
       <form onSubmit={add} className="mt-6 p-6 rounded-2xl bg-card border grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-        <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+        <div><Label>Username</Label><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="e.g. dr.plinija" /></div>
         <div>
           <Label>Role</Label>
           <select className="w-full h-9 px-3 rounded-md border bg-background" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
@@ -60,28 +80,49 @@ function Staff() {
         <div className="flex items-end"><Button type="submit" className="w-full brand-gradient text-white border-0">Add</Button></div>
       </form>
 
-      <div className="mt-6 rounded-2xl bg-card border overflow-hidden">
+      <div className="mt-6 rounded-2xl bg-card border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="text-left px-4 py-3">Name</th>
-              <th className="text-left px-4 py-3">Email</th>
+              <th className="text-left px-4 py-3">Username</th>
               <th className="text-left px-4 py-3">Role</th>
-              <th></th>
+              <th className="text-right px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="px-4 py-3 font-medium">{u.name}</td>
-                <td className="px-4 py-3">{u.email}</td>
-                <td className="px-4 py-3 capitalize">{u.role}</td>
-                <td className="px-4 py-3 text-right">
-                  <Button size="sm" variant="ghost" onClick={() => resetPw(u.id)}><Key className="size-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(u.id)} disabled={u.id === user?.id}><Trash2 className="size-4 text-destructive" /></Button>
-                </td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const isEditing = editing === u.id;
+              return (
+                <tr key={u.id} className="border-t">
+                  <td className="px-4 py-3 font-medium">
+                    {isEditing
+                      ? <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                      : u.name}
+                  </td>
+                  <td className="px-4 py-3">
+                    {isEditing
+                      ? <Input value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} />
+                      : u.email}
+                  </td>
+                  <td className="px-4 py-3 capitalize">{u.role}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {isEditing ? (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => saveEdit(u.id)} aria-label="Save"><Check className="size-4 text-emerald-600" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} aria-label="Cancel"><X className="size-4" /></Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => startEdit(u)} aria-label="Edit"><Pencil className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => resetPw(u.id)} aria-label="Reset password"><Key className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove(u.id)} disabled={u.id === user?.id} aria-label="Remove"><Trash2 className="size-4 text-destructive" /></Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

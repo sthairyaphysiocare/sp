@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { Users, Activity, CalendarCheck2, Inbox } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { fmtDate } from "@/lib/date";
 
 export const Route = createFileRoute("/app/")({
   component: Dashboard,
@@ -25,10 +26,17 @@ function useCount(target: number, duration = 800) {
   return n;
 }
 
-function KPI({ icon: Icon, label, value, accent }: { icon: any; label: string; value: number; accent: string }) {
+type KPIKey = "patients" | "active" | "today" | "pending";
+
+function KPI({
+  icon: Icon, label, value, accent, active, onClick,
+}: { icon: any; label: string; value: number; accent: string; active: boolean; onClick: () => void }) {
   const n = useCount(value);
   return (
-    <div className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all">
+    <button
+      onClick={onClick}
+      className={`text-left p-6 rounded-2xl bg-card border hover:soft-shadow transition-all w-full ${active ? "ring-2 ring-brand" : ""}`}
+    >
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">{label}</div>
@@ -38,7 +46,10 @@ function KPI({ icon: Icon, label, value, accent }: { icon: any; label: string; v
           <Icon className="size-6" />
         </div>
       </div>
-    </div>
+      <div className="mt-3 text-xs text-brand font-medium">
+        {active ? "▼ Hide details" : "Click to view details →"}
+      </div>
+    </button>
   );
 }
 
@@ -48,9 +59,13 @@ function Dashboard() {
   const visits = useStore((s) => s.visits);
   const bookings = useStore((s) => s.bookings);
   const today = new Date().toISOString().slice(0, 10);
-  const todays = visits.filter((v) => v.nxt === today).length;
-  const active = new Set(visits.filter((v) => v.fi < 90).map((v) => v.patientId)).size;
-  const pending = bookings.filter((b) => b.status === "pending").length;
+  const todaysVisits = visits.filter((v) => v.nxt === today);
+  const activeIds = new Set(visits.filter((v) => v.fi < 90).map((v) => v.patientId));
+  const activePatients = patients.filter((p) => activeIds.has(p.id));
+  const pendingBookings = bookings.filter((b) => b.status === "pending");
+
+  const [open, setOpen] = useState<KPIKey | null>(null);
+  const toggle = (k: KPIKey) => setOpen((c) => (c === k ? null : k));
 
   return (
     <div>
@@ -61,11 +76,54 @@ function Dashboard() {
       </div>
 
       <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI icon={Users} label="Total Patients" value={patients.length} accent="bg-brand" />
-        <KPI icon={Activity} label="Active Rehab" value={active} accent="bg-emerald-500" />
-        <KPI icon={CalendarCheck2} label="Today's Visits" value={todays} accent="bg-orange-500" />
-        <KPI icon={Inbox} label="Pending Bookings" value={pending} accent="bg-violet-500" />
+        <KPI icon={Users} label="Total Patients" value={patients.length} accent="bg-brand" active={open === "patients"} onClick={() => toggle("patients")} />
+        <KPI icon={Activity} label="Active Rehab" value={activePatients.length} accent="bg-emerald-500" active={open === "active"} onClick={() => toggle("active")} />
+        <KPI icon={CalendarCheck2} label="Today's Visits" value={todaysVisits.length} accent="bg-orange-500" active={open === "today"} onClick={() => toggle("today")} />
+        <KPI icon={Inbox} label="Pending Bookings" value={pendingBookings.length} accent="bg-violet-500" active={open === "pending"} onClick={() => toggle("pending")} />
       </div>
+
+      {open && (
+        <div className="mt-6 p-6 rounded-2xl bg-card border">
+          {open === "patients" && (
+            <DataTable
+              title="All Patients"
+              cols={["PID", "Name", "Phone", "Registered"]}
+              rows={patients.map((p) => [p.pid, p.n, p.m, fmtDate(p.ts)])}
+              links={patients.map((p) => `/app/patients/${p.id}`)}
+            />
+          )}
+          {open === "active" && (
+            <DataTable
+              title="Active Rehab Patients"
+              cols={["PID", "Name", "Complaint", "Latest FI"]}
+              rows={activePatients.map((p) => {
+                const last = [...visits].filter((v) => v.patientId === p.id).sort((a, b) => a.dt.localeCompare(b.dt)).pop();
+                return [p.pid, p.n, p.cc, last ? `${last.fi}%` : "—"];
+              })}
+              links={activePatients.map((p) => `/app/patients/${p.id}`)}
+            />
+          )}
+          {open === "today" && (
+            <DataTable
+              title="Today's Scheduled Visits"
+              cols={["Date", "Time", "Patient", "Therapist"]}
+              rows={todaysVisits.map((v) => {
+                const p = patients.find((x) => x.id === v.patientId);
+                return [fmtDate(v.nxt), v.nxtTm || "—", p?.n ?? "Unknown", v.tN];
+              })}
+              links={todaysVisits.map((v) => `/app/patients/${v.patientId}`)}
+            />
+          )}
+          {open === "pending" && (
+            <DataTable
+              title="Pending Booking Requests"
+              cols={["Name", "Phone", "Preferred Date", "Time"]}
+              rows={pendingBookings.map((b) => [b.name, b.phone, b.prefDate ? fmtDate(b.prefDate) : (b.preferred || "—"), b.prefTime || "—"])}
+              links={pendingBookings.map(() => "/app/bookings")}
+            />
+          )}
+        </div>
+      )}
 
       <div className="mt-8 grid lg:grid-cols-2 gap-4">
         <div className="p-6 rounded-2xl bg-card border">
@@ -77,7 +135,7 @@ function Dashboard() {
                   <div className="font-medium">{p.n}</div>
                   <div className="text-xs text-muted-foreground">{p.pid} · {p.cc}</div>
                 </div>
-                <div className="text-xs text-muted-foreground">{new Date(p.ts).toLocaleDateString()}</div>
+                <div className="text-xs text-muted-foreground">{fmtDate(p.ts)}</div>
               </Link>
             ))}
           </div>
@@ -90,7 +148,9 @@ function Dashboard() {
               <div key={b.id} className="flex items-center justify-between px-3 py-3 rounded-lg bg-surface">
                 <div>
                   <div className="font-medium">{b.name}</div>
-                  <div className="text-xs text-muted-foreground">{b.phone} · {b.preferred || "Any time"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {b.phone} · {b.prefDate ? `${fmtDate(b.prefDate)} ${b.prefTime ?? ""}` : (b.preferred || "Any time")}
+                  </div>
                 </div>
                 <span className="text-xs px-2 py-1 rounded-full bg-orange-500/10 text-orange-700 capitalize">{b.status}</span>
               </div>
@@ -98,6 +158,38 @@ function Dashboard() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DataTable({ title, cols, rows, links }: { title: string; cols: string[]; rows: (string | number)[][]; links?: string[] }) {
+  return (
+    <div>
+      <h3 className="font-semibold text-lg mb-4">{title}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No records found.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase tracking-wider text-muted-foreground border-b">
+              <tr>{cols.map((c) => <th key={c} className="py-2 px-3 text-left font-semibold">{c}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="border-b last:border-0 hover:bg-accent/40">
+                  {r.map((cell, j) => (
+                    <td key={j} className="py-2.5 px-3">
+                      {j === 0 && links?.[i] ? (
+                        <Link to={links[i]} className="text-brand hover:underline">{cell}</Link>
+                      ) : cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
