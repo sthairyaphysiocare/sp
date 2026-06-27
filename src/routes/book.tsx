@@ -101,15 +101,45 @@ function BookPage() {
               <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div>
-              <Label htmlFor="pref">Preferred Date / Time</Label>
-              <Input id="pref" placeholder="e.g. Tomorrow 5 PM" value={form.preferred} onChange={(e) => setForm({ ...form, preferred: e.target.value })} />
+              <Label htmlFor="prefDate">Preferred Date *</Label>
+              <Input
+                id="prefDate"
+                type="date"
+                min={today}
+                value={form.prefDate}
+                onChange={(e) => setForm({ ...form, prefDate: e.target.value, prefTime: "" })}
+                required
+              />
+              <div className="text-xs text-muted-foreground mt-1">{fmtDate(form.prefDate)}</div>
+            </div>
+            <div>
+              <Label htmlFor="prefTime">Preferred Time Slot *</Label>
+              <select
+                id="prefTime"
+                className="w-full h-9 px-3 rounded-md border bg-background"
+                value={form.prefTime}
+                onChange={(e) => setForm({ ...form, prefTime: e.target.value })}
+                required
+              >
+                <option value="">{closed ? "Clinic closed" : "Select 30-min slot"}</option>
+                {slots.map((s) => (
+                  <option key={s} value={s} disabled={taken.includes(s)}>
+                    {fmtTime12(s)}{taken.includes(s) ? " — Booked" : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Mon–Fri 9 AM–1 PM &amp; 4 PM–8 PM · Sat 9 AM–1 PM · Sun closed
+              </div>
             </div>
           </div>
           <div>
             <Label htmlFor="concern">Concern / Symptoms</Label>
             <Textarea id="concern" rows={4} value={form.concern} onChange={(e) => setForm({ ...form, concern: e.target.value })} />
           </div>
-          <Button type="submit" size="lg" className="brand-gradient text-white border-0">Submit Request</Button>
+          <Button type="submit" size="lg" className="brand-gradient text-white border-0" disabled={closed || !form.prefTime}>
+            Submit Request
+          </Button>
         </form>
       </section>
     </PublicLayout>
