@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { store } from "@/lib/store";
+import { useMemo, useState } from "react";
+import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { MessageCircle, Mail, CheckCircle2 } from "lucide-react";
+import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
 
 export const Route = createFileRoute("/book")({
   head: () => ({
@@ -25,20 +26,29 @@ export const Route = createFileRoute("/book")({
 });
 
 function BookPage() {
-  const [form, setForm] = useState({ name: "", phone: "", email: "", concern: "", preferred: "" });
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", concern: "", prefDate: today, prefTime: "" });
   const [done, setDone] = useState(false);
+
+  const taken = useStore((s) => takenSlotsForDate(s, form.prefDate));
+  const slots = useMemo(() => slotsForDate(form.prefDate), [form.prefDate]);
+  const closed = slots.length === 0;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.phone) {
-      toast.error("Name and phone are required");
-      return;
-    }
-    store.addBooking(form);
+    if (!form.name || !form.phone) { toast.error("Name and phone are required"); return; }
+    if (!form.prefDate || !form.prefTime) { toast.error("Please pick a date and a 30-minute time slot"); return; }
+    if (taken.includes(form.prefTime)) { toast.error("That slot was just booked. Please pick another."); return; }
+    store.addBooking({
+      name: form.name, phone: form.phone, email: form.email, concern: form.concern,
+      preferred: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
+      prefDate: form.prefDate, prefTime: form.prefTime,
+    });
     toast.success("Booking received — we'll contact you shortly.");
     setDone(true);
-    setForm({ name: "", phone: "", email: "", concern: "", preferred: "" });
+    setForm({ name: "", phone: "", email: "", concern: "", prefDate: today, prefTime: "" });
   }
+
 
   return (
     <PublicLayout>
