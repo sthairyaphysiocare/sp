@@ -88,25 +88,6 @@ export interface AppSettings {
   publicStatsEnabled: boolean;
 }
 
-export interface ClinicalNote {
-  id: string;
-  patientId: string;
-  dt: string;
-  tm: string;
-  tN: string;
-  msg: string;
-}
-
-export interface Booking {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  concern: string;
-  preferred: string;
-  status: "pending" | "contacted" | "scheduled" | "closed";
-  ts: number;
-}
 
 export const COMORBIDITIES: Record<number, string> = {
   1: "Diabetes",
