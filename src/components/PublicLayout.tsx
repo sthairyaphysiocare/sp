@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
-import { CLINIC } from "@/lib/logo";
+import { CLINIC, enabledBranches } from "@/lib/logo";
+import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { ExternalLink, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,6 +18,8 @@ const NAV = [
 
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const settings = useStore((s) => s.settings);
+  const branches = enabledBranches(settings);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -85,28 +88,38 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           <div className="md:col-span-2">
             <Logo size={48} textClassName="text-background" />
             <p className="mt-4 text-sm text-background/70 max-w-md">
-              Sthairya Physiocare — expert musculoskeletal rehabilitation, sports
-              medicine, and post-operative recovery in Puttur.
+              Expert care for everything from musculoskeletal conditions and sports injuries
+              to post surgical recovery.
             </p>
             <p className="mt-3 text-xs text-background/60 italic">{CLINIC.tagline}</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Visit Us</h4>
-            <p className="text-sm text-background/70">{CLINIC.address}</p>
-            <a
-              href={CLINIC.mapUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-2 underline-offset-2 hover:underline"
-            >
-              View on Google Maps <ExternalLink className="size-3" />
-            </a>
+            <div className="space-y-3">
+              {branches.map((b) => (
+                <div key={b.id}>
+                  <div className="text-sm font-medium text-background/90">{b.name}</div>
+                  <p className="text-xs text-background/70 mt-0.5">{b.address}</p>
+                  {b.mapUrl && (
+                    <a href={b.mapUrl} target="_blank" rel="noreferrer"
+                       className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-1 underline-offset-2 hover:underline">
+                      View on Google Maps <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Contact</h4>
-            <p className="text-sm text-background/70">Phone: {CLINIC.phone}</p>
-            <p className="text-sm text-background/70 break-all">{CLINIC.email}</p>
-            <p className="text-sm text-background/70 mt-2">{CLINIC.domain}</p>
+            <div className="space-y-1.5">
+              {branches.map((b) => (
+                <p key={b.id} className="text-sm text-background/70">
+                  <span className="text-background/90">{b.name}:</span> {b.phone}
+                </p>
+              ))}
+              <p className="text-sm text-background/70 break-all pt-1">{CLINIC.email}</p>
+            </div>
           </div>
         </div>
         <div className="border-t border-background/10">

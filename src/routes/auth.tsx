@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,15 @@ function AuthPage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const usernameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) navigate({ to: "/app", replace: true });
   }, [user, navigate]);
+
+  useEffect(() => {
+    usernameRef.current?.focus();
+  }, []);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,11 +64,13 @@ function AuthPage() {
               <Label htmlFor="u">Username</Label>
               <Input
                 id="u"
+                ref={usernameRef}
                 type="text"
                 autoComplete="username"
                 placeholder="your.username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoFocus
                 required
               />
             </div>

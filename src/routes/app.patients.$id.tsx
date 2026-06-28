@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { fmtDate } from "@/lib/date";
 import { slotsForDate } from "@/lib/date";
+import { branchById } from "@/lib/logo";
 
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientDetail,
@@ -28,6 +29,7 @@ function PatientDetail() {
   const patient = useStore((s) => s.patients.find((p) => p.id === id));
   const visits = useStore((s) => s.visits.filter((v) => v.patientId === id).sort((a, b) => a.vN - b.vN));
   const notes = useStore((s) => s.notes.filter((n) => n.patientId === id));
+  const branch = useStore((s) => branchById(s.settings, patient?.br));
   const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes">("overview");
   const [showRx, setShowRx] = useState(false);
   const isAdmin = hasRole("admin");
@@ -68,6 +70,11 @@ function PatientDetail() {
           <div className="flex items-center gap-2 text-xs font-mono text-brand">{patient.pid}</div>
           <h1 className="text-2xl sm:text-3xl font-bold truncate">{patient.n}</h1>
           <p className="text-sm text-muted-foreground">{age} yrs · {patient.g === "M" ? "Male" : patient.g === "F" ? "Female" : "Other"} · {patient.m}</p>
+          {branch && (
+            <p className="text-xs mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-brand font-medium">
+              Branch: {branch.name}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
           {canClinical && (

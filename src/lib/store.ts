@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import type { AppSettings, BlockedSlot, Booking, ClinicalNote, Patient, User, Visit, Role } from "./types";
+import type { AppSettings, BlockedSlot, Booking, Branch, ClinicalNote, Patient, User, Visit, Role } from "./types";
+import { DEFAULT_BRANCH, CLINIC } from "./logo";
 
 const KEY = "sthairya.db.v2";
 
@@ -22,11 +23,11 @@ const DEFAULT_USERS: User[] = [
 
 function seedPatients(): Patient[] {
   const base: Omit<Patient, "id" | "pid" | "sn" | "ts">[] = [
-    { n: "Ramesh Kamath", dob: "1972-04-12", g: "M", m: "9845012345", am: "", e: "ramesh@example.com", oc: "Teacher", em: "Sushma 9845011111", bg: "B+", h: 172, w: 78, cc: "Low back pain radiating to right leg", pi: "Onset 3 weeks ago after lifting", sx: "Nil", med: "Paracetamol PRN", al: "Nil", cm: [2], lf: "Sedentary", fh: "Father diabetic" },
-    { n: "Anjali Shenoy", dob: "1995-09-23", g: "F", m: "9742056789", am: "", e: "anjali@example.com", oc: "IT Engineer", em: "Rohit 9742000000", bg: "O+", h: 162, w: 58, cc: "Neck stiffness, headaches", pi: "Desk work, 6 weeks", sx: "Nil", med: "Nil", al: "Dust", cm: [], lf: "Active weekends", fh: "Nil" },
-    { n: "Vinod Bhat", dob: "1965-01-30", g: "M", m: "9986234567", am: "", e: "vinod@example.com", oc: "Retired", em: "Lata 9986200000", bg: "A+", h: 168, w: 82, cc: "Frozen shoulder right side", pi: "Gradual onset 2 months", sx: "Appendectomy 1995", med: "Metformin", al: "Nil", cm: [1, 2], lf: "Walks daily", fh: "Diabetic" },
-    { n: "Priya Pai", dob: "1988-07-18", g: "F", m: "9663112233", am: "", e: "priya@example.com", oc: "Homemaker", em: "Suresh 9663100000", bg: "AB+", h: 158, w: 65, cc: "Post-op knee rehab (TKR)", pi: "TKR done 3 weeks back", sx: "TKR Right knee", med: "Calcium, D3", al: "Nil", cm: [], lf: "Limited mobility", fh: "Mother arthritic" },
-    { n: "Karthik Hegde", dob: "2001-03-05", g: "M", m: "9036778899", am: "", e: "karthik@example.com", oc: "Cricketer", em: "Rajesh 9036700000", bg: "O-", h: 178, w: 74, cc: "Right shoulder impingement", pi: "Sports injury 10 days back", sx: "Nil", med: "Nil", al: "Nil", cm: [], lf: "Athlete", fh: "Nil" },
+    { n: "Ramesh Kamath", dob: "1972-04-12", g: "M", m: "9845012345", am: "", e: "ramesh@example.com", oc: "Teacher", em: "Sushma 9845011111", bg: "B+", h: 172, w: 78, cc: "Low back pain radiating to right leg", pi: "Onset 3 weeks ago after lifting", sx: "Nil", med: "Paracetamol PRN", al: "Nil", cm: [2], lf: "Sedentary", fh: "Father diabetic", br: DEFAULT_BRANCH.id },
+    { n: "Anjali Shenoy", dob: "1995-09-23", g: "F", m: "9742056789", am: "", e: "anjali@example.com", oc: "IT Engineer", em: "Rohit 9742000000", bg: "O+", h: 162, w: 58, cc: "Neck stiffness, headaches", pi: "Desk work, 6 weeks", sx: "Nil", med: "Nil", al: "Dust", cm: [], lf: "Active weekends", fh: "Nil", br: DEFAULT_BRANCH.id },
+    { n: "Vinod Bhat", dob: "1965-01-30", g: "M", m: "9986234567", am: "", e: "vinod@example.com", oc: "Retired", em: "Lata 9986200000", bg: "A+", h: 168, w: 82, cc: "Frozen shoulder right side", pi: "Gradual onset 2 months", sx: "Appendectomy 1995", med: "Metformin", al: "Nil", cm: [1, 2], lf: "Walks daily", fh: "Diabetic", br: DEFAULT_BRANCH.id },
+    { n: "Priya Pai", dob: "1988-07-18", g: "F", m: "9663112233", am: "", e: "priya@example.com", oc: "Homemaker", em: "Suresh 9663100000", bg: "AB+", h: 158, w: 65, cc: "Post-op knee rehab (TKR)", pi: "TKR done 3 weeks back", sx: "TKR Right knee", med: "Calcium, D3", al: "Nil", cm: [], lf: "Limited mobility", fh: "Mother arthritic", br: DEFAULT_BRANCH.id },
+    { n: "Karthik Hegde", dob: "2001-03-05", g: "M", m: "9036778899", am: "", e: "karthik@example.com", oc: "Cricketer", em: "Rajesh 9036700000", bg: "O-", h: 178, w: 74, cc: "Right shoulder impingement", pi: "Sports injury 10 days back", sx: "Nil", med: "Nil", al: "Nil", cm: [], lf: "Athlete", fh: "Nil", br: DEFAULT_BRANCH.id },
   ];
   const now = Date.now();
   return base.map((b, i) => ({
@@ -65,6 +66,14 @@ function seedVisits(patients: Patient[]): Visit[] {
   return out;
 }
 
+function defaultSettings(): AppSettings {
+  return {
+    publicStatsEnabled: false,
+    branches: [{ ...DEFAULT_BRANCH }],
+    whatsappNumber: CLINIC.whatsapp,
+  };
+}
+
 function defaultDb(): DB {
   const p = seedPatients();
   return {
@@ -74,7 +83,7 @@ function defaultDb(): DB {
     notes: [],
     bookings: [],
     blocked: [],
-    settings: { publicStatsEnabled: false },
+    settings: defaultSettings(),
     session: { userId: null },
   };
 }
@@ -85,9 +94,15 @@ function load(): DB {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DB;
-      // backfill new fields
       if (!parsed.blocked) parsed.blocked = [];
-      if (!parsed.settings) parsed.settings = { publicStatsEnabled: false };
+      if (!parsed.settings) parsed.settings = defaultSettings();
+      if (!parsed.settings.branches || parsed.settings.branches.length === 0) {
+        parsed.settings.branches = [{ ...DEFAULT_BRANCH }];
+      }
+      if (!parsed.settings.whatsappNumber) parsed.settings.whatsappNumber = CLINIC.whatsapp;
+      // backfill patient branch
+      const defId = parsed.settings.branches[0].id;
+      parsed.patients = parsed.patients.map((p) => (p.br ? p : { ...p, br: defId }));
       return parsed;
     }
   } catch {}
@@ -215,9 +230,32 @@ export const store = {
     state = { ...state, settings: { ...state.settings, ...patch } };
     persist();
   },
+  addBranch(b: Omit<Branch, "id">): Branch {
+    const nb: Branch = { ...b, id: `br${Date.now()}` };
+    state = { ...state, settings: { ...state.settings, branches: [...state.settings.branches, nb] } };
+    persist();
+    return nb;
+  },
+  updateBranch(id: string, patch: Partial<Branch>) {
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        branches: state.settings.branches.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+      },
+    };
+    persist();
+  },
+  removeBranch(id: string) {
+    if (state.settings.branches.length <= 1) return;
+    state = {
+      ...state,
+      settings: { ...state.settings, branches: state.settings.branches.filter((b) => b.id !== id) },
+    };
+    persist();
+  },
 };
 
-// Compute taken slots for a date — combines visits' next reviews, scheduled bookings, and blocked.
 export function takenSlotsForDate(s: DB, date: string): string[] {
   const out = new Set<string>();
   for (const v of s.visits) {

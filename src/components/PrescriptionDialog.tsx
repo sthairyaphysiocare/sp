@@ -1,11 +1,13 @@
 import { useRef, useState } from "react";
-import { LOGO_URL, CLINIC } from "@/lib/logo";
+import { LOGO_URL, branchById, whatsappDigits } from "@/lib/logo";
 import type { Patient, Visit } from "@/lib/types";
+import { useStore } from "@/lib/store";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Printer, Download, X } from "lucide-react";
+import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
 import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
 
@@ -20,6 +22,9 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const today = fmtDate(new Date());
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : "—";
 
+  const settings = useStore((s) => s.settings);
+  const branch = branchById(settings, patient.br) ?? settings.branches[0];
+
   const [rx, setRx] = useState({
     concern: "",
     diagnosis: patient.cc || "",
@@ -30,53 +35,93 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     reviewDate: lastVisit?.nxt || "",
     reviewTime: lastVisit?.nxtTm || "",
   });
-  const [exporting, setExporting] = useState(false);
+  const [busy, setBusy] = useState<null | "pdf" | "wa">(null);
 
   const reviewSlots = slotsForDate(rx.reviewDate);
 
-  async function exportPdf() {
-    if (!ref.current || exporting) return;
-    setExporting(true);
+  async function buildPdf(): Promise<{ blob: Blob; filename: string } | null> {
+    if (!ref.current) return null;
+    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+      import("jspdf"),
+      import("html2canvas"),
+    ]);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const canvas = await html2canvas(ref.current, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
+    const img = canvas.toDataURL("image/jpeg", 0.95);
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    const pw = pdf.internal.pageSize.getWidth();
+    const ph = pdf.internal.pageSize.getHeight();
+    const imgH = (canvas.height * pw) / canvas.width;
+    let y = 0;
+    if (imgH <= ph) {
+      pdf.addImage(img, "JPEG", 0, 0, pw, imgH);
+    } else {
+      let remaining = imgH;
+      while (remaining > 0) {
+        pdf.addImage(img, "JPEG", 0, y, pw, imgH);
+        remaining -= ph;
+        y -= ph;
+        if (remaining > 0) pdf.addPage();
+      }
+    }
+    const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
+    return { blob: pdf.output("blob"), filename };
+  }
+
+  async function downloadPdf() {
+    if (busy) return;
+    setBusy("pdf");
     toast.loading("Generating PDF...", { id: "pdf" });
     try {
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import("jspdf"),
-        import("html2canvas"),
-      ]);
-      // Allow layout/fonts to settle before snapshot
-      await new Promise((r) => requestAnimationFrame(() => r(null)));
-      const canvas = await html2canvas(ref.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      });
-      const img = canvas.toDataURL("image/jpeg", 0.95);
-      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pw) / canvas.width;
-      let y = 0;
-      // Multi-page support
-      if (imgH <= ph) {
-        pdf.addImage(img, "JPEG", 0, 0, pw, imgH);
-      } else {
-        let remaining = imgH;
-        while (remaining > 0) {
-          pdf.addImage(img, "JPEG", 0, y, pw, imgH);
-          remaining -= ph;
-          y -= ph;
-          if (remaining > 0) pdf.addPage();
-        }
-      }
-      pdf.save(`Prescription_${patient.pid}_${Date.now()}.pdf`);
+      const out = await buildPdf();
+      if (!out) throw new Error("no preview");
+      const url = URL.createObjectURL(out.blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = out.filename; a.click();
+      URL.revokeObjectURL(url);
       toast.success("PDF downloaded", { id: "pdf" });
     } catch (err) {
-      console.error("PDF export error:", err);
-      toast.error("Failed to generate PDF. Please try again.", { id: "pdf" });
+      console.error(err);
+      toast.error("Failed to generate PDF.", { id: "pdf" });
     } finally {
-      setExporting(false);
+      setBusy(null);
+    }
+  }
+
+  async function sendWhatsApp() {
+    if (busy) return;
+    setBusy("wa");
+    toast.loading("Preparing prescription...", { id: "wa" });
+    try {
+      // Build & auto-download the PDF so the user can attach it in WhatsApp
+      const out = await buildPdf();
+      if (out) {
+        const url = URL.createObjectURL(out.blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = out.filename; a.click();
+        URL.revokeObjectURL(url);
+      }
+      // wa.me cannot attach files; open chat to the patient's number with a pre-filled text
+      const patientNum = (patient.m || "").replace(/[^0-9]/g, "");
+      const dest = patientNum.length >= 10
+        ? (patientNum.length === 10 ? `91${patientNum}` : patientNum)
+        : whatsappDigits(settings);
+      const message =
+        `Hello ${patient.n}, your prescription from Sthairya Physiocare (${branch?.name ?? ""}) is ready. ` +
+        `Please find the details attached/below.`;
+      window.open(`https://wa.me/${dest}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
+      toast.success("WhatsApp opened — attach the downloaded PDF.", { id: "wa" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't prepare WhatsApp message.", { id: "wa" });
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -88,20 +133,21 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto print:bg-white print:overflow-visible">
       <div className="min-h-full flex items-start justify-center p-4 print:p-0">
         <div className="bg-background rounded-2xl shadow-2xl w-full max-w-4xl my-8 print:my-0 print:shadow-none print:rounded-none">
-          {/* Toolbar — hidden in print */}
           <div className="p-4 border-b flex items-center justify-between print:hidden">
             <h2 className="font-semibold text-lg">Prescription · {patient.pid}</h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button size="sm" variant="outline" onClick={printRx}><Printer className="size-4" /> Print</Button>
-              <Button size="sm" className="brand-gradient text-white border-0" onClick={exportPdf} disabled={exporting}>
-                <Download className="size-4" /> {exporting ? "Generating..." : "Export PDF"}
+              <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!!busy}>
+                <Download className="size-4" /> {busy === "pdf" ? "Generating..." : "Download PDF"}
+              </Button>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={sendWhatsApp} disabled={!!busy}>
+                <WhatsAppIcon size={16} /> {busy === "wa" ? "Preparing..." : "Send via WhatsApp"}
               </Button>
               <Button size="sm" variant="ghost" onClick={onClose}><X className="size-4" /></Button>
             </div>
           </div>
 
           <div className="grid lg:grid-cols-[1fr_1.4fr] gap-0">
-            {/* Editor */}
             <div className="p-5 border-r space-y-4 bg-surface print:hidden">
               <h3 className="font-semibold text-sm">Prescription Content</h3>
               <p className="text-[11px] text-muted-foreground -mt-2">All fields are optional. Empty sections will not appear in the print/PDF.</p>
@@ -129,33 +175,36 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
               </div>
             </div>
 
-            {/* Preview */}
             <div className="p-4 bg-muted print:p-0 print:bg-white">
               <div ref={ref} className="relative bg-white text-black p-8 mx-auto shadow-sm print:shadow-none" style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}>
-                {/* Watermark */}
                 <div className="absolute inset-0 grid place-items-center pointer-events-none" aria-hidden>
                   <img src={LOGO_URL} alt="" className="w-[420px] h-[420px] object-contain" style={{ opacity: 0.07 }} crossOrigin="anonymous" />
                 </div>
 
-                {/* Letterhead */}
                 <div className="relative flex items-start justify-between border-b-2 border-[#0284c7] pb-4">
                   <div className="flex items-center gap-4">
                     <img src={LOGO_URL} alt="Logo" className="w-20 h-20 object-contain rounded-full" crossOrigin="anonymous" />
                     <div>
                       <div className="text-2xl font-bold text-[#0c4a6e] leading-tight">STHAIRYA PHYSIOCARE</div>
                       <div className="text-[10px] tracking-[0.25em] text-[#0284c7] uppercase">Resilience · Firmness · Balance</div>
-                      <div className="text-xs text-gray-600 mt-1">{CLINIC.address}</div>
-                      <div className="text-xs text-gray-600">{CLINIC.domain} · {CLINIC.phone}</div>
+                      {branch && (
+                        <>
+                          <div className="text-xs text-gray-700 mt-1 font-semibold">{branch.name} Branch</div>
+                          <div className="text-xs text-gray-600">{branch.address}</div>
+                          <div className="text-xs text-gray-600">
+                            Phone: {branch.phone}
+                            {branch.license && <> · Reg. No: {branch.license}</>}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {/* Date — shifted 2 tabs left so it doesn't get clipped by printer margins */}
                   <div className="text-xs" style={{ marginRight: "64px" }}>
                     <div className="font-semibold">Date</div>
                     <div>{today}</div>
                   </div>
                 </div>
 
-                {/* Patient row */}
                 <div className="relative mt-5 grid grid-cols-4 gap-3 text-xs">
                   <div><div className="font-semibold text-gray-500 uppercase">Patient ID</div><div className="font-mono">{patient.pid}</div></div>
                   <div><div className="font-semibold text-gray-500 uppercase">Name</div><div className="font-medium">{patient.n}</div></div>
@@ -185,7 +234,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   )}
                 </div>
 
-                {/* Signature — shifted 2 tabs left, footer line removed */}
                 <div className="relative mt-12 grid grid-cols-2 gap-4 text-xs text-gray-600">
                   <div></div>
                   <div className="text-right" style={{ marginRight: "64px" }}>

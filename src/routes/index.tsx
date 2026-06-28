@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
-import { LOGO_URL, CLINIC } from "@/lib/logo";
+import { LOGO_URL, CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import {
   Activity, HeartPulse, Dumbbell, Stethoscope, ShieldCheck, Sparkles,
-  MapPin, Phone, Mail, MessageCircle, ArrowRight, ExternalLink,
+  MapPin, Phone, Mail, ArrowRight, ExternalLink,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -23,6 +24,8 @@ function HomePage() {
   const settings = useStore((s) => s.settings);
   const patients = useStore((s) => s.patients);
   const visits = useStore((s) => s.visits);
+  const branches = enabledBranches(settings);
+  const wa = whatsappDigits(settings);
   const stats = [
     { label: "Patients Treated", value: `${patients.length}+` },
     { label: "Years of Practice", value: "10+" },
@@ -32,7 +35,6 @@ function HomePage() {
 
   return (
     <PublicLayout>
-      {/* Fixed background watermark logo */}
       <div
         aria-hidden
         className="fixed inset-0 pointer-events-none z-0 grid place-items-center"
@@ -45,7 +47,6 @@ function HomePage() {
         }}
       />
       <div className="relative z-10">
-      {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 brand-gradient opacity-[0.04]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-12 pb-20 lg:py-24 grid lg:grid-cols-2 gap-10 items-center">
@@ -57,8 +58,10 @@ function HomePage() {
               Move better. <span className="text-brand-gradient">Live stronger.</span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-              At Sthairya Physiocare, evidence based physiotherapy meets personalised recovery.
-              From sports injuries to post-surgical rehab, right here in Puttur.
+              At Sthairya Physiocare, evidence based practice meets personalized care. Whether
+              you are managing complex musculoskeletal disorders, recovering from a sports
+              injury, rehabilitating after surgery or overcoming everyday mobility challenges,
+              we are dedicated to helping you live a pain free life.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/book">
@@ -66,9 +69,9 @@ function HomePage() {
                   Book a Visit <ArrowRight className="size-4" />
                 </Button>
               </Link>
-              <a href={`https://wa.me/${CLINIC.whatsapp}`} target="_blank" rel="noreferrer">
+              <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
                 <Button size="lg" variant="outline">
-                  <MessageCircle className="size-4" /> WhatsApp
+                  <WhatsAppIcon size={16} /> WhatsApp
                 </Button>
               </a>
             </div>
@@ -95,7 +98,6 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Specialities */}
       <section className="py-16 sm:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="text-center max-w-2xl mx-auto mb-12">
@@ -121,13 +123,12 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Why us */}
       <section className="py-16 sm:py-20 bg-surface/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-3 gap-6">
           {[
             { icon: ShieldCheck, t: "Evidence-Based Care", d: "Protocols backed by latest clinical research and outcome tracking." },
             { icon: HeartPulse, t: "Personalised Plans", d: "Every recovery plan is tailored to your goals and lifestyle." },
-            { icon: Activity, t: "Progress You See", d: "Practively tracking pain reduction and functional recovery." },
+            { icon: Activity, t: "Progress You See", d: "Proactively tracking pain reduction and functional recovery." },
           ].map((x) => (
             <div key={x.t} className="p-6 rounded-2xl bg-card border">
               <x.icon className="size-8 text-brand" />
@@ -138,38 +139,40 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Contact CTA */}
       <section className="py-16 sm:py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 rounded-3xl brand-gradient text-white p-8 sm:p-12 grid md:grid-cols-2 gap-8">
           <div>
             <h2 className="text-3xl font-bold">Ready to start your recovery?</h2>
             <p className="mt-3 text-white/90">Reach out and our team will schedule your first session.</p>
             <div className="mt-6 space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <MapPin className="size-4 mt-0.5 shrink-0" />
-                <a
-                  href={CLINIC.mapUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
-                >
-                  View on Google Maps <ExternalLink className="size-3.5" />
-                </a>
-              </div>
-              <div className="flex items-center gap-3"><Phone className="size-4 shrink-0" /><span>{CLINIC.phone}</span></div>
+              {branches.map((b) => (
+                <div key={b.id} className="flex items-start gap-3">
+                  <MapPin className="size-4 mt-0.5 shrink-0" />
+                  <div>
+                    <div className="font-medium">{b.name}</div>
+                    {b.mapUrl && (
+                      <a href={b.mapUrl} target="_blank" rel="noreferrer"
+                         className="inline-flex items-center gap-1 underline-offset-2 hover:underline text-white/90">
+                        View on Google Maps <ExternalLink className="size-3.5" />
+                      </a>
+                    )}
+                    <div className="text-white/80 text-xs mt-0.5">{b.phone}</div>
+                  </div>
+                </div>
+              ))}
               <div className="flex items-center gap-3"><Mail className="size-4 shrink-0" /><span className="break-all">{CLINIC.email}</span></div>
             </div>
           </div>
           <div className="flex flex-col gap-3 justify-center">
             <Link to="/book"><Button size="lg" className="w-full bg-white text-brand hover:bg-white/90 border-0">Book Online</Button></Link>
-            <a href={`https://wa.me/${CLINIC.whatsapp}`} target="_blank" rel="noreferrer">
+            <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
               <Button size="lg" variant="outline" className="w-full bg-transparent border-white text-white hover:bg-white/10">
-                <MessageCircle className="size-4" /> Chat on WhatsApp
+                <WhatsAppIcon size={16} /> Chat on WhatsApp
               </Button>
             </a>
-            <a href={`mailto:${CLINIC.email}`}>
+            <a href={`tel:+${wa}`}>
               <Button size="lg" variant="outline" className="w-full bg-transparent border-white text-white hover:bg-white/10">
-                <Mail className="size-4" /> Email Us
+                <Phone className="size-4" /> Call
               </Button>
             </a>
           </div>
