@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
-import { CLINIC } from "@/lib/logo";
+import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,8 @@ import { useMemo, useState } from "react";
 import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { MessageCircle, Mail, CheckCircle2 } from "lucide-react";
+import { Mail, CheckCircle2 } from "lucide-react";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
 
 export const Route = createFileRoute("/book")({
@@ -27,12 +28,20 @@ export const Route = createFileRoute("/book")({
 
 function BookPage() {
   const today = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", concern: "", prefDate: today, prefTime: "" });
+  const settings = useStore((s) => s.settings);
+  const branches = enabledBranches(settings);
+  const wa = whatsappDigits(settings);
+  const [form, setForm] = useState({
+    name: "", phone: "", email: "", concern: "",
+    prefDate: today, prefTime: "",
+    br: branches[0]?.id || "",
+  });
   const [done, setDone] = useState(false);
 
   const taken = useStore((s) => takenSlotsForDate(s, form.prefDate));
   const slots = useMemo(() => slotsForDate(form.prefDate), [form.prefDate]);
   const closed = slots.length === 0;
+  const showBranchPicker = branches.length > 1;
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,12 +52,12 @@ function BookPage() {
       name: form.name, phone: form.phone, email: form.email, concern: form.concern,
       preferred: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
       prefDate: form.prefDate, prefTime: form.prefTime,
+      br: form.br || branches[0]?.id,
     });
     toast.success("Booking received — we'll contact you shortly.");
     setDone(true);
-    setForm({ name: "", phone: "", email: "", concern: "", prefDate: today, prefTime: "" });
+    setForm({ ...form, name: "", phone: "", email: "", concern: "", prefTime: "" });
   }
-
 
   return (
     <PublicLayout>
@@ -58,13 +67,12 @@ function BookPage() {
         <p className="mt-4 text-lg text-muted-foreground">Choose the channel that works best for you.</p>
 
         <div className="mt-10 grid lg:grid-cols-3 gap-4">
-          <a href={`https://wa.me/${CLINIC.whatsapp}?text=${encodeURIComponent("Hi, I'd like to book a physiotherapy session.")}`}
+          <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Hi, I'd like to book a physiotherapy session.")}`}
              target="_blank" rel="noreferrer"
              className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all">
-            <div className="size-12 rounded-xl bg-emerald-500/10 text-emerald-600 grid place-items-center mb-4"><MessageCircle className="size-5" /></div>
+            <div className="size-12 rounded-xl bg-emerald-500/10 text-emerald-600 grid place-items-center mb-4"><WhatsAppIcon size={20} /></div>
             <h3 className="font-semibold">WhatsApp</h3>
             <p className="text-sm text-muted-foreground mt-1">Fastest response — chat directly.</p>
-            <p className="text-xs text-brand mt-2">{CLINIC.phone}</p>
           </a>
           <a href={`mailto:${CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
              className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all">
@@ -100,6 +108,15 @@ function BookPage() {
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
+            {showBranchPicker && (
+              <div>
+                <Label htmlFor="br">Preferred Location *</Label>
+                <select id="br" className="w-full h-9 px-3 rounded-md border bg-background"
+                        value={form.br} onChange={(e) => setForm({ ...form, br: e.target.value })} required>
+                  {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <Label htmlFor="prefDate">Preferred Date *</Label>
               <Input
@@ -129,7 +146,7 @@ function BookPage() {
                 ))}
               </select>
               <div className="text-[11px] text-muted-foreground mt-1">
-                Mon–Fri 9 AM–1 PM &amp; 4 PM–8 PM · Sat 9 AM–1 PM · Sun closed
+                Mon–Fri 9 AM–1 PM &amp; 4 PM–8 PM · Sat 9 AM–1 PM · Sun by appointment
               </div>
             </div>
           </div>

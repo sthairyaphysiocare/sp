@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { store } from "@/lib/store";
+import { store, useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { enabledBranches } from "@/lib/logo";
 
 export const Route = createFileRoute("/app/patients/new")({
   component: NewPatient,
@@ -18,10 +19,12 @@ export const Route = createFileRoute("/app/patients/new")({
 function NewPatient() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
+  const branches = useStore((s) => enabledBranches(s.settings));
   const nextPid = store.nextPid();
   const [f, setF] = useState({
     n: "", dob: "", g: "M" as "M" | "F" | "O", m: "", am: "", e: "", oc: "", em: "",
     bg: "", h: 0, w: 0, cc: "", pi: "", sx: "", med: "", al: "", cm: [] as number[], lf: "", fh: "",
+    br: branches[0]?.id || "",
   });
 
   function toggleCm(id: number) {
@@ -31,6 +34,7 @@ function NewPatient() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!f.n || !f.m) { toast.error("Name and mobile required"); return; }
+    if (!f.br) { toast.error("Please select a branch"); return; }
     const p = store.addPatient(f);
     toast.success(`Patient ${p.pid} created`);
     navigate({ to: "/app/patients/$id", params: { id: p.id } });
@@ -60,6 +64,14 @@ function NewPatient() {
             <div><Label>Email</Label><Input type="email" value={f.e} onChange={(e) => setF({ ...f, e: e.target.value })} /></div>
             <div><Label>Occupation</Label><Input value={f.oc} onChange={(e) => setF({ ...f, oc: e.target.value })} /></div>
             <div><Label>Emergency Contact</Label><Input value={f.em} onChange={(e) => setF({ ...f, em: e.target.value })} /></div>
+            <div className="sm:col-span-2">
+              <Label>Treating Branch *</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.br}
+                      onChange={(e) => setF({ ...f, br: e.target.value })} required>
+                <option value="">Select branch…</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
           </div>
         </section>
 
