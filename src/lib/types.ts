@@ -8,6 +8,16 @@ export interface User {
   password: string;
 }
 
+export interface Branch {
+  id: string;
+  name: string;
+  address: string;
+  mapUrl: string;
+  phone: string;
+  license: string;
+  enabled: boolean;
+}
+
 export interface Patient {
   id: string;
   pid: string;
@@ -31,6 +41,7 @@ export interface Patient {
   cm: number[];
   lf: string;
   fh: string;
+  br?: string; // assigned branch id
   ts: number;
 }
 
@@ -49,8 +60,8 @@ export interface Visit {
   adv: string;
   fi: number;
   nxt: string;
-  nxtTm?: string; // HH:MM next review time slot
-  dur?: number; // minutes, default 30
+  nxtTm?: string;
+  dur?: number;
 }
 
 export interface ClinicalNote {
@@ -68,9 +79,10 @@ export interface Booking {
   phone: string;
   email: string;
   concern: string;
-  preferred: string; // legacy free-text
-  prefDate?: string; // ISO yyyy-mm-dd
-  prefTime?: string; // HH:MM
+  preferred: string;
+  prefDate?: string;
+  prefTime?: string;
+  br?: string; // preferred branch id
   status: "pending" | "contacted" | "scheduled" | "closed";
   ts: number;
 }
@@ -79,15 +91,16 @@ export interface BlockedSlot {
   id: string;
   date: string;
   time: string;
-  dur: number; // minutes
+  dur: number;
   reason: string;
   by: string;
 }
 
 export interface AppSettings {
   publicStatsEnabled: boolean;
+  branches: Branch[];
+  whatsappNumber: string; // digits only, e.g. 919900315254
 }
-
 
 export const COMORBIDITIES: Record<number, string> = {
   1: "Diabetes",

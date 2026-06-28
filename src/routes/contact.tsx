@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
-import { CLINIC } from "@/lib/logo";
-import { MapPin, Phone, Mail, MessageCircle, Clock, ExternalLink } from "lucide-react";
+import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
+import { useStore } from "@/lib/store";
+import { MapPin, Phone, Mail, Clock, ExternalLink } from "lucide-react";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/contact")({
@@ -18,7 +20,11 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
-  const mapUrl = CLINIC.mapUrl;
+  const settings = useStore((s) => s.settings);
+  const branches = enabledBranches(settings);
+  const wa = whatsappDigits(settings);
+  const primary = branches[0];
+
   return (
     <PublicLayout>
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
@@ -32,24 +38,57 @@ function ContactPage() {
             <div className="p-6 rounded-2xl bg-card border">
               <div className="flex items-start gap-4">
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><MapPin className="size-5" /></div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h3 className="font-semibold">Visit Us</h3>
-                  <p className="text-sm text-muted-foreground mt-1">{CLINIC.name}, {CLINIC.address}</p>
-                  <a href={mapUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-brand mt-2 hover:underline">
-                    View on Google Maps <ExternalLink className="size-3" />
+                  <div className="mt-3 space-y-4">
+                    {branches.map((b) => (
+                      <div key={b.id}>
+                        <div className="text-sm font-medium">{b.name}</div>
+                        <p className="text-sm text-muted-foreground mt-0.5">{b.address}</p>
+                        {b.mapUrl && (
+                          <a href={b.mapUrl} target="_blank" rel="noreferrer"
+                             className="inline-flex items-center gap-1 text-sm text-brand mt-1 hover:underline">
+                            View on Google Maps <ExternalLink className="size-3" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-card border">
+              <div className="flex items-start gap-4">
+                <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Phone className="size-5" /></div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Call</h3>
+                  <div className="mt-2 space-y-1">
+                    {branches.map((b) => (
+                      <p key={b.id} className="text-sm">
+                        <span className="text-muted-foreground">{b.name}:</span>{" "}
+                        <a href={`tel:${b.phone.replace(/\s/g, "")}`} className="text-brand hover:underline">{b.phone}</a>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-card border">
+              <div className="flex items-start gap-4">
+                <div className="size-10 rounded-lg bg-emerald-500 grid place-items-center text-white shrink-0"><WhatsAppIcon size={20} /></div>
+                <div>
+                  <h3 className="font-semibold">WhatsApp</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Quick replies, 7 days a week.</p>
+                  <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer"
+                     className="inline-flex items-center gap-1 text-sm text-emerald-600 hover:underline mt-1">
+                    Chat with us
                   </a>
                 </div>
               </div>
             </div>
-            <div className="p-6 rounded-2xl bg-card border">
-              <div className="flex items-start gap-4">
-                <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Phone className="size-5" /></div>
-                <div>
-                  <h3 className="font-semibold">Call / WhatsApp</h3>
-                  <p className="text-sm text-muted-foreground mt-1">{CLINIC.phone}</p>
-                </div>
-              </div>
-            </div>
+
             <div className="p-6 rounded-2xl bg-card border">
               <div className="flex items-start gap-4">
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Mail className="size-5" /></div>
@@ -59,13 +98,15 @@ function ContactPage() {
                 </div>
               </div>
             </div>
+
             <div className="p-6 rounded-2xl bg-card border">
               <div className="flex items-start gap-4">
                 <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Clock className="size-5" /></div>
                 <div>
                   <h3 className="font-semibold">Clinic Hours</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Mon – Sat: 8:00 AM – 8:00 PM</p>
-                  <p className="text-sm text-muted-foreground">Sun: By appointment</p>
+                  <p className="text-sm text-muted-foreground mt-1">Monday – Friday: 9:00 AM – 1:00 PM &amp; 4:00 PM – 8:00 PM</p>
+                  <p className="text-sm text-muted-foreground">Saturday: 9:00 AM – 1:00 PM</p>
+                  <p className="text-sm text-muted-foreground">Sunday: By appointment</p>
                 </div>
               </div>
             </div>
@@ -74,7 +115,7 @@ function ContactPage() {
           <div className="rounded-2xl overflow-hidden border bg-card min-h-[400px]">
             <iframe
               title="Clinic Location"
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(CLINIC.mapRef)}&output=embed`}
+              src={`https://maps.google.com/maps?q=${encodeURIComponent(primary?.address || CLINIC.mapRef)}&output=embed`}
               className="w-full h-full min-h-[400px] border-0"
               loading="lazy"
             />
@@ -82,14 +123,14 @@ function ContactPage() {
         </div>
 
         <div className="mt-10 flex flex-wrap gap-3">
-          <a href={`https://wa.me/${CLINIC.whatsapp}`} target="_blank" rel="noreferrer">
-            <Button className="brand-gradient text-white border-0"><MessageCircle className="size-4" /> WhatsApp Now</Button>
+          <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"><WhatsAppIcon size={16} /> WhatsApp Now</Button>
+          </a>
+          <a href={`tel:+${wa}`}>
+            <Button variant="outline"><Phone className="size-4" /> Call</Button>
           </a>
           <a href={`mailto:${CLINIC.email}`}>
             <Button variant="outline"><Mail className="size-4" /> Send Email</Button>
-          </a>
-          <a href={`tel:${CLINIC.phone}`}>
-            <Button variant="outline"><Phone className="size-4" /> Call</Button>
           </a>
         </div>
       </section>
