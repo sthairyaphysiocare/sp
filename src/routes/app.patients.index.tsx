@@ -3,23 +3,35 @@ import { store, useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { Search, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { IconButton } from "@/components/IconButton";
+import { Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/app/patients/")({
   component: Patients,
 });
+
+const PAGE = 10;
 
 function Patients() {
   const patients = useStore((s) => s.patients);
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
   const [q, setQ] = useState("");
-  const filtered = patients.filter((p) =>
-    !q || p.sn.includes(q.toLowerCase()) || p.pid.toLowerCase().includes(q.toLowerCase()) || p.m.includes(q),
+  const [shown, setShown] = useState(PAGE);
+
+  const filtered = useMemo(
+    () => patients.filter((p) =>
+      !q || p.sn.includes(q.toLowerCase()) || p.pid.toLowerCase().includes(q.toLowerCase()) || p.m.includes(q),
+    ),
+    [patients, q],
   );
+
+  const visible = filtered.slice(0, shown);
+  const hasMore = filtered.length > visible.length;
 
   function onDelete(id: string, name: string) {
     if (!isAdmin) return;
@@ -27,7 +39,6 @@ function Patients() {
     store.deletePatient(id);
     toast.success("Patient record deleted");
   }
-
 
   return (
     <div>
@@ -42,7 +53,7 @@ function Patients() {
 
       <div className="mt-6 relative">
         <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search by name, ID, or mobile..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9 h-11" />
+        <Input placeholder="Search by name, ID, or mobile..." value={q} onChange={(e) => { setQ(e.target.value); setShown(PAGE); }} className="pl-9 h-11" />
       </div>
 
       <div className="mt-6 rounded-2xl bg-card border overflow-hidden">
@@ -55,12 +66,17 @@ function Patients() {
                 <th className="text-left px-4 py-3">Age/Sex</th>
                 <th className="text-left px-4 py-3 hidden md:table-cell">Mobile</th>
                 <th className="text-left px-4 py-3 hidden lg:table-cell">Chief Complaint</th>
+                <th className="text-left px-4 py-3">Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => {
-                const age = new Date().getFullYear() - new Date(p.dob).getFullYear();
+              {visible.map((p) => {
+                const age = p.dob ? new Date().getFullYear() - new Date(p.dob).getFullYear() : "—";
+                const status = p.status || "active";
+                const badge = status === "active" ? "bg-emerald-500/10 text-emerald-700"
+                  : status === "completed" ? "bg-blue-500/10 text-blue-700"
+                  : "bg-muted text-muted-foreground";
                 return (
                   <tr key={p.id} className="border-t hover:bg-surface">
                     <td className="px-4 py-3 font-mono text-xs">{p.pid}</td>
@@ -68,24 +84,33 @@ function Patients() {
                     <td className="px-4 py-3">{age}/{p.g}</td>
                     <td className="px-4 py-3 hidden md:table-cell">{p.m}</td>
                     <td className="px-4 py-3 hidden lg:table-cell truncate max-w-xs">{p.cc}</td>
+                    <td className="px-4 py-3"><span className={`text-[11px] px-2 py-0.5 rounded-full capitalize ${badge}`}>{status}</span></td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline mr-3">Open</Link>
+                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand text-sm font-medium hover:underline mr-2">Open</Link>
                       {isAdmin && (
-                        <Button size="sm" variant="ghost" onClick={() => onDelete(p.id, p.n)} aria-label={`Delete ${p.n}`}>
+                        <IconButton tooltip="Delete patient" onClick={() => onDelete(p.id, p.n)}>
                           <Trash2 className="size-4 text-destructive" />
-                        </Button>
+                        </IconButton>
                       )}
                     </td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-muted-foreground py-12">No patients match your search.</td></tr>
+              {visible.length === 0 && (
+                <tr><td colSpan={7} className="text-center text-muted-foreground py-12">No patients match your search.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {hasMore && (
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" onClick={() => setShown((s) => s + PAGE)}>
+            Load More ({filtered.length - visible.length} remaining)
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
