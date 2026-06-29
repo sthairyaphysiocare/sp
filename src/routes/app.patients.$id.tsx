@@ -2,25 +2,28 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useMemo, useState } from "react";
-import { ArrowLeft, FileText, Plus, Activity, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Plus, Activity, Trash2, Pencil, Check, X, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { COMORBIDITIES } from "@/lib/types";
+import { COMORBIDITIES, type Patient, type PatientStatus, type Visit } from "@/lib/types";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { fmtDate } from "@/lib/date";
-import { slotsForDate } from "@/lib/date";
-import { branchById } from "@/lib/logo";
+import { fmtDate, slotsForDate } from "@/lib/date";
+import { branchById, enabledBranches } from "@/lib/logo";
+import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
+import { IconButton } from "@/components/IconButton";
 
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientDetail,
 });
+
+const STATUSES: PatientStatus[] = ["active", "inactive", "completed"];
 
 function PatientDetail() {
   const { id } = useParams({ from: "/app/patients/$id" });
@@ -30,8 +33,11 @@ function PatientDetail() {
   const visits = useStore((s) => s.visits.filter((v) => v.patientId === id).sort((a, b) => a.vN - b.vN));
   const notes = useStore((s) => s.notes.filter((n) => n.patientId === id));
   const branch = useStore((s) => branchById(s.settings, patient?.br));
+  const branches = useStore((s) => enabledBranches(s.settings));
+  const therapists = useStore((s) => s.users.filter((u) => u.role === "therapist" || u.role === "admin"));
   const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes">("overview");
   const [showRx, setShowRx] = useState(false);
+  const [editing, setEditing] = useState(false);
   const isAdmin = hasRole("admin");
 
   function onDelete() {
@@ -51,14 +57,27 @@ function PatientDetail() {
     );
   }
 
+  const status: PatientStatus = patient.status || "active";
+  const isActive = status === "active";
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : "—";
   const lastVisit = visits[visits.length - 1];
   const canClinical = hasRole("admin", "therapist");
+  const canEdit = canClinical && isActive;
 
   const chartData = useMemo(
     () => visits.map((v) => ({ visit: `V${v.vN}`, pain: v.pS, recovery: v.fi })),
     [visits],
   );
+
+  const statusBadge = status === "active" ? "bg-emerald-500/10 text-emerald-700"
+    : status === "completed" ? "bg-blue-500/10 text-blue-700"
+    : "bg-muted text-muted-foreground";
+
+  function changeStatus(s: PatientStatus) {
+    if (!patient) return;
+    store.updatePatient(patient.id, { status: s });
+    toast.success(`Status set to ${s}`);
+  }
 
   return (
     <div>
@@ -70,25 +89,46 @@ function PatientDetail() {
           <div className="flex items-center gap-2 text-xs font-mono text-brand">{patient.pid}</div>
           <h1 className="text-2xl sm:text-3xl font-bold truncate">{patient.n}</h1>
           <p className="text-sm text-muted-foreground">{age} yrs · {patient.g === "M" ? "Male" : patient.g === "F" ? "Female" : "Other"} · {patient.m}</p>
-          {branch && (
-            <p className="text-xs mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-brand font-medium">
-              Branch: {branch.name}
-            </p>
-          )}
+          <div className="mt-1 flex flex-wrap gap-2 items-center">
+            {branch && (
+              <span className="text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-brand font-medium">
+                {branch.name}
+              </span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${statusBadge}`}>{status}</span>
+            {canClinical && (
+              <select value={status} onChange={(e) => changeStatus(e.target.value as PatientStatus)}
+                      className="text-xs h-7 px-2 rounded-md border bg-background capitalize">
+                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
           {canClinical && (
-            <Button onClick={() => setShowRx(true)} className="brand-gradient text-white border-0">
+            <Button onClick={() => setShowRx(true)} disabled={!isActive} className="brand-gradient text-white border-0">
               <FileText className="size-4" /> Prescription
+            </Button>
+          )}
+          {canClinical && (
+            <Button variant="outline" onClick={() => setEditing(true)} disabled={!isActive}>
+              {isActive ? <><Pencil className="size-4" /> Edit</> : <><Lock className="size-4" /> Locked</>}
             </Button>
           )}
           {isAdmin && (
             <Button variant="outline" onClick={onDelete} className="text-destructive border-destructive/40 hover:bg-destructive/10">
-              <Trash2 className="size-4" /> Delete Patient
+              <Trash2 className="size-4" /> Delete
             </Button>
           )}
         </div>
       </div>
+
+      {!isActive && canClinical && (
+        <div className="mt-4 p-3 rounded-lg bg-muted/60 border text-sm flex items-center gap-2">
+          <Lock className="size-4 text-muted-foreground" />
+          <span>This patient is {status}. Set status to <strong>Active</strong> to edit clinical details.</span>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-1 border-b">
         {(["overview", "visits", "progress", "notes"] as const).map((t) => {
@@ -108,9 +148,10 @@ function PatientDetail() {
             <Card title="Demographics">
               <Row k="Email" v={patient.e || "—"} />
               <Row k="Occupation" v={patient.oc || "—"} />
-              <Row k="Emergency" v={patient.em || "—"} />
+              <Row k="Emergency" v={patient.emN || patient.emP ? `${patient.emN || ""} ${patient.emP || ""}`.trim() : (patient.em || "—")} />
               <Row k="Blood Group" v={patient.bg || "—"} />
               <Row k="Height / Weight" v={`${patient.h || "—"} cm / ${patient.w || "—"} kg`} />
+              <Row k="Therapist" v={therapists.find((t) => t.id === patient.tId)?.name || "—"} />
             </Card>
             {canClinical && (
               <Card title="Clinical">
@@ -126,7 +167,7 @@ function PatientDetail() {
         )}
 
         {tab === "visits" && (
-          <VisitsTab patientId={patient.id} visits={visits} canEdit={canClinical} therapistId={user?.id || ""} therapistName={user?.name || ""} />
+          <VisitsTab patient={patient} visits={visits} canEdit={canEdit} therapistId={user?.id || ""} therapistName={user?.name || ""} />
         )}
 
         {tab === "progress" && canClinical && (
@@ -143,8 +184,8 @@ function PatientDetail() {
                   <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                     <XAxis dataKey="visit" />
-                    <YAxis yAxisId="left" domain={[0, 10]} label={{ value: "Pain (VAS)", angle: -90, position: "insideLeft", style: { fontSize: 12 } }} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} label={{ value: "Recovery %", angle: 90, position: "insideRight", style: { fontSize: 12 } }} />
+                    <YAxis yAxisId="left" domain={[0, 10]} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
                     <Tooltip />
                     <Legend />
                     <Line yAxisId="left" type="monotone" dataKey="pain" stroke="#ef4444" strokeWidth={2.5} name="Pain Score" dot={{ r: 4 }} />
@@ -153,16 +194,25 @@ function PatientDetail() {
                 </ResponsiveContainer>
               </div>
             )}
-            <p className="text-xs text-muted-foreground mt-3">Left axis: VAS/NPRS pain trend (0–10). Right axis: functional recovery (0–100%).</p>
+            <p className="text-xs text-muted-foreground mt-3">Left axis: VAS/NPRS (0–10). Right axis: functional recovery (0–100%).</p>
           </div>
         )}
 
         {tab === "notes" && canClinical && (
-          <NotesTab patientId={patient.id} notes={notes} authorName={user?.name || ""} />
+          <NotesTab patientId={patient.id} notes={notes} authorName={user?.name || ""} canEdit={isActive} />
         )}
       </div>
 
-      {showRx && canClinical && <PrescriptionDialog patient={patient} lastVisit={lastVisit} onClose={() => setShowRx(false)} />}
+      {editing && canEdit && (
+        <EditPatientDialog
+          patient={patient}
+          branches={branches}
+          therapists={therapists}
+          onClose={() => setEditing(false)}
+        />
+      )}
+
+      {showRx && canClinical && isActive && <PrescriptionDialog patient={patient} lastVisit={lastVisit} onClose={() => setShowRx(false)} />}
     </div>
   );
 }
@@ -179,15 +229,119 @@ function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="grid grid-cols-[120px_1fr] gap-3">
       <div className="text-muted-foreground text-xs uppercase tracking-wider font-medium">{k}</div>
-      <div>{v}</div>
+      <div className="break-words">{v}</div>
     </div>
   );
 }
 
-function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
-  patientId: string; visits: any[]; canEdit: boolean; therapistId: string; therapistName: string;
+function EditPatientDialog({ patient, branches, therapists, onClose }: {
+  patient: Patient;
+  branches: { id: string; name: string }[];
+  therapists: { id: string; name: string }[];
+  onClose: () => void;
+}) {
+  const [f, setF] = useState({
+    n: patient.n, dob: patient.dob, g: patient.g, m: patient.m, am: patient.am,
+    e: patient.e, oc: patient.oc,
+    emN: patient.emN || "", emP: patient.emP || "",
+    bg: patient.bg, h: patient.h, w: patient.w,
+    cc: patient.cc, pi: patient.pi, sx: patient.sx, med: patient.med, al: patient.al,
+    cm: [...patient.cm], lf: patient.lf, fh: patient.fh,
+    br: patient.br || branches[0]?.id || "", tId: patient.tId || "",
+  });
+
+  function toggleCm(id: number) {
+    setF({ ...f, cm: f.cm.includes(id) ? f.cm.filter((x) => x !== id) : [...f.cm, id] });
+  }
+
+  function save() {
+    const em = (f.emN || f.emP) ? `${f.emN} ${f.emP}`.trim() : "";
+    store.updatePatient(patient.id, { ...f, em });
+    toast.success("Patient updated");
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto p-4">
+      <div className="bg-background rounded-2xl shadow-2xl max-w-3xl mx-auto my-6">
+        <div className="p-4 border-b flex items-center justify-between">
+          <h2 className="font-semibold text-lg">Edit Patient · {patient.pid}</h2>
+          <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close"><X className="size-4" /></Button>
+        </div>
+        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div><Label>Full Name</Label><Input value={f.n} onChange={(e) => setF({ ...f, n: e.target.value })} /></div>
+            <div>
+              <Label>Date of Birth</Label>
+              <MonthYearDatePicker value={f.dob} onChange={(v) => setF({ ...f, dob: v })} yearsBack={100} yearsForward={0} />
+            </div>
+            <div>
+              <Label>Gender</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.g} onChange={(e) => setF({ ...f, g: e.target.value as any })}>
+                <option value="M">Male</option><option value="F">Female</option><option value="O">Other</option>
+              </select>
+            </div>
+            <div><Label>Mobile</Label><Input value={f.m} onChange={(e) => setF({ ...f, m: e.target.value })} /></div>
+            <div><Label>Alternate Mobile</Label><Input value={f.am} onChange={(e) => setF({ ...f, am: e.target.value })} /></div>
+            <div><Label>Email</Label><Input value={f.e} onChange={(e) => setF({ ...f, e: e.target.value })} /></div>
+            <div><Label>Occupation</Label><Input value={f.oc} onChange={(e) => setF({ ...f, oc: e.target.value })} /></div>
+            <div><Label>Emergency Contact Name</Label><Input value={f.emN} onChange={(e) => setF({ ...f, emN: e.target.value })} /></div>
+            <div><Label>Emergency Contact Number</Label><Input value={f.emP} onChange={(e) => setF({ ...f, emP: e.target.value })} /></div>
+            <div><Label>Blood Group</Label><Input value={f.bg} onChange={(e) => setF({ ...f, bg: e.target.value })} /></div>
+            <div><Label>Height (cm)</Label><Input type="number" value={f.h || ""} onChange={(e) => setF({ ...f, h: +e.target.value })} /></div>
+            <div><Label>Weight (kg)</Label><Input type="number" value={f.w || ""} onChange={(e) => setF({ ...f, w: +e.target.value })} /></div>
+            <div>
+              <Label>Branch</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.br} onChange={(e) => setF({ ...f, br: e.target.value })}>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Assigned Therapist</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.tId} onChange={(e) => setF({ ...f, tId: e.target.value })}>
+                <option value="">Unassigned</option>
+                {therapists.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="border-t pt-4 space-y-3">
+            <h3 className="font-semibold text-sm">Clinical</h3>
+            <div><Label>Chief Complaint</Label><Textarea rows={2} value={f.cc} onChange={(e) => setF({ ...f, cc: e.target.value })} /></div>
+            <div><Label>HPI</Label><Textarea rows={3} value={f.pi} onChange={(e) => setF({ ...f, pi: e.target.value })} /></div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div><Label>Surgical History</Label><Textarea rows={2} value={f.sx} onChange={(e) => setF({ ...f, sx: e.target.value })} /></div>
+              <div><Label>Medications</Label><Textarea rows={2} value={f.med} onChange={(e) => setF({ ...f, med: e.target.value })} /></div>
+              <div><Label>Allergies</Label><Input value={f.al} onChange={(e) => setF({ ...f, al: e.target.value })} /></div>
+              <div><Label>Family History</Label><Input value={f.fh} onChange={(e) => setF({ ...f, fh: e.target.value })} /></div>
+              <div className="sm:col-span-2"><Label>Lifestyle</Label><Input value={f.lf} onChange={(e) => setF({ ...f, lf: e.target.value })} /></div>
+            </div>
+            <div>
+              <Label>Comorbidities</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {Object.entries(COMORBIDITIES).map(([id, label]) => (
+                  <button type="button" key={id} onClick={() => toggleCm(+id)}
+                    className={`px-3 py-2 min-h-11 rounded-lg text-sm border ${f.cm.includes(+id) ? "bg-brand text-white border-brand" : "bg-background"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 border-t flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button className="brand-gradient text-white border-0" onClick={save}><Check className="size-4" /> Save Changes</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VisitsTab({ patient, visits, canEdit, therapistId, therapistName }: {
+  patient: Patient; visits: Visit[]; canEdit: boolean; therapistId: string; therapistName: string;
 }) {
   const [show, setShow] = useState(false);
+  const [editVid, setEditVid] = useState<string | null>(null);
   const [v, setV] = useState({
     dt: new Date().toISOString().slice(0, 10),
     pS: 5, sym: "", rom: "", str: "", tx: "", adv: "", fi: 50,
@@ -200,7 +354,7 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
 
   function save() {
     if (!canEdit) return;
-    store.addVisit({ patientId, ...v, tId: therapistId, tN: therapistName });
+    store.addVisit({ patientId: patient.id, ...v, tId: therapistId, tN: therapistName });
     toast.success("Visit logged");
     setShow(false);
     setV({ ...v, sym: "", rom: "", str: "", tx: "", adv: "", nxtTm: "" });
@@ -231,7 +385,6 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
             <div>
               <Label>Next Review Date</Label>
               <Input type="date" value={v.nxt} onChange={(e) => setV({ ...v, nxt: e.target.value, nxtTm: "" })} />
-              <div className="text-xs text-muted-foreground mt-1">Displays as {fmtDate(v.nxt)}</div>
             </div>
             <div>
               <Label>Next Review Time Slot</Label>
@@ -243,14 +396,12 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
                   </option>
                 ))}
               </select>
-              {slots.length === 0 && <div className="text-xs text-destructive mt-1">Clinic closed on this date.</div>}
             </div>
             <div>
               <Label>Slot Duration (min)</Label>
               <select className="w-full h-9 px-3 rounded-md border bg-background" value={v.dur} onChange={(e) => setV({ ...v, dur: +e.target.value })}>
                 {[30, 60, 90, 120].map((d) => <option key={d} value={d}>{d} min</option>)}
               </select>
-              <div className="text-xs text-muted-foreground mt-1">Extended slots block public bookings.</div>
             </div>
           </div>
           <div className="flex gap-2">
@@ -263,63 +414,99 @@ function VisitsTab({ patientId, visits, canEdit, therapistId, therapistName }: {
       <div className="space-y-3">
         {visits.length === 0 && <p className="text-sm text-muted-foreground text-center py-12">No visits logged yet.</p>}
         {[...visits].reverse().map((vis) => (
-          <div key={vis.id} className="p-5 rounded-2xl bg-card border">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white text-sm font-bold">V{vis.vN}</div>
-                <div>
-                  <div className="font-semibold">{fmtDate(vis.dt)}</div>
-                  <div className="text-xs text-muted-foreground">{vis.tN}</div>
+          editVid === vis.id ? (
+            <VisitEdit key={vis.id} visit={vis} onClose={() => setEditVid(null)} />
+          ) : (
+            <div key={vis.id} className="p-5 rounded-2xl bg-card border">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white text-sm font-bold">V{vis.vN}</div>
+                  <div>
+                    <div className="font-semibold">{fmtDate(vis.dt)}</div>
+                    <div className="text-xs text-muted-foreground">{vis.tN}</div>
+                  </div>
+                </div>
+                <div className="flex gap-2 items-center text-xs">
+                  <span className="px-2 py-1 rounded bg-red-500/10 text-red-700">Pain {vis.pS}/10</span>
+                  <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-700">Recovery {vis.fi}%</span>
+                  {canEdit && (
+                    <IconButton tooltip="Edit visit" onClick={() => setEditVid(vis.id)}>
+                      <Pencil className="size-4" />
+                    </IconButton>
+                  )}
                 </div>
               </div>
-              <div className="flex gap-2 text-xs">
-                <span className="px-2 py-1 rounded bg-red-500/10 text-red-700">Pain {vis.pS}/10</span>
-                <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-700">Recovery {vis.fi}%</span>
+              <div className="mt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                {vis.sym && <div><span className="text-muted-foreground text-xs uppercase">Symptoms: </span>{vis.sym}</div>}
+                {vis.rom && <div><span className="text-muted-foreground text-xs uppercase">ROM: </span>{vis.rom}</div>}
+                {vis.str && <div><span className="text-muted-foreground text-xs uppercase">MMT: </span>{vis.str}</div>}
+                {vis.tx && <div><span className="text-muted-foreground text-xs uppercase">Tx: </span>{vis.tx}</div>}
+                {vis.adv && <div className="sm:col-span-2"><span className="text-muted-foreground text-xs uppercase">HEP: </span>{vis.adv}</div>}
               </div>
             </div>
-            <div className="mt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-              {vis.sym && <div><span className="text-muted-foreground text-xs uppercase">Symptoms: </span>{vis.sym}</div>}
-              {vis.rom && <div><span className="text-muted-foreground text-xs uppercase">ROM: </span>{vis.rom}</div>}
-              {vis.str && <div><span className="text-muted-foreground text-xs uppercase">MMT: </span>{vis.str}</div>}
-              {vis.tx && <div><span className="text-muted-foreground text-xs uppercase">Tx: </span>{vis.tx}</div>}
-              {vis.adv && <div className="sm:col-span-2"><span className="text-muted-foreground text-xs uppercase">HEP: </span>{vis.adv}</div>}
-            </div>
-          </div>
+          )
         ))}
       </div>
     </div>
   );
 }
 
-function NotesTab({ patientId, notes, authorName }: { patientId: string; notes: any[]; authorName: string }) {
+function VisitEdit({ visit, onClose }: { visit: Visit; onClose: () => void }) {
+  const [v, setV] = useState({ ...visit });
+  function save() {
+    store.updateVisit(visit.id, v);
+    toast.success("Visit updated");
+    onClose();
+  }
+  return (
+    <div className="p-5 rounded-2xl bg-card border border-brand/40 space-y-3">
+      <div className="font-semibold">Edit Visit V{visit.vN}</div>
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div><Label>Date</Label><Input type="date" value={v.dt} onChange={(e) => setV({ ...v, dt: e.target.value })} /></div>
+        <div><Label>Pain</Label><Input type="number" min={0} max={10} value={v.pS} onChange={(e) => setV({ ...v, pS: +e.target.value })} /></div>
+        <div><Label>Recovery %</Label><Input type="number" min={0} max={100} value={v.fi} onChange={(e) => setV({ ...v, fi: +e.target.value })} /></div>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div><Label>Symptoms</Label><Textarea rows={2} value={v.sym} onChange={(e) => setV({ ...v, sym: e.target.value })} /></div>
+        <div><Label>ROM</Label><Textarea rows={2} value={v.rom} onChange={(e) => setV({ ...v, rom: e.target.value })} /></div>
+        <div><Label>MMT</Label><Textarea rows={2} value={v.str} onChange={(e) => setV({ ...v, str: e.target.value })} /></div>
+        <div><Label>Treatment</Label><Textarea rows={2} value={v.tx} onChange={(e) => setV({ ...v, tx: e.target.value })} /></div>
+        <div className="sm:col-span-2"><Label>Advice</Label><Textarea rows={2} value={v.adv} onChange={(e) => setV({ ...v, adv: e.target.value })} /></div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button className="brand-gradient text-white border-0" onClick={save}><Check className="size-4" /> Save</Button>
+      </div>
+    </div>
+  );
+}
+
+function NotesTab({ patientId, notes, authorName, canEdit }: { patientId: string; notes: any[]; authorName: string; canEdit: boolean }) {
   const [msg, setMsg] = useState("");
   function add() {
     if (!msg.trim()) return;
     const now = new Date();
     store.addNote({
-      patientId,
-      dt: now.toISOString().slice(0, 10),
-      tm: now.toTimeString().slice(0, 5),
-      tN: authorName,
-      msg: msg.trim(),
+      patientId, dt: now.toISOString().slice(0, 10), tm: now.toTimeString().slice(0, 5), tN: authorName, msg: msg.trim(),
     });
     setMsg("");
     toast.success("Note added");
   }
   return (
     <div className="space-y-4">
-      <div className="p-5 rounded-2xl bg-card border">
-        <Label>Add Clinical Note</Label>
-        <Textarea rows={3} value={msg} onChange={(e) => setMsg(e.target.value)} className="mt-2" placeholder="Progress observation, plan update..." />
-        <Button onClick={add} className="mt-3 brand-gradient text-white border-0">Add Note</Button>
-      </div>
+      {canEdit && (
+        <div className="p-5 rounded-2xl bg-card border">
+          <Label>Add Clinical Note</Label>
+          <Textarea rows={3} value={msg} onChange={(e) => setMsg(e.target.value)} className="mt-2" />
+          <Button onClick={add} className="mt-3 brand-gradient text-white border-0">Add Note</Button>
+        </div>
+      )}
       <div className="space-y-2">
         {notes.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">No notes yet.</p>}
         {[...notes].reverse().map((n) => (
           <div key={n.id} className="p-4 rounded-xl bg-card border">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{n.tN}</span>
-              <span>{fmtDate(n.dt)} · {n.tm}</span>
+              <span>{n.tN}</span><span>{fmtDate(n.dt)} · {n.tm}</span>
             </div>
             <div className="mt-2 text-sm">{n.msg}</div>
           </div>
