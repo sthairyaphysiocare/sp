@@ -4,16 +4,25 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { Globe, MapPin, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Globe, MapPin, Plus, Trash2, Pencil, Check, X, Award, BarChart3, Users } from "lucide-react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
-import type { Branch } from "@/lib/types";
+import { ICON_OPTIONS } from "@/lib/icons";
+import type { Branch, BranchHours, Clinician, PublicStats, SpecialityItem } from "@/lib/types";
 
 export const Route = createFileRoute("/app/settings")({
   component: Settings,
 });
+
+const DAYS: { k: keyof BranchHours; label: string }[] = [
+  { k: "mon", label: "Mon" }, { k: "tue", label: "Tue" }, { k: "wed", label: "Wed" },
+  { k: "thu", label: "Thu" }, { k: "fri", label: "Fri" }, { k: "sat", label: "Sat" }, { k: "sun", label: "Sun" },
+];
+
+const EMPTY_HOURS: BranchHours = { mon: "", tue: "", wed: "", thu: "", fri: "", sat: "", sun: "" };
 
 function Settings() {
   const { user, hasRole } = useAuth();
@@ -21,6 +30,7 @@ function Settings() {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [wa, setWa] = useState(settings.whatsappNumber || "");
+  const [stats, setStats] = useState<PublicStats>(settings.stats);
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -44,19 +54,15 @@ function Settings() {
     toast.success("WhatsApp Business number updated");
   }
 
+  function saveStats() {
+    store.setSettings({ stats });
+    toast.success("Public statistics updated");
+  }
+
   return (
     <div>
       <Toaster />
       <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
-
-      <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
-        <h2 className="font-semibold">Account</h2>
-        <div className="mt-3 space-y-2 text-sm">
-          <div><span className="text-muted-foreground">Name:</span> {user?.name}</div>
-          <div><span className="text-muted-foreground">Username:</span> {user?.email}</div>
-          <div><span className="text-muted-foreground">Role:</span> <span className="capitalize">{user?.role}</span></div>
-        </div>
-      </div>
 
       <form onSubmit={save} className="mt-6 p-6 rounded-2xl bg-card border max-w-xl space-y-4">
         <h2 className="font-semibold">Change Password</h2>
@@ -71,48 +77,42 @@ function Settings() {
             <div className="flex items-start gap-3">
               <div className="size-10 rounded-lg bg-emerald-500 grid place-items-center text-white shrink-0"><WhatsAppIcon size={20} /></div>
               <div className="flex-1">
-                <h2 className="font-semibold">Global Clinic WhatsApp Business Number</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Used for all inbound queries and outbound automated messages site-wide. Include country code (e.g. 91 for India).
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <Input value={wa} onChange={(e) => setWa(e.target.value)} placeholder="919900315254" />
+                <h2 className="font-semibold">Global WhatsApp Business Number</h2>
+                <p className="text-sm text-muted-foreground mt-1">Include country code (e.g. 91 for India).</p>
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <Input value={wa} onChange={(e) => setWa(e.target.value)} placeholder="919900315254" className="flex-1 min-w-[200px]" />
                   <Button onClick={saveWa} className="brand-gradient text-white border-0">Save</Button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+          <div className="mt-6 p-6 rounded-2xl bg-card border">
             <div className="flex items-start gap-3">
-              <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Globe className="size-5" /></div>
+              <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><BarChart3 className="size-5" /></div>
               <div className="flex-1">
-                <h2 className="font-semibold">Public Website Controls</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Toggle clinic statistics on the public home page.
-                </p>
-                <div className="mt-4 flex items-center justify-between gap-4 p-3 rounded-lg bg-surface border">
-                  <div>
-                    <div className="font-medium text-sm">Show Public Statistics</div>
-                    <div className="text-xs text-muted-foreground">
-                      Currently <strong className={settings.publicStatsEnabled ? "text-emerald-600" : "text-orange-600"}>
-                        {settings.publicStatsEnabled ? "Enabled" : "Disabled"}
-                      </strong>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={togglePublicStats}
-                    className={settings.publicStatsEnabled ? "" : "brand-gradient text-white border-0"}
-                    variant={settings.publicStatsEnabled ? "outline" : "default"}
-                  >
-                    {settings.publicStatsEnabled ? "Disable" : "Enable"}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h2 className="font-semibold">Public Clinic Statistics</h2>
+                  <Button onClick={togglePublicStats} variant={settings.publicStatsEnabled ? "outline" : "default"}
+                          className={settings.publicStatsEnabled ? "" : "brand-gradient text-white border-0"}>
+                    {settings.publicStatsEnabled ? "Disable Public" : "Enable Public"}
                   </Button>
                 </div>
+                <p className="text-sm text-muted-foreground mt-1">Edit the four metrics shown on the public Home page.</p>
+                <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div><Label>Patients Treated</Label><Input value={stats.patients} onChange={(e) => setStats({ ...stats, patients: e.target.value })} /></div>
+                  <div><Label>Years of Practice</Label><Input value={stats.years} onChange={(e) => setStats({ ...stats, years: e.target.value })} /></div>
+                  <div><Label>Recovery Rate</Label><Input value={stats.recovery} onChange={(e) => setStats({ ...stats, recovery: e.target.value })} /></div>
+                  <div><Label>Specialised Programs</Label><Input value={stats.programs} onChange={(e) => setStats({ ...stats, programs: e.target.value })} /></div>
+                </div>
+                <Button onClick={saveStats} className="mt-4 brand-gradient text-white border-0">Save Statistics</Button>
               </div>
             </div>
           </div>
 
           <BranchManager />
+          <SpecialitiesManager />
+          <CliniciansManager />
         </>
       )}
     </div>
@@ -128,13 +128,11 @@ function BranchManager() {
     <div className="mt-6 p-6 rounded-2xl bg-card border">
       <div className="flex items-start gap-3">
         <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><MapPin className="size-5" /></div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
               <h2 className="font-semibold">Clinic Locations &amp; Settings</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Add, edit or disable branches. Disabled branches are hidden from the public site.
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">Per-branch clinic hours render on the public Contact page.</p>
             </div>
             <Button onClick={() => setAdding(true)} className="brand-gradient text-white border-0">
               <Plus className="size-4" /> Add Branch
@@ -144,7 +142,7 @@ function BranchManager() {
           <div className="mt-5 space-y-3">
             {adding && (
               <BranchEditor
-                initial={{ name: "", address: "", mapUrl: "", phone: "", license: "", enabled: true }}
+                initial={{ name: "", address: "", mapUrl: "", phone: "", license: "", enabled: true, hours: { ...EMPTY_HOURS } }}
                 onCancel={() => setAdding(false)}
                 onSave={(b) => { store.addBranch(b); setAdding(false); toast.success("Branch added"); }}
               />
@@ -165,9 +163,10 @@ function BranchManager() {
                   onEdit={() => setEditId(b.id)}
                   onToggle={() => store.updateBranch(b.id, { enabled: !b.enabled })}
                   onDelete={() => {
-                    if (!confirm(`Delete branch "${b.name}"?`)) return;
+                    if (branches.length <= 1) { toast.error("At least one branch is required."); return; }
+                    if (!confirm(`Delete branch "${b.name}"? Patients will be reassigned to the first remaining branch.`)) return;
                     store.removeBranch(b.id);
-                    toast.success("Branch removed");
+                    toast.success("Branch removed & patients reassigned");
                   }}
                 />
               ),
@@ -184,8 +183,8 @@ function BranchRow({ branch, canDelete, onEdit, onToggle, onDelete }: {
 }) {
   return (
     <div className="p-4 rounded-xl bg-surface border">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{branch.name}</span>
             <span className={`text-[11px] px-2 py-0.5 rounded-full ${branch.enabled ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
@@ -193,18 +192,14 @@ function BranchRow({ branch, canDelete, onEdit, onToggle, onDelete }: {
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-1">{branch.address}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {branch.phone}{branch.license && ` · Reg. ${branch.license}`}
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{branch.phone}{branch.license && ` · Reg. ${branch.license}`}</p>
         </div>
         <div className="flex gap-1 shrink-0">
           <Button size="sm" variant="outline" onClick={onToggle}>{branch.enabled ? "Disable" : "Enable"}</Button>
-          <Button size="sm" variant="ghost" onClick={onEdit}><Pencil className="size-4" /></Button>
-          {canDelete && (
-            <Button size="sm" variant="ghost" onClick={onDelete}>
-              <Trash2 className="size-4 text-destructive" />
-            </Button>
-          )}
+          <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Edit"><Pencil className="size-4" /></Button>
+          <Button size="sm" variant="ghost" onClick={onDelete} disabled={!canDelete} aria-label="Delete">
+            <Trash2 className={`size-4 ${canDelete ? "text-destructive" : "text-muted-foreground"}`} />
+          </Button>
         </div>
       </div>
     </div>
@@ -219,7 +214,13 @@ function BranchEditor({ initial, onSave, onCancel }: {
   const [f, setF] = useState<Omit<Branch, "id">>({
     name: initial.name, address: initial.address, mapUrl: initial.mapUrl,
     phone: initial.phone, license: initial.license, enabled: initial.enabled,
+    hours: initial.hours ?? { ...EMPTY_HOURS },
   });
+  const hours = f.hours ?? EMPTY_HOURS;
+
+  function setHour(k: keyof BranchHours, v: string) {
+    setF({ ...f, hours: { ...hours, [k]: v } });
+  }
 
   function save() {
     if (!f.name.trim()) { toast.error("Branch name is required"); return; }
@@ -234,14 +235,202 @@ function BranchEditor({ initial, onSave, onCancel }: {
         <div className="sm:col-span-2"><Label>Address</Label><Input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></div>
         <div><Label>Google Map Link</Label><Input value={f.mapUrl} onChange={(e) => setF({ ...f, mapUrl: e.target.value })} placeholder="https://maps.app.goo.gl/..." /></div>
         <div><Label>License / Registration Number</Label><Input value={f.license} onChange={(e) => setF({ ...f, license: e.target.value })} /></div>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />
           Visible on public site
         </label>
       </div>
+      <div className="mt-4">
+        <Label className="text-sm font-semibold">Clinic Hours</Label>
+        <div className="mt-2 grid sm:grid-cols-2 gap-2">
+          {DAYS.map((d) => (
+            <div key={d.k} className="grid grid-cols-[60px_1fr] gap-2 items-center">
+              <span className="text-xs font-medium text-muted-foreground">{d.label}</span>
+              <Input value={hours[d.k]} onChange={(e) => setHour(d.k, e.target.value)} placeholder="9:00 AM – 1:00 PM" />
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="mt-3 flex gap-2 justify-end">
         <Button variant="outline" size="sm" onClick={onCancel}><X className="size-4" /> Cancel</Button>
         <Button size="sm" className="brand-gradient text-white border-0" onClick={save}><Check className="size-4" /> Save</Button>
+      </div>
+    </div>
+  );
+}
+
+function SpecialitiesManager() {
+  const items = useStore((s) => s.settings.specialities);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div className="mt-6 p-6 rounded-2xl bg-card border">
+      <div className="flex items-start gap-3">
+        <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Globe className="size-5" /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="font-semibold">Specialities</h2>
+              <p className="text-sm text-muted-foreground mt-1">Manage the speciality cards on Home + Specialities pages.</p>
+            </div>
+            <Button onClick={() => setAdding(true)} className="brand-gradient text-white border-0">
+              <Plus className="size-4" /> Add
+            </Button>
+          </div>
+          <div className="mt-5 space-y-2">
+            {adding && (
+              <SpecialityEditor
+                initial={{ icon: "Activity", title: "", desc: "" }}
+                onCancel={() => setAdding(false)}
+                onSave={(v) => { store.addSpeciality(v); setAdding(false); toast.success("Speciality added"); }}
+              />
+            )}
+            {items.map((it) =>
+              editId === it.id ? (
+                <SpecialityEditor
+                  key={it.id}
+                  initial={it}
+                  onCancel={() => setEditId(null)}
+                  onSave={(v) => { store.updateSpeciality(it.id, v); setEditId(null); toast.success("Updated"); }}
+                />
+              ) : (
+                <div key={it.id} className="p-3 rounded-xl bg-surface border flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-sm">{it.title}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">{it.desc}</div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" aria-label="Edit" onClick={() => setEditId(it.id)}><Pencil className="size-4" /></Button>
+                    <Button size="sm" variant="ghost" aria-label="Delete" onClick={() => { if (confirm(`Delete "${it.title}"?`)) { store.removeSpeciality(it.id); toast.success("Removed"); } }}>
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpecialityEditor({ initial, onSave, onCancel }: {
+  initial: Omit<SpecialityItem, "id">; onSave: (v: Omit<SpecialityItem, "id">) => void; onCancel: () => void;
+}) {
+  const [f, setF] = useState(initial);
+  return (
+    <div className="p-4 rounded-xl bg-background border border-brand/30 space-y-3">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div>
+          <Label>Icon</Label>
+          <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.icon} onChange={(e) => setF({ ...f, icon: e.target.value })}>
+            {ICON_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div className="sm:col-span-2"><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
+      </div>
+      <div><Label>Description</Label><Textarea rows={2} value={f.desc} onChange={(e) => setF({ ...f, desc: e.target.value })} /></div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" size="sm" onClick={onCancel}><X className="size-4" /> Cancel</Button>
+        <Button size="sm" className="brand-gradient text-white border-0" onClick={() => onSave(f)}><Check className="size-4" /> Save</Button>
+      </div>
+    </div>
+  );
+}
+
+function CliniciansManager() {
+  const enabled = useStore((s) => s.settings.cliniciansEnabled);
+  const items = useStore((s) => s.settings.clinicians);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div className="mt-6 p-6 rounded-2xl bg-card border">
+      <div className="flex items-start gap-3">
+        <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Users className="size-5" /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="font-semibold">Clinician Profiles</h2>
+              <p className="text-sm text-muted-foreground mt-1">"Clinical Expertise" section on the public Home page.</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant={enabled ? "outline" : "default"}
+                onClick={() => { store.setSettings({ cliniciansEnabled: !enabled }); toast.success(`Profiles ${!enabled ? "enabled" : "disabled"}`); }}
+                className={enabled ? "" : "brand-gradient text-white border-0"}
+              >
+                {enabled ? "Disable Public" : "Enable Public"}
+              </Button>
+              <Button onClick={() => setAdding(true)} className="brand-gradient text-white border-0">
+                <Plus className="size-4" /> Add Clinician
+              </Button>
+            </div>
+          </div>
+          <div className="mt-5 space-y-2">
+            {adding && (
+              <ClinicianEditor
+                initial={{ name: "", photo: "", qualification: "", experience: "", speciality: "" }}
+                onCancel={() => setAdding(false)}
+                onSave={(v) => { store.addClinician(v); setAdding(false); toast.success("Clinician added"); }}
+              />
+            )}
+            {items.length === 0 && !adding && (
+              <p className="text-sm text-muted-foreground italic">No clinician profiles yet.</p>
+            )}
+            {items.map((c) =>
+              editId === c.id ? (
+                <ClinicianEditor
+                  key={c.id}
+                  initial={c}
+                  onCancel={() => setEditId(null)}
+                  onSave={(v) => { store.updateClinician(c.id, v); setEditId(null); toast.success("Updated"); }}
+                />
+              ) : (
+                <div key={c.id} className="p-3 rounded-xl bg-surface border flex items-start justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="size-10 rounded-full bg-brand/10 grid place-items-center overflow-hidden shrink-0">
+                      {c.photo ? <img src={c.photo} alt={c.name} className="w-full h-full object-cover" /> : <Award className="size-5 text-brand" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm truncate">{c.name || "(unnamed)"}</div>
+                      <div className="text-xs text-muted-foreground truncate">{[c.qualification, c.speciality].filter(Boolean).join(" · ")}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" aria-label="Edit" onClick={() => setEditId(c.id)}><Pencil className="size-4" /></Button>
+                    <Button size="sm" variant="ghost" aria-label="Delete" onClick={() => { if (confirm(`Remove ${c.name || "this profile"}?`)) { store.removeClinician(c.id); toast.success("Removed"); } }}>
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClinicianEditor({ initial, onSave, onCancel }: {
+  initial: Omit<Clinician, "id">; onSave: (v: Omit<Clinician, "id">) => void; onCancel: () => void;
+}) {
+  const [f, setF] = useState(initial);
+  return (
+    <div className="p-4 rounded-xl bg-background border border-brand/30 space-y-3">
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div><Label>Name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Dr. Plinija" /></div>
+        <div><Label>Photo URL</Label><Input value={f.photo} onChange={(e) => setF({ ...f, photo: e.target.value })} placeholder="https://..." /></div>
+        <div><Label>Qualification</Label><Input value={f.qualification} onChange={(e) => setF({ ...f, qualification: e.target.value })} placeholder="BPT, MPT (Orthopaedics)" /></div>
+        <div><Label>Years of Experience</Label><Input value={f.experience} onChange={(e) => setF({ ...f, experience: e.target.value })} placeholder="10+ years" /></div>
+        <div className="sm:col-span-2"><Label>Speciality</Label><Input value={f.speciality} onChange={(e) => setF({ ...f, speciality: e.target.value })} placeholder="Sports & Musculoskeletal Rehab" /></div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" size="sm" onClick={onCancel}><X className="size-4" /> Cancel</Button>
+        <Button size="sm" className="brand-gradient text-white border-0" onClick={() => onSave(f)}><Check className="size-4" /> Save</Button>
       </div>
     </div>
   );
