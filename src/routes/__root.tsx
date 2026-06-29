@@ -94,7 +94,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
+        <TooltipProvider delayDuration={250}>
+          <GlobalWatermark />
+          <div className="relative z-10">
+            <Outlet />
+          </div>
+        </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
