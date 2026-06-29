@@ -1,7 +1,7 @@
-//import logoAsset from "@/assets/logo.jpg.asset.json";
+import logoAsset from "@/assets/logo.jpg.asset.json";
 import type { Branch, AppSettings } from "./types";
 
-export const LOGO_URL: string = "/logo.jpg";
+export const LOGO_URL: string = logoAsset.url;
 
 export const CLINIC = {
   name: "Sthairya Physiocare",
