@@ -8,7 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { fmtDate, fmtTime12, slotsForDate, fmtDateTime } from "@/lib/date";
 import { CLINIC } from "@/lib/logo";
-import { Check, Clock, MessageCircle, Mail } from "lucide-react";
+import { Check, Clock, MessageCircle, Mail, Archive } from "lucide-react";
 
 export const Route = createFileRoute("/app/bookings")({
   component: Bookings,
@@ -34,8 +34,21 @@ function Bookings() {
   return (
     <div>
       <Toaster />
-      <h1 className="text-2xl sm:text-3xl font-bold">Booking Queue</h1>
-      <p className="text-sm text-muted-foreground mt-1">{bookings.length} total requests · Approve or propose a new slot.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold">Booking Queue</h1>
+          <p className="text-sm text-muted-foreground mt-1">{bookings.length} total requests · Approve or propose a new slot.</p>
+        </div>
+        {bookings.some((b) => b.status === "closed") && (
+          <Button variant="outline" onClick={() => {
+            if (!confirm("Archive all closed bookings? They will be removed from the queue.")) return;
+            store.clearClosedBookings();
+            toast.success("Closed bookings cleared");
+          }}>
+            <Archive className="size-4" /> Clear Closed
+          </Button>
+        )}
+      </div>
 
       <div className="mt-6 space-y-3">
         {bookings.length === 0 && (
