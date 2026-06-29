@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppStaffRouteImport } from './routes/app.staff'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppBookingsRouteImport } from './routes/app.bookings'
 import { Route as AppPatientsIndexRouteImport } from './routes/app.patients.index'
 import { Route as AppPatientsNewRouteImport } from './routes/app.patients.new'
@@ -74,6 +75,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBookingsRoute = AppBookingsRouteImport.update({
   id: '/bookings',
   path: '/bookings',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
   '/app': typeof AppIndexRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
   '/app/': typeof AppIndexRoute
@@ -154,6 +163,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/specialities'
     | '/app/bookings'
+    | '/app/reports'
     | '/app/settings'
     | '/app/staff'
     | '/app/'
@@ -169,6 +179,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/specialities'
     | '/app/bookings'
+    | '/app/reports'
     | '/app/settings'
     | '/app/staff'
     | '/app'
@@ -185,6 +196,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/specialities'
     | '/app/bookings'
+    | '/app/reports'
     | '/app/settings'
     | '/app/staff'
     | '/app/'
@@ -275,6 +287,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/reports': {
+      id: '/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/bookings': {
       id: '/app/bookings'
       path: '/bookings'
@@ -308,6 +327,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBookingsRoute: typeof AppBookingsRoute
+  AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppStaffRoute: typeof AppStaffRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -318,6 +338,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppBookingsRoute: AppBookingsRoute,
+  AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppStaffRoute: AppStaffRoute,
   AppIndexRoute: AppIndexRoute,
