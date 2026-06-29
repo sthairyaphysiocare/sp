@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import type { AppSettings, BlockedSlot, Booking, Branch, ClinicalNote, Patient, User, Visit, Role } from "./types";
+import type {
+  AppSettings, BlockedSlot, Booking, Branch, ClinicalNote, Clinician,
+  Patient, PublicStats, SpecialityItem, User, Visit, Role, BranchHours,
+} from "./types";
 import { DEFAULT_BRANCH, CLINIC } from "./logo";
 
 const KEY = "sthairya.db.v2";
@@ -16,18 +19,46 @@ interface DB {
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: "u1", email: "admin", name: "Dr. Admin", role: "admin", password: "password" },
+  { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password" },
   { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password" },
   { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password" },
 ];
 
+const DEFAULT_HOURS: BranchHours = {
+  mon: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
+  tue: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
+  wed: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
+  thu: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
+  fri: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
+  sat: "9:00 AM – 1:00 PM",
+  sun: "By appointment",
+};
+
+const DEFAULT_STATS: PublicStats = {
+  patients: "6+",
+  years: "10+",
+  recovery: "61%",
+  programs: "20+",
+};
+
+const DEFAULT_SPECIALITIES: SpecialityItem[] = [
+  { id: "sp1", icon: "Activity", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
+  { id: "sp2", icon: "HeartPulse", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
+  { id: "sp3", icon: "Dumbbell", title: "Sports Injuries", desc: "Performance-driven rehabilitation for athletes." },
+  { id: "sp4", icon: "Stethoscope", title: "Frozen Shoulder", desc: "Manual therapy and progressive ROM restoration." },
+  { id: "sp5", icon: "Bone", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
+  { id: "sp6", icon: "Brain", title: "Neurological Rehab", desc: "Stroke recovery, Parkinson's, balance training." },
+  { id: "sp7", icon: "Footprints", title: "Gait & Posture", desc: "Gait analysis and biomechanical correction." },
+  { id: "sp8", icon: "Baby", title: "Paediatric & Geriatric", desc: "Developmental and mobility programs for all ages." },
+];
+
 function seedPatients(): Patient[] {
   const base: Omit<Patient, "id" | "pid" | "sn" | "ts">[] = [
-    { n: "Ramesh Kamath", dob: "1972-04-12", g: "M", m: "9845012345", am: "", e: "ramesh@example.com", oc: "Teacher", em: "Sushma 9845011111", bg: "B+", h: 172, w: 78, cc: "Low back pain radiating to right leg", pi: "Onset 3 weeks ago after lifting", sx: "Nil", med: "Paracetamol PRN", al: "Nil", cm: [2], lf: "Sedentary", fh: "Father diabetic", br: DEFAULT_BRANCH.id },
-    { n: "Anjali Shenoy", dob: "1995-09-23", g: "F", m: "9742056789", am: "", e: "anjali@example.com", oc: "IT Engineer", em: "Rohit 9742000000", bg: "O+", h: 162, w: 58, cc: "Neck stiffness, headaches", pi: "Desk work, 6 weeks", sx: "Nil", med: "Nil", al: "Dust", cm: [], lf: "Active weekends", fh: "Nil", br: DEFAULT_BRANCH.id },
-    { n: "Vinod Bhat", dob: "1965-01-30", g: "M", m: "9986234567", am: "", e: "vinod@example.com", oc: "Retired", em: "Lata 9986200000", bg: "A+", h: 168, w: 82, cc: "Frozen shoulder right side", pi: "Gradual onset 2 months", sx: "Appendectomy 1995", med: "Metformin", al: "Nil", cm: [1, 2], lf: "Walks daily", fh: "Diabetic", br: DEFAULT_BRANCH.id },
-    { n: "Priya Pai", dob: "1988-07-18", g: "F", m: "9663112233", am: "", e: "priya@example.com", oc: "Homemaker", em: "Suresh 9663100000", bg: "AB+", h: 158, w: 65, cc: "Post-op knee rehab (TKR)", pi: "TKR done 3 weeks back", sx: "TKR Right knee", med: "Calcium, D3", al: "Nil", cm: [], lf: "Limited mobility", fh: "Mother arthritic", br: DEFAULT_BRANCH.id },
-    { n: "Karthik Hegde", dob: "2001-03-05", g: "M", m: "9036778899", am: "", e: "karthik@example.com", oc: "Cricketer", em: "Rajesh 9036700000", bg: "O-", h: 178, w: 74, cc: "Right shoulder impingement", pi: "Sports injury 10 days back", sx: "Nil", med: "Nil", al: "Nil", cm: [], lf: "Athlete", fh: "Nil", br: DEFAULT_BRANCH.id },
+    { n: "Ramesh Kamath", dob: "1972-04-12", g: "M", m: "9845012345", am: "", e: "ramesh@example.com", oc: "Teacher", em: "Sushma 9845011111", emN: "Sushma", emP: "9845011111", bg: "B+", h: 172, w: 78, cc: "Low back pain radiating to right leg", pi: "Onset 3 weeks ago after lifting", sx: "Nil", med: "Paracetamol PRN", al: "Nil", cm: [2], lf: "Sedentary", fh: "Father diabetic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
+    { n: "Anjali Shenoy", dob: "1995-09-23", g: "F", m: "9742056789", am: "", e: "anjali@example.com", oc: "IT Engineer", em: "Rohit 9742000000", emN: "Rohit", emP: "9742000000", bg: "O+", h: 162, w: 58, cc: "Neck stiffness, headaches", pi: "Desk work, 6 weeks", sx: "Nil", med: "Nil", al: "Dust", cm: [], lf: "Active weekends", fh: "Nil", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
+    { n: "Vinod Bhat", dob: "1965-01-30", g: "M", m: "9986234567", am: "", e: "vinod@example.com", oc: "Retired", em: "Lata 9986200000", emN: "Lata", emP: "9986200000", bg: "A+", h: 168, w: 82, cc: "Frozen shoulder right side", pi: "Gradual onset 2 months", sx: "Appendectomy 1995", med: "Metformin", al: "Nil", cm: [1, 2], lf: "Walks daily", fh: "Diabetic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
+    { n: "Priya Pai", dob: "1988-07-18", g: "F", m: "9663112233", am: "", e: "priya@example.com", oc: "Homemaker", em: "Suresh 9663100000", emN: "Suresh", emP: "9663100000", bg: "AB+", h: 158, w: 65, cc: "Post-op knee rehab (TKR)", pi: "TKR done 3 weeks back", sx: "TKR Right knee", med: "Calcium, D3", al: "Nil", cm: [], lf: "Limited mobility", fh: "Mother arthritic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
+    { n: "Karthik Hegde", dob: "2001-03-05", g: "M", m: "9036778899", am: "", e: "karthik@example.com", oc: "Cricketer", em: "Rajesh 9036700000", emN: "Rajesh", emP: "9036700000", bg: "O-", h: 178, w: 74, cc: "Right shoulder impingement", pi: "Sports injury 10 days back", sx: "Nil", med: "Nil", al: "Nil", cm: [], lf: "Athlete", fh: "Nil", br: DEFAULT_BRANCH.id, tId: "u2", status: "completed" },
   ];
   const now = Date.now();
   return base.map((b, i) => ({
@@ -69,8 +100,12 @@ function seedVisits(patients: Patient[]): Visit[] {
 function defaultSettings(): AppSettings {
   return {
     publicStatsEnabled: false,
-    branches: [{ ...DEFAULT_BRANCH }],
+    branches: [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }],
     whatsappNumber: CLINIC.whatsapp,
+    stats: { ...DEFAULT_STATS },
+    specialities: DEFAULT_SPECIALITIES.map((s) => ({ ...s })),
+    cliniciansEnabled: false,
+    clinicians: [],
   };
 }
 
@@ -97,12 +132,22 @@ function load(): DB {
       if (!parsed.blocked) parsed.blocked = [];
       if (!parsed.settings) parsed.settings = defaultSettings();
       if (!parsed.settings.branches || parsed.settings.branches.length === 0) {
-        parsed.settings.branches = [{ ...DEFAULT_BRANCH }];
+        parsed.settings.branches = [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }];
       }
+      parsed.settings.branches = parsed.settings.branches.map((b) => ({ ...b, hours: b.hours ?? { ...DEFAULT_HOURS } }));
       if (!parsed.settings.whatsappNumber) parsed.settings.whatsappNumber = CLINIC.whatsapp;
-      // backfill patient branch
+      if (!parsed.settings.stats) parsed.settings.stats = { ...DEFAULT_STATS };
+      if (!parsed.settings.specialities) parsed.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
+      if (typeof parsed.settings.cliniciansEnabled !== "boolean") parsed.settings.cliniciansEnabled = false;
+      if (!parsed.settings.clinicians) parsed.settings.clinicians = [];
       const defId = parsed.settings.branches[0].id;
-      parsed.patients = parsed.patients.map((p) => (p.br ? p : { ...p, br: defId }));
+      parsed.patients = parsed.patients.map((p) => ({
+        ...p,
+        br: p.br || defId,
+        status: p.status || "active",
+        emN: p.emN ?? "",
+        emP: p.emP ?? "",
+      }));
       return parsed;
     }
   } catch {}
@@ -174,7 +219,14 @@ export const store = {
     return `STP${String(max + 1).padStart(6, "0")}`;
   },
   addPatient(p: Omit<Patient, "id" | "pid" | "sn" | "ts">): Patient {
-    const np: Patient = { ...p, id: `p${Date.now()}`, pid: this.nextPid(), sn: p.n.toLowerCase(), ts: Date.now() };
+    const np: Patient = {
+      ...p,
+      id: `p${Date.now()}`,
+      pid: this.nextPid(),
+      sn: p.n.toLowerCase(),
+      status: p.status || "active",
+      ts: Date.now(),
+    };
     state = { ...state, patients: [...state.patients, np] };
     persist();
     return np;
@@ -202,6 +254,10 @@ export const store = {
     persist();
     return nv;
   },
+  updateVisit(id: string, patch: Partial<Visit>) {
+    state = { ...state, visits: state.visits.map((v) => (v.id === id ? { ...v, ...patch } : v)) };
+    persist();
+  },
   addNote(n: Omit<ClinicalNote, "id">) {
     const nn: ClinicalNote = { ...n, id: `n${Date.now()}` };
     state = { ...state, notes: [...state.notes, nn] };
@@ -215,6 +271,10 @@ export const store = {
   },
   updateBooking(id: string, patch: Partial<Booking>) {
     state = { ...state, bookings: state.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) };
+    persist();
+  },
+  clearClosedBookings() {
+    state = { ...state, bookings: state.bookings.filter((b) => b.status !== "closed") };
     persist();
   },
   addBlocked(b: Omit<BlockedSlot, "id">) {
@@ -231,7 +291,7 @@ export const store = {
     persist();
   },
   addBranch(b: Omit<Branch, "id">): Branch {
-    const nb: Branch = { ...b, id: `br${Date.now()}` };
+    const nb: Branch = { ...b, id: `br${Date.now()}`, hours: b.hours ?? { ...DEFAULT_HOURS } };
     state = { ...state, settings: { ...state.settings, branches: [...state.settings.branches, nb] } };
     persist();
     return nb;
@@ -248,10 +308,47 @@ export const store = {
   },
   removeBranch(id: string) {
     if (state.settings.branches.length <= 1) return;
+    const remaining = state.settings.branches.filter((b) => b.id !== id);
+    const fallback = remaining[0].id;
     state = {
       ...state,
-      settings: { ...state.settings, branches: state.settings.branches.filter((b) => b.id !== id) },
+      settings: { ...state.settings, branches: remaining },
+      patients: state.patients.map((p) => (p.br === id ? { ...p, br: fallback } : p)),
     };
+    persist();
+  },
+  // Specialities
+  addSpeciality(s: Omit<SpecialityItem, "id">) {
+    const ns: SpecialityItem = { ...s, id: `sp${Date.now()}` };
+    state = { ...state, settings: { ...state.settings, specialities: [...state.settings.specialities, ns] } };
+    persist();
+  },
+  updateSpeciality(id: string, patch: Partial<SpecialityItem>) {
+    state = {
+      ...state,
+      settings: { ...state.settings, specialities: state.settings.specialities.map((s) => (s.id === id ? { ...s, ...patch } : s)) },
+    };
+    persist();
+  },
+  removeSpeciality(id: string) {
+    state = { ...state, settings: { ...state.settings, specialities: state.settings.specialities.filter((s) => s.id !== id) } };
+    persist();
+  },
+  // Clinicians
+  addClinician(c: Omit<Clinician, "id">) {
+    const nc: Clinician = { ...c, id: `cl${Date.now()}` };
+    state = { ...state, settings: { ...state.settings, clinicians: [...state.settings.clinicians, nc] } };
+    persist();
+  },
+  updateClinician(id: string, patch: Partial<Clinician>) {
+    state = {
+      ...state,
+      settings: { ...state.settings, clinicians: state.settings.clinicians.map((c) => (c.id === id ? { ...c, ...patch } : c)) },
+    };
+    persist();
+  },
+  removeClinician(id: string) {
+    state = { ...state, settings: { ...state.settings, clinicians: state.settings.clinicians.filter((c) => c.id !== id) } };
     persist();
   },
 };
