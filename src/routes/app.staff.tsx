@@ -73,7 +73,10 @@ function Staff() {
         <div>
           <Label>Role</Label>
           <select className="w-full h-9 px-3 rounded-md border bg-background" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-            <option value="admin">Admin</option><option value="therapist">Therapist</option><option value="reception">Reception</option>
+            <option value="admin">Admin</option>
+            <option value="therapist">Therapist</option>
+            <option value="reception">Reception</option>
+            <option value="other">Other (view-only)</option>
           </select>
         </div>
         <div><Label>Password</Label><Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
