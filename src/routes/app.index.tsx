@@ -60,8 +60,7 @@ function Dashboard() {
   const bookings = useStore((s) => s.bookings);
   const today = new Date().toISOString().slice(0, 10);
   const todaysVisits = visits.filter((v) => v.nxt === today);
-  const activeIds = new Set(visits.filter((v) => v.fi < 90).map((v) => v.patientId));
-  const activePatients = patients.filter((p) => activeIds.has(p.id));
+  const activePatients = patients.filter((p) => (p.status || "active") === "active");
   const pendingBookings = bookings.filter((b) => b.status === "pending");
 
   const [open, setOpen] = useState<KPIKey | null>(null);

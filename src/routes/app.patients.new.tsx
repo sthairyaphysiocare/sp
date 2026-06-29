@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
 import { useState } from "react";
 import { COMORBIDITIES } from "@/lib/types";
 import { toast } from "sonner";
@@ -20,11 +21,16 @@ function NewPatient() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const branches = useStore((s) => enabledBranches(s.settings));
+  const therapists = useStore((s) => s.users.filter((u) => u.role === "therapist" || u.role === "admin"));
   const nextPid = store.nextPid();
+  const defaultTherapist = therapists.find((t) => t.role === "therapist")?.id || therapists[0]?.id || "";
   const [f, setF] = useState({
-    n: "", dob: "", g: "M" as "M" | "F" | "O", m: "", am: "", e: "", oc: "", em: "",
+    n: "", dob: "", g: "M" as "M" | "F" | "O", m: "", am: "", e: "", oc: "",
+    em: "", emN: "", emP: "",
     bg: "", h: 0, w: 0, cc: "", pi: "", sx: "", med: "", al: "", cm: [] as number[], lf: "", fh: "",
     br: branches[0]?.id || "",
+    tId: defaultTherapist,
+    status: "active" as const,
   });
 
   function toggleCm(id: number) {
@@ -35,7 +41,8 @@ function NewPatient() {
     e.preventDefault();
     if (!f.n || !f.m) { toast.error("Name and mobile required"); return; }
     if (!f.br) { toast.error("Please select a branch"); return; }
-    const p = store.addPatient(f);
+    const em = f.emN || f.emP ? `${f.emN} ${f.emP}`.trim() : "";
+    const p = store.addPatient({ ...f, em });
     toast.success(`Patient ${p.pid} created`);
     navigate({ to: "/app/patients/$id", params: { id: p.id } });
   }
@@ -52,7 +59,10 @@ function NewPatient() {
           <h2 className="font-semibold">Demographics</h2>
           <div className="grid sm:grid-cols-2 gap-4">
             <div><Label>Full Name *</Label><Input value={f.n} onChange={(e) => setF({ ...f, n: e.target.value })} required /></div>
-            <div><Label>Date of Birth</Label><Input type="date" value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} /></div>
+            <div>
+              <Label>Date of Birth</Label>
+              <MonthYearDatePicker value={f.dob} onChange={(v) => setF({ ...f, dob: v })} yearsBack={100} yearsForward={0} />
+            </div>
             <div>
               <Label>Gender</Label>
               <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.g} onChange={(e) => setF({ ...f, g: e.target.value as any })}>
@@ -63,14 +73,24 @@ function NewPatient() {
             <div><Label>Alternate Mobile</Label><Input value={f.am} onChange={(e) => setF({ ...f, am: e.target.value })} /></div>
             <div><Label>Email</Label><Input type="email" value={f.e} onChange={(e) => setF({ ...f, e: e.target.value })} /></div>
             <div><Label>Occupation</Label><Input value={f.oc} onChange={(e) => setF({ ...f, oc: e.target.value })} /></div>
-            <div><Label>Emergency Contact</Label><Input value={f.em} onChange={(e) => setF({ ...f, em: e.target.value })} /></div>
-            <div className="sm:col-span-2">
+            <div><Label>Emergency Contact Name</Label><Input value={f.emN} onChange={(e) => setF({ ...f, emN: e.target.value })} /></div>
+            <div><Label>Emergency Contact Number</Label><Input value={f.emP} onChange={(e) => setF({ ...f, emP: e.target.value })} /></div>
+            <div>
               <Label>Treating Branch *</Label>
               <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.br}
                       onChange={(e) => setF({ ...f, br: e.target.value })} required>
                 <option value="">Select branch…</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Assigned Therapist</Label>
+              <select className="w-full h-9 px-3 rounded-md border bg-background" value={f.tId}
+                      onChange={(e) => setF({ ...f, tId: e.target.value })}>
+                <option value="">Unassigned</option>
+                {therapists.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">Defaults to the first available therapist.</p>
             </div>
           </div>
         </section>

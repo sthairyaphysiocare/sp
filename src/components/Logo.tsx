@@ -24,10 +24,10 @@ export function Logo({
       />
       {showText && (
         <div className={cn("leading-tight", textClassName)}>
-          <div className="font-display font-bold text-brand tracking-tight text-lg">
+          <div className="font-display font-bold tracking-tight text-lg sm:text-xl text-brand-gradient">
             STHAIRYA
           </div>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          <div className="font-display font-semibold text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-brand">
             Physiocare
           </div>
         </div>

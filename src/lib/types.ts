@@ -1,4 +1,4 @@
-export type Role = "admin" | "therapist" | "reception";
+export type Role = "admin" | "therapist" | "reception" | "other";
 
 export interface User {
   id: string;
@@ -6,6 +6,16 @@ export interface User {
   name: string;
   role: Role;
   password: string;
+}
+
+export interface BranchHours {
+  mon: string;
+  tue: string;
+  wed: string;
+  thu: string;
+  fri: string;
+  sat: string;
+  sun: string;
 }
 
 export interface Branch {
@@ -16,7 +26,10 @@ export interface Branch {
   phone: string;
   license: string;
   enabled: boolean;
+  hours?: BranchHours;
 }
+
+export type PatientStatus = "active" | "inactive" | "completed";
 
 export interface Patient {
   id: string;
@@ -29,7 +42,9 @@ export interface Patient {
   am: string;
   e: string;
   oc: string;
-  em: string;
+  em: string; // legacy combined emergency
+  emN?: string; // emergency contact name
+  emP?: string; // emergency contact phone
   bg: string;
   h: number;
   w: number;
@@ -42,6 +57,8 @@ export interface Patient {
   lf: string;
   fh: string;
   br?: string; // assigned branch id
+  tId?: string; // assigned therapist id
+  status?: PatientStatus;
   ts: number;
 }
 
@@ -82,7 +99,7 @@ export interface Booking {
   preferred: string;
   prefDate?: string;
   prefTime?: string;
-  br?: string; // preferred branch id
+  br?: string;
   status: "pending" | "contacted" | "scheduled" | "closed";
   ts: number;
 }
@@ -96,10 +113,37 @@ export interface BlockedSlot {
   by: string;
 }
 
+export interface PublicStats {
+  patients: string;
+  years: string;
+  recovery: string;
+  programs: string;
+}
+
+export interface SpecialityItem {
+  id: string;
+  icon: string; // key into ICON_MAP
+  title: string;
+  desc: string;
+}
+
+export interface Clinician {
+  id: string;
+  name: string;
+  photo: string;
+  qualification: string;
+  experience: string;
+  speciality: string;
+}
+
 export interface AppSettings {
   publicStatsEnabled: boolean;
   branches: Branch[];
-  whatsappNumber: string; // digits only, e.g. 919900315254
+  whatsappNumber: string;
+  stats: PublicStats;
+  specialities: SpecialityItem[];
+  cliniciansEnabled: boolean;
+  clinicians: Clinician[];
 }
 
 export const COMORBIDITIES: Record<number, string> = {

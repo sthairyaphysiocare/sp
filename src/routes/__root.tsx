@@ -8,6 +8,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { LOGO_URL, CLINIC } from "@/lib/logo";
 import { AuthProvider } from "@/lib/auth";
+import { GlobalWatermark } from "@/components/GlobalWatermark";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 function NotFoundComponent() {
   return (
@@ -92,7 +94,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
+        <TooltipProvider delayDuration={250}>
+          <GlobalWatermark />
+          <div className="relative z-10">
+            <Outlet />
+          </div>
+        </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Printer, Download, X } from "lucide-react";
+import { Printer, Download, X, ArrowLeft, ArrowRight, Eye, Pencil } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
 import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
@@ -17,6 +17,8 @@ interface Props {
   onClose: () => void;
 }
 
+type Step = "edit" | "preview";
+
 export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const today = fmtDate(new Date());
@@ -25,6 +27,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const settings = useStore((s) => s.settings);
   const branch = branchById(settings, patient.br) ?? settings.branches[0];
 
+  const [step, setStep] = useState<Step>("edit");
   const [rx, setRx] = useState({
     concern: "",
     diagnosis: patient.cc || "",
@@ -36,8 +39,11 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     reviewTime: lastVisit?.nxtTm || "",
   });
   const [busy, setBusy] = useState<null | "pdf" | "wa">(null);
+  const [waPrompt, setWaPrompt] = useState(false);
+  const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
   const reviewSlots = slotsForDate(rx.reviewDate);
+  const has = (s: string) => !!(s && s.trim());
 
   async function buildPdf(): Promise<{ blob: Blob; filename: string } | null> {
     if (!ref.current) return null;
@@ -58,10 +64,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     const pw = pdf.internal.pageSize.getWidth();
     const ph = pdf.internal.pageSize.getHeight();
     const imgH = (canvas.height * pw) / canvas.width;
-    let y = 0;
     if (imgH <= ph) {
       pdf.addImage(img, "JPEG", 0, 0, pw, imgH);
     } else {
+      let y = 0;
       let remaining = imgH;
       while (remaining > 0) {
         pdf.addImage(img, "JPEG", 0, y, pw, imgH);
@@ -74,49 +80,59 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     return { blob: pdf.output("blob"), filename };
   }
 
-  async function downloadPdf() {
-    if (busy) return;
+  async function downloadPdf(): Promise<{ blob: Blob; filename: string } | null> {
+    if (busy) return null;
     setBusy("pdf");
     toast.loading("Generating PDF...", { id: "pdf" });
     try {
       const out = await buildPdf();
-      if (!out) throw new Error("no preview");
+      if (!out) throw new Error("preview missing");
       const url = URL.createObjectURL(out.blob);
       const a = document.createElement("a");
       a.href = url; a.download = out.filename; a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success("PDF downloaded", { id: "pdf" });
+      return out;
     } catch (err) {
       console.error(err);
       toast.error("Failed to generate PDF.", { id: "pdf" });
+      return null;
     } finally {
       setBusy(null);
     }
   }
 
+  function openWhatsAppPrompt() {
+    if (step !== "preview") setStep("preview");
+    setWaNumber((patient.m || "").replace(/[^0-9]/g, ""));
+    setWaPrompt(true);
+  }
+
   async function sendWhatsApp() {
     if (busy) return;
+    let digits = waNumber.replace(/[^0-9]/g, "");
+    if (digits.length < 10) { toast.error("Enter a valid mobile number."); return; }
+    if (digits.length === 10) digits = `91${digits}`;
     setBusy("wa");
     toast.loading("Preparing prescription...", { id: "wa" });
     try {
-      // Build & auto-download the PDF so the user can attach it in WhatsApp
+      // Render preview first if not yet (mount happens when step === "preview")
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
       const out = await buildPdf();
       if (out) {
         const url = URL.createObjectURL(out.blob);
         const a = document.createElement("a");
         a.href = url; a.download = out.filename; a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-      // wa.me cannot attach files; open chat to the patient's number with a pre-filled text
-      const patientNum = (patient.m || "").replace(/[^0-9]/g, "");
-      const dest = patientNum.length >= 10
-        ? (patientNum.length === 10 ? `91${patientNum}` : patientNum)
-        : whatsappDigits(settings);
+      const fallback = whatsappDigits(settings);
+      const dest = digits || fallback;
       const message =
         `Hello ${patient.n}, your prescription from Sthairya Physiocare (${branch?.name ?? ""}) is ready. ` +
-        `Please find the details attached/below.`;
+        `Please find the details attached.`;
       window.open(`https://wa.me/${dest}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
       toast.success("WhatsApp opened — attach the downloaded PDF.", { id: "wa" });
+      setWaPrompt(false);
     } catch (err) {
       console.error(err);
       toast.error("Couldn't prepare WhatsApp message.", { id: "wa" });
@@ -125,58 +141,92 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     }
   }
 
-  function printRx() { window.print(); }
-
-  const has = (s: string) => !!(s && s.trim());
+  function printRx() {
+    if (step !== "preview") { setStep("preview"); setTimeout(() => window.print(), 200); return; }
+    window.print();
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto print:bg-white print:overflow-visible">
-      <div className="min-h-full flex items-start justify-center p-4 print:p-0">
-        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-4xl my-8 print:my-0 print:shadow-none print:rounded-none">
-          <div className="p-4 border-b flex items-center justify-between print:hidden">
-            <h2 className="font-semibold text-lg">Prescription · {patient.pid}</h2>
+      <div className="min-h-full flex items-start justify-center p-2 sm:p-4 print:p-0">
+        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl my-4 sm:my-8 print:my-0 print:shadow-none print:rounded-none">
+          {/* Header / stepper — hidden in print */}
+          <div className="p-3 sm:p-4 border-b flex items-center justify-between gap-3 flex-wrap print:hidden">
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="font-semibold text-base sm:text-lg truncate">Prescription · {patient.pid}</h2>
+              <div className="hidden sm:flex items-center gap-1 ml-2 text-xs">
+                <span className={`px-2 py-0.5 rounded-full ${step === "edit" ? "bg-brand text-white" : "bg-muted text-muted-foreground"}`}>1 · Content</span>
+                <span className="text-muted-foreground">→</span>
+                <span className={`px-2 py-0.5 rounded-full ${step === "preview" ? "bg-brand text-white" : "bg-muted text-muted-foreground"}`}>2 · Preview</span>
+              </div>
+            </div>
             <div className="flex gap-2 flex-wrap">
-              <Button size="sm" variant="outline" onClick={printRx}><Printer className="size-4" /> Print</Button>
-              <Button size="sm" variant="outline" onClick={downloadPdf} disabled={!!busy}>
-                <Download className="size-4" /> {busy === "pdf" ? "Generating..." : "Download PDF"}
-              </Button>
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={sendWhatsApp} disabled={!!busy}>
-                <WhatsAppIcon size={16} /> {busy === "wa" ? "Preparing..." : "Send via WhatsApp"}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={onClose}><X className="size-4" /></Button>
+              {step === "edit" ? (
+                <Button size="sm" className="brand-gradient text-white border-0" onClick={() => setStep("preview")}>
+                  <Eye className="size-4" /> Preview & Print <ArrowRight className="size-4" />
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setStep("edit")}>
+                    <ArrowLeft className="size-4" /> <Pencil className="size-4" /> Back to Content
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={printRx}><Printer className="size-4" /> Print</Button>
+                  <Button size="sm" variant="outline" onClick={() => downloadPdf()} disabled={!!busy}>
+                    <Download className="size-4" /> {busy === "pdf" ? "Generating..." : "Download PDF"}
+                  </Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={openWhatsAppPrompt} disabled={!!busy}>
+                    <WhatsAppIcon size={16} /> {busy === "wa" ? "Preparing..." : "Send via WhatsApp"}
+                  </Button>
+                </>
+              )}
+              <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close"><X className="size-4" /></Button>
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-[1fr_1.4fr] gap-0">
-            <div className="p-5 border-r space-y-4 bg-surface print:hidden">
-              <h3 className="font-semibold text-sm">Prescription Content</h3>
-              <p className="text-[11px] text-muted-foreground -mt-2">All fields are optional. Empty sections will not appear in the print/PDF.</p>
-              <div>
-                <Label>To Whomsoever It May Concern</Label>
-                <Textarea rows={3} value={rx.concern} placeholder="e.g. fitness certificate or referral note" onChange={(e) => setRx({ ...rx, concern: e.target.value })} />
-              </div>
-              <div><Label>Diagnosis</Label><Input value={rx.diagnosis} onChange={(e) => setRx({ ...rx, diagnosis: e.target.value })} /></div>
-              <div><Label>℞ Manual Therapy</Label><Textarea rows={2} value={rx.manualTherapy} onChange={(e) => setRx({ ...rx, manualTherapy: e.target.value })} /></div>
-              <div><Label>Electrotherapy / Modalities</Label><Textarea rows={2} value={rx.modalities} onChange={(e) => setRx({ ...rx, modalities: e.target.value })} /></div>
-              <div><Label>Exercise Protocol</Label><Textarea rows={5} value={rx.exercises} onChange={(e) => setRx({ ...rx, exercises: e.target.value })} /></div>
-              <div><Label>Advice</Label><Textarea rows={3} value={rx.advice} onChange={(e) => setRx({ ...rx, advice: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
+          {/* Step 1 — Content form (full width) */}
+          {step === "edit" && (
+            <div className="p-4 sm:p-6 print:hidden">
+              <p className="text-xs text-muted-foreground mb-4">All fields are optional. Empty sections won't appear in the printed prescription.</p>
+              <div className="grid lg:grid-cols-2 gap-4">
+                <div className="lg:col-span-2">
+                  <Label>To Whomsoever It May Concern</Label>
+                  <Textarea rows={3} value={rx.concern} onChange={(e) => setRx({ ...rx, concern: e.target.value })}
+                            placeholder="e.g. fitness certificate, referral note, employer letter" />
+                </div>
+                <div><Label>Diagnosis</Label><Input value={rx.diagnosis} onChange={(e) => setRx({ ...rx, diagnosis: e.target.value })} /></div>
+                <div><Label>℞ Manual Therapy</Label><Input value={rx.manualTherapy} onChange={(e) => setRx({ ...rx, manualTherapy: e.target.value })} /></div>
+                <div className="lg:col-span-2"><Label>Electrotherapy / Modalities</Label><Textarea rows={2} value={rx.modalities} onChange={(e) => setRx({ ...rx, modalities: e.target.value })} /></div>
+                <div className="lg:col-span-2"><Label>Exercise Protocol</Label><Textarea rows={5} value={rx.exercises} onChange={(e) => setRx({ ...rx, exercises: e.target.value })} /></div>
+                <div className="lg:col-span-2"><Label>Advice</Label><Textarea rows={3} value={rx.advice} onChange={(e) => setRx({ ...rx, advice: e.target.value })} /></div>
                 <div>
                   <Label>Next Review Date</Label>
                   <Input type="date" value={rx.reviewDate} onChange={(e) => setRx({ ...rx, reviewDate: e.target.value, reviewTime: "" })} />
                 </div>
                 <div>
                   <Label>Next Review Time</Label>
-                  <select className="w-full h-9 px-3 rounded-md border bg-background" value={rx.reviewTime} onChange={(e) => setRx({ ...rx, reviewTime: e.target.value })}>
+                  <select className="w-full h-9 px-3 rounded-md border bg-background" value={rx.reviewTime}
+                          onChange={(e) => setRx({ ...rx, reviewTime: e.target.value })} disabled={!rx.reviewDate}>
                     <option value="">— None —</option>
                     {reviewSlots.map((s) => <option key={s} value={s}>{fmtTime12(s)}</option>)}
                   </select>
                 </div>
               </div>
+              <div className="mt-6 flex justify-end">
+                <Button className="brand-gradient text-white border-0" onClick={() => setStep("preview")}>
+                  <Eye className="size-4" /> Preview & Print <ArrowRight className="size-4" />
+                </Button>
+              </div>
             </div>
+          )}
 
-            <div className="p-4 bg-muted print:p-0 print:bg-white">
-              <div ref={ref} className="relative bg-white text-black p-8 mx-auto shadow-sm print:shadow-none" style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}>
+          {/* Step 2 — A4 preview */}
+          {step === "preview" && (
+            <div className="p-2 sm:p-4 bg-muted print:p-0 print:bg-white overflow-x-auto">
+              <div
+                ref={ref}
+                className="relative bg-white text-black p-8 mx-auto shadow-sm print:shadow-none"
+                style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}
+              >
                 <div className="absolute inset-0 grid place-items-center pointer-events-none" aria-hidden>
                   <img src={LOGO_URL} alt="" className="w-[420px] h-[420px] object-contain" style={{ opacity: 0.07 }} crossOrigin="anonymous" />
                 </div>
@@ -189,7 +239,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                       <div className="text-[10px] tracking-[0.25em] text-[#0284c7] uppercase">Resilience · Firmness · Balance</div>
                       {branch && (
                         <>
-                          <div className="text-xs text-gray-700 mt-1 font-semibold">{branch.name} Branch</div>
+                          <div className="text-xs text-gray-700 mt-1 font-semibold">{branch.name}</div>
                           <div className="text-xs text-gray-600">{branch.address}</div>
                           <div className="text-xs text-gray-600">
                             Phone: {branch.phone}
@@ -199,7 +249,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                       )}
                     </div>
                   </div>
-                  <div className="text-xs" style={{ marginRight: "64px" }}>
+                  <div className="text-xs" style={{ marginRight: "48px" }}>
                     <div className="font-semibold">Date</div>
                     <div>{today}</div>
                   </div>
@@ -234,16 +284,40 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   )}
                 </div>
 
-                <div className="relative mt-12 grid grid-cols-2 gap-4 text-xs text-gray-600">
+                {/* Signature block: centered under the line */}
+                <div className="relative mt-16 grid grid-cols-2 gap-4 text-xs text-gray-600">
                   <div></div>
-                  <div className="text-right" style={{ marginRight: "64px" }}>
+                  <div style={{ marginRight: "48px" }}>
                     <div className="h-12 border-b border-gray-400 mb-1" />
-                    <div className="font-semibold">Physiotherapist Signature</div>
+                    <div className="font-semibold text-center">Physiotherapist Signature</div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* WhatsApp number prompt */}
+          {waPrompt && (
+            <div className="fixed inset-0 z-[60] bg-black/60 grid place-items-center p-4 print:hidden">
+              <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-5">
+                <h3 className="font-semibold text-lg">Send Prescription via WhatsApp</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Confirm the recipient's WhatsApp number. The PDF will be downloaded for you to attach in the chat.
+                </p>
+                <div className="mt-4">
+                  <Label>WhatsApp Number</Label>
+                  <Input value={waNumber} onChange={(e) => setWaNumber(e.target.value)} placeholder="9900315254 or 919900315254" />
+                  <p className="text-[11px] text-muted-foreground mt-1">If you enter 10 digits, +91 will be added automatically.</p>
+                </div>
+                <div className="mt-5 flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setWaPrompt(false)}>Cancel</Button>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={sendWhatsApp} disabled={!!busy}>
+                    <WhatsAppIcon size={16} /> {busy === "wa" ? "Preparing..." : "Open WhatsApp"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

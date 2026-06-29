@@ -26,9 +26,7 @@ function AuthPage() {
     if (user) navigate({ to: "/app", replace: true });
   }, [user, navigate]);
 
-  useEffect(() => {
-    usernameRef.current?.focus();
-  }, []);
+  useEffect(() => { usernameRef.current?.focus(); }, []);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,50 +37,44 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-surface">
+    <div className="min-h-screen grid place-items-center px-4 py-12 bg-surface">
       <Toaster />
-      <div className="hidden lg:flex flex-col justify-between p-12 brand-gradient text-white">
-        <Logo size={44} textClassName="text-white" />
-        <div>
-          <h1 className="text-4xl font-bold leading-tight">Clinical Workspace</h1>
-          <p className="mt-3 text-white/85 max-w-md">
-            Secure access to patient records, visit logs, recovery analytics, and prescription tools.
-          </p>
-        </div>
-        <p className="text-xs text-white/60">© {new Date().getFullYear()} Sthairya Physiocare</p>
-      </div>
-      <div className="flex items-center justify-center p-6 sm:p-10">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden mb-8"><Logo size={44} /></div>
-          <h2 className="text-2xl font-bold">Staff Sign In</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Authorised personnel only. Sign in with your staff <strong>username</strong>.
-          </p>
+      <div className="w-full max-w-md text-center">
+        <div className="flex justify-center mb-6"><Logo size={56} /></div>
+        <h2 className="text-2xl sm:text-3xl font-bold">Staff Sign In</h2>
+        <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
+          Authorised personnel only. Sign in with your staff <strong>username</strong>.
+        </p>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            <div>
-              <Label htmlFor="u">Username</Label>
-              <Input
-                id="u"
-                ref={usernameRef}
-                type="text"
-                autoComplete="username"
-                placeholder="your.username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoFocus
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="p">Password</Label>
-              <Input id="p" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Sign In</Button>
-          </form>
+        <form onSubmit={submit} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
+          <div>
+            <Label htmlFor="u">Username</Label>
+            <Input
+              id="u"
+              ref={usernameRef}
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="p">Password</Label>
+            <Input
+              id="p"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Sign In</Button>
+        </form>
 
-          <Link to="/" className="block mt-6 text-sm text-brand hover:underline text-center">← Back to website</Link>
-        </div>
+        <Link to="/" className="block mt-6 text-sm text-brand hover:underline">← Back to website</Link>
       </div>
     </div>
   );
