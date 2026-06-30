@@ -20,6 +20,7 @@ function Patients() {
   const patients = useStore((s) => s.patients);
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
+  const canCreate = hasRole("admin", "therapist", "reception");
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(PAGE);
 
@@ -48,7 +49,9 @@ function Patients() {
           <h1 className="text-2xl sm:text-3xl font-bold">Patients</h1>
           <p className="text-sm text-muted-foreground mt-1">{patients.length} total · click to view</p>
         </div>
-        <Link to="/app/patients/new"><Button className="brand-gradient text-white border-0"><Plus className="size-4" /> New Patient</Button></Link>
+        {canCreate && (
+          <Link to="/app/patients/new"><Button className="brand-gradient text-white border-0"><Plus className="size-4" /> New Patient</Button></Link>
+        )}
       </div>
 
       <div className="mt-6 relative">
@@ -79,8 +82,12 @@ function Patients() {
                   : "bg-muted text-muted-foreground";
                 return (
                   <tr key={p.id} className="border-t hover:bg-surface">
-                    <td className="px-4 py-3 font-mono text-xs">{p.pid}</td>
-                    <td className="px-4 py-3 font-medium">{p.n}</td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      <Link to="/app/patients/$id" params={{ id: p.id }} className="text-brand hover:underline font-semibold">{p.pid}</Link>
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      <Link to="/app/patients/$id" params={{ id: p.id }} className="hover:underline">{p.n}</Link>
+                    </td>
                     <td className="px-4 py-3">{age}/{p.g}</td>
                     <td className="px-4 py-3 hidden md:table-cell">{p.m}</td>
                     <td className="px-4 py-3 hidden lg:table-cell truncate max-w-xs">{p.cc}</td>
