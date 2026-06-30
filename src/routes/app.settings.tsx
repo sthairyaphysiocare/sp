@@ -460,11 +460,29 @@ function ClinicianEditor({ initial, onSave, onCancel }: {
   initial: Omit<Clinician, "id">; onSave: (v: Omit<Clinician, "id">) => void; onCancel: () => void;
 }) {
   const [f, setF] = useState(initial);
+  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please choose an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image exceeds 5 MB limit"); return; }
+    const r = new FileReader();
+    r.onload = () => setF({ ...f, photo: String(r.result || "") });
+    r.onerror = () => toast.error("Failed to read image");
+    r.readAsDataURL(file);
+  }
+
   return (
     <div className="p-4 rounded-xl bg-background border border-brand/30 space-y-3">
       <div className="grid sm:grid-cols-2 gap-3">
         <div><Label>Name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Dr. Plinija" /></div>
-        <div><Label>Photo URL</Label><Input value={f.photo} onChange={(e) => setF({ ...f, photo: e.target.value })} placeholder="https://..." /></div>
+        <div>
+          <Label>Photo (max 5 MB)</Label>
+          <div className="flex items-center gap-2 mt-1">
+            {f.photo && <img src={f.photo} alt="" className="size-12 rounded-full object-cover border" />}
+            <input type="file" accept="image/*" onChange={onPhoto} className="text-sm flex-1 min-w-0" />
+            {f.photo && <Button type="button" size="sm" variant="ghost" onClick={() => setF({ ...f, photo: "" })} aria-label="Remove photo"><X className="size-4" /></Button>}
+          </div>
+        </div>
         <div><Label>Qualification</Label><Input value={f.qualification} onChange={(e) => setF({ ...f, qualification: e.target.value })} placeholder="BPT, MPT (Orthopaedics)" /></div>
         <div><Label>Years of Experience</Label><Input value={f.experience} onChange={(e) => setF({ ...f, experience: e.target.value })} placeholder="10+ years" /></div>
         <div className="sm:col-span-2"><Label>Speciality</Label><Input value={f.speciality} onChange={(e) => setF({ ...f, speciality: e.target.value })} placeholder="Sports & Musculoskeletal Rehab" /></div>
