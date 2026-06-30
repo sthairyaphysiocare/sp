@@ -120,12 +120,12 @@ function Dashboard() {
     );
   }
 
-  const cards: { key: KPIKey; icon: any; label: string; value: number; accent: string; visible: boolean }[] = [
-    { key: "patients", icon: Users, label: "Total Patients", value: patients.length, accent: "bg-brand", visible: true },
-    { key: "active", icon: Activity, label: "Active Rehab", value: activePatients.length, accent: "bg-emerald-500", visible: true },
-    { key: "today", icon: CalendarCheck2, label: "Today's Visits", value: todaysVisits.length, accent: "bg-orange-500", visible: !isOther },
-    { key: "pending", icon: Inbox, label: "Pending Bookings", value: pendingBookings.length, accent: "bg-violet-500", visible: !isOther },
-  ].filter((c) => c.visible);
+  const cards = ([
+    { key: "patients" as KPIKey, icon: Users, label: "Total Patients", value: patients.length, accent: "bg-brand", visible: true },
+    { key: "active" as KPIKey, icon: Activity, label: "Active Rehab", value: activePatients.length, accent: "bg-emerald-500", visible: true },
+    { key: "today" as KPIKey, icon: CalendarCheck2, label: "Today's Visits", value: todaysVisits.length, accent: "bg-orange-500", visible: !isOther },
+    { key: "pending" as KPIKey, icon: Inbox, label: "Pending Bookings", value: pendingBookings.length, accent: "bg-violet-500", visible: !isOther },
+  ]).filter((c) => c.visible);
 
   return (
     <div>
