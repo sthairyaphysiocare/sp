@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { useStore } from "@/lib/store";
+import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
+import { CLINIC } from "@/lib/logo";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -15,17 +18,28 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+type Mode = "signin" | "forgot-email" | "forgot-otp" | "forgot-reset";
+
 function AuthPage() {
   const { login, user } = useAuth();
+  const users = useStore((s) => s.users);
+  const settings = useStore((s) => s.settings);
+  const setPasswordForUser = useStore((s) => s.setPassword);
   const navigate = useNavigate();
+
+  const [mode, setMode] = useState<Mode>("signin");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [otpInput, setOtpInput] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpUserId, setOtpUserId] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [busy, setBusy] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (user) navigate({ to: "/app", replace: true });
-  }, [user, navigate]);
-
+  useEffect(() => { if (user) navigate({ to: "/app", replace: true }); }, [user, navigate]);
   useEffect(() => { usernameRef.current?.focus(); }, []);
 
   function submit(e: React.FormEvent) {
@@ -36,43 +50,120 @@ function AuthPage() {
     navigate({ to: "/app" });
   }
 
+  async function sendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    const target = forgotEmail.trim().toLowerCase();
+    const found = users.find((u) => (u.emailId || "").trim().toLowerCase() === target);
+    if (!found) { toast.error("No staff account found for that email"); return; }
+    const code = generateOtp();
+    setBusy(true);
+    const t = toast.loading("Sending OTP...");
+    try {
+      await sendOtpEmail({
+        toEmail: target, toName: found.name, otp: code,
+        fromEmail: settings.globalEmail || CLINIC.email,
+      });
+      setOtp(code);
+      setOtpUserId(found.id);
+      setMode("forgot-otp");
+      toast.success(`OTP sent to ${target}`, { id: t });
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't send OTP. Check email configuration.", { id: t });
+    } finally { setBusy(false); }
+  }
+
+  function verifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (otpInput.trim() !== otp) { toast.error("Incorrect OTP"); return; }
+    setMode("forgot-reset");
+  }
+
+  function resetPwd(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPwd.length < 4) { toast.error("Password too short"); return; }
+    if (newPwd !== confirmPwd) { toast.error("Passwords don't match"); return; }
+    setPasswordForUser(otpUserId, newPwd);
+    toast.success("Password updated. Please sign in.");
+    setMode("signin"); setOtp(""); setOtpInput(""); setNewPwd(""); setConfirmPwd("");
+    setForgotEmail("");
+  }
+
   return (
-    <div className="min-h-screen grid place-items-center px-4 py-12 bg-surface">
+    <div className="min-h-screen grid place-items-center px-4 py-12">
       <Toaster />
       <div className="w-full max-w-md text-center">
         <div className="flex justify-center mb-6"><Logo size={56} /></div>
-        <h2 className="text-2xl sm:text-3xl font-bold">Staff Sign In</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold">
+          {mode === "signin" ? "Staff Sign In" : "Reset Password"}
+        </h2>
         <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
-          Authorised personnel only. Sign in with your staff <strong>username</strong>.
+          {mode === "signin"
+            ? <>Authorised personnel only. Sign in with your staff <strong>username</strong>.</>
+            : "Use the email registered to your staff profile."}
         </p>
 
-        <form onSubmit={submit} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
-          <div>
-            <Label htmlFor="u">Username</Label>
-            <Input
-              id="u"
-              ref={usernameRef}
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="p">Password</Label>
-            <Input
-              id="p"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Sign In</Button>
-        </form>
+        {mode === "signin" && (
+          <form onSubmit={submit} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
+            <div>
+              <Label htmlFor="u">Username</Label>
+              <Input id="u" ref={usernameRef} type="text" autoComplete="username"
+                value={username} onChange={(e) => setUsername(e.target.value)} autoFocus required />
+            </div>
+            <div>
+              <Label htmlFor="p">Password</Label>
+              <Input id="p" type="password" autoComplete="current-password"
+                value={password} onChange={(e) => setPassword(e.target.value)} required />
+            </div>
+            <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Sign In</Button>
+            <div className="text-center">
+              <button type="button" onClick={() => setMode("forgot-email")}
+                className="text-sm text-brand hover:underline">Forgot password?</button>
+            </div>
+          </form>
+        )}
+
+        {mode === "forgot-email" && (
+          <form onSubmit={sendOtp} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
+            <div>
+              <Label htmlFor="fe">Registered Email ID</Label>
+              <Input id="fe" type="email" autoFocus value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)} required />
+              <p className="text-xs text-muted-foreground mt-1">Sent from: {settings.globalEmail || CLINIC.email}</p>
+            </div>
+            <Button type="submit" size="lg" disabled={busy} className="w-full brand-gradient text-white border-0">
+              {busy ? "Sending OTP..." : "Send OTP"}
+            </Button>
+            <button type="button" onClick={() => setMode("signin")} className="block w-full text-sm text-muted-foreground hover:underline">Back to sign in</button>
+          </form>
+        )}
+
+        {mode === "forgot-otp" && (
+          <form onSubmit={verifyOtp} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
+            <div>
+              <Label htmlFor="otp">6-Digit OTP</Label>
+              <Input id="otp" inputMode="numeric" pattern="[0-9]*" maxLength={6} autoFocus
+                value={otpInput} onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))} required />
+              <p className="text-xs text-muted-foreground mt-1">Check your inbox at {forgotEmail}</p>
+            </div>
+            <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Verify</Button>
+            <button type="button" onClick={() => setMode("forgot-email")} className="block w-full text-sm text-muted-foreground hover:underline">Use a different email</button>
+          </form>
+        )}
+
+        {mode === "forgot-reset" && (
+          <form onSubmit={resetPwd} className="mt-8 space-y-4 text-left bg-card border rounded-2xl p-6 sm:p-8 soft-shadow">
+            <div>
+              <Label htmlFor="np">New Password</Label>
+              <Input id="np" type="password" autoFocus value={newPwd} onChange={(e) => setNewPwd(e.target.value)} required />
+            </div>
+            <div>
+              <Label htmlFor="cp">Confirm New Password</Label>
+              <Input id="cp" type="password" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} required />
+            </div>
+            <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">Save Password</Button>
+          </form>
+        )}
 
         <Link to="/" className="block mt-6 text-sm text-brand hover:underline">← Back to website</Link>
       </div>
