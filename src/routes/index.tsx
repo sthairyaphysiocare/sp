@@ -7,7 +7,8 @@ import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { getIcon } from "@/lib/icons";
 import {
   Activity, HeartPulse, ShieldCheck, Sparkles, MapPin, Phone, Mail, ArrowRight,
-  ExternalLink, Feather, Sun, Award, GraduationCap, Clock, User,
+  ExternalLink, Feather, Sun, Award, GraduationCap, Clock, User, PersonStanding,
+  TrendingUp, UserCheck,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -27,7 +28,7 @@ function HomePage() {
 
   const taglines = [
     { icon: Feather, text: "Relieve the pain." },
-    { icon: Activity, text: "Restore the movement." },
+    { icon: PersonStanding, text: "Restore the movement." },
     { icon: Sun, text: "Renew your life." },
   ];
 
@@ -37,8 +38,8 @@ function HomePage() {
         <div className="absolute inset-0 brand-gradient opacity-[0.04]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-12 pb-20 lg:py-24 grid lg:grid-cols-2 gap-10 items-center">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent text-brand text-xs font-semibold mb-5">
-              <Sparkles className="size-3.5" /> {CLINIC.tagline}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-brand text-sm sm:text-base font-semibold mb-5 tracking-wide">
+              <Sparkles className="size-4 sm:size-5" /> {CLINIC.tagline}
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.05]">
               Move better. <span className="text-brand-gradient">Live stronger.</span>
@@ -177,8 +178,8 @@ function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-3 gap-6">
           {[
             { icon: ShieldCheck, t: "Evidence-Based Care", d: "Protocols backed by latest clinical research and outcome tracking." },
-            { icon: HeartPulse, t: "Personalised Plans", d: "Every recovery plan is tailored to your goals and lifestyle." },
-            { icon: Activity, t: "Progress You See", d: "Proactively tracking pain reduction and functional recovery." },
+            { icon: UserCheck, t: "Personalised Plans", d: "Every recovery plan is tailored to your goals and lifestyle." },
+            { icon: TrendingUp, t: "Progress You See", d: "Proactively tracking pain reduction and functional recovery." },
           ].map((x) => (
             <div key={x.t} className="p-6 rounded-2xl bg-card border">
               <x.icon className="size-8 text-brand" />
