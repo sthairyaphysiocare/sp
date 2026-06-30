@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
 import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
@@ -43,7 +44,7 @@ function ContactPage() {
   const branches = enabledBranches(settings);
   const wa = whatsappDigits(settings);
   const globalEmail = settings.globalEmail || CLINIC.email;
-  const [activeId, setActiveId] = (require("react") as typeof import("react")).useState<string>(branches[0]?.id || "");
+  const [activeId, setActiveId] = useState<string>(branches[0]?.id || "");
   const active = branches.find((b) => b.id === activeId) || branches[0];
   const mapQuery = encodeURIComponent(active?.address || CLINIC.mapRef);
 
