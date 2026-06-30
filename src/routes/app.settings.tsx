@@ -30,7 +30,9 @@ function Settings() {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [wa, setWa] = useState(settings.whatsappNumber || "");
+  const [gEmail, setGEmail] = useState(settings.globalEmail || "");
   const [stats, setStats] = useState<PublicStats>(settings.stats);
+  const [myEmail, setMyEmail] = useState(user?.emailId || "");
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +42,14 @@ function Settings() {
     store.changePassword(user.id, pw);
     setPw(""); setPw2("");
     toast.success("Password updated");
+  }
+
+  function saveMyEmail() {
+    if (!user) return;
+    const v = myEmail.trim();
+    if (v && !/.+@.+\..+/.test(v)) { toast.error("Enter a valid email"); return; }
+    store.updateUser(user.id, { emailId: v });
+    toast.success("Email updated");
   }
 
   function togglePublicStats() {
@@ -52,6 +62,13 @@ function Settings() {
     if (digits.length < 10) { toast.error("Enter a valid number"); return; }
     store.setSettings({ whatsappNumber: digits });
     toast.success("WhatsApp Business number updated");
+  }
+
+  function saveGEmail() {
+    const v = gEmail.trim();
+    if (v && !/.+@.+\..+/.test(v)) { toast.error("Enter a valid email"); return; }
+    store.setSettings({ globalEmail: v });
+    toast.success("Global Email ID updated");
   }
 
   function saveStats() {
