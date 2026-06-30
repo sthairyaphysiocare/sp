@@ -88,6 +88,15 @@ function Settings() {
         <Button type="submit" className="brand-gradient text-white border-0">Update Password</Button>
       </form>
 
+      <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+        <h2 className="font-semibold">My Email ID</h2>
+        <p className="text-sm text-muted-foreground mt-1">Used for password reset OTP &amp; notifications.</p>
+        <div className="mt-3 flex gap-2 flex-wrap">
+          <Input type="email" value={myEmail} onChange={(e) => setMyEmail(e.target.value)} placeholder="you@example.com" className="flex-1 min-w-[200px]" />
+          <Button onClick={saveMyEmail} className="brand-gradient text-white border-0">Save</Button>
+        </div>
+      </div>
+
       {hasRole("admin") && (
         <>
           <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
@@ -99,6 +108,20 @@ function Settings() {
                 <div className="mt-3 flex gap-2 flex-wrap">
                   <Input value={wa} onChange={(e) => setWa(e.target.value)} placeholder="919900315254" className="flex-1 min-w-[200px]" />
                   <Button onClick={saveWa} className="brand-gradient text-white border-0">Save</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+            <div className="flex items-start gap-3">
+              <div className="size-10 rounded-lg bg-blue-500 grid place-items-center text-white shrink-0"><Globe className="size-5" /></div>
+              <div className="flex-1">
+                <h2 className="font-semibold">Global Email ID</h2>
+                <p className="text-sm text-muted-foreground mt-1">Master fallback email for branches without a custom Email ID and outgoing OTPs.</p>
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <Input type="email" value={gEmail} onChange={(e) => setGEmail(e.target.value)} placeholder="hello@sthairya.in" className="flex-1 min-w-[200px]" />
+                  <Button onClick={saveGEmail} className="brand-gradient text-white border-0">Save</Button>
                 </div>
               </div>
             </div>
