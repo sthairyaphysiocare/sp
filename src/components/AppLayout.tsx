@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
   { to: "/app", label: "Dashboard", icon: <LayoutDashboard className="size-4" />, roles: ["admin", "therapist", "reception", "other"] },
   { to: "/app/patients", label: "Patients", icon: <Users className="size-4" />, roles: ["admin", "therapist", "reception", "other"] },
   { to: "/app/bookings", label: "Bookings", icon: <CalendarClock className="size-4" />, roles: ["admin", "therapist", "reception"] },
-  { to: "/app/reports", label: "Reports", icon: <FileBarChart2 className="size-4" />, roles: ["admin", "therapist", "reception"] },
+  { to: "/app/reports", label: "Reports", icon: <FileBarChart2 className="size-4" />, roles: ["admin", "therapist", "reception", "other"] },
   { to: "/app/staff", label: "Staff", icon: <UserCog className="size-4" />, roles: ["admin"] },
   { to: "/app/settings", label: "Settings", icon: <Settings className="size-4" />, roles: ["admin", "therapist", "reception", "other"] },
 ];
@@ -78,7 +78,7 @@ export function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen flex bg-surface">
+    <div className="min-h-screen flex">
       <div className="hidden md:flex">{Sidebar}</div>
       {open && (
         <div className="fixed inset-0 z-50 flex md:hidden">

@@ -19,9 +19,9 @@ interface DB {
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password" },
-  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password" },
-  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password" },
+  { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password", emailId: "" },
+  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password", emailId: "" },
+  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password", emailId: "" },
 ];
 
 const DEFAULT_HOURS: BranchHours = {
@@ -42,11 +42,11 @@ const DEFAULT_STATS: PublicStats = {
 };
 
 const DEFAULT_SPECIALITIES: SpecialityItem[] = [
-  { id: "sp1", icon: "Activity", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
-  { id: "sp2", icon: "HeartPulse", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
+  { id: "sp1", icon: "Bone", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
+  { id: "sp2", icon: "Bandage", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
   { id: "sp3", icon: "Dumbbell", title: "Sports Injuries", desc: "Performance-driven rehabilitation for athletes." },
   { id: "sp4", icon: "Stethoscope", title: "Frozen Shoulder", desc: "Manual therapy and progressive ROM restoration." },
-  { id: "sp5", icon: "Bone", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
+  { id: "sp5", icon: "Accessibility", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
   { id: "sp6", icon: "Brain", title: "Neurological Rehab", desc: "Stroke recovery, Parkinson's, balance training." },
   { id: "sp7", icon: "Footprints", title: "Gait & Posture", desc: "Gait analysis and biomechanical correction." },
   { id: "sp8", icon: "Baby", title: "Paediatric & Geriatric", desc: "Developmental and mobility programs for all ages." },
@@ -100,8 +100,9 @@ function seedVisits(patients: Patient[]): Visit[] {
 function defaultSettings(): AppSettings {
   return {
     publicStatsEnabled: false,
-    branches: [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }],
+    branches: [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS }, emailId: "" }],
     whatsappNumber: CLINIC.whatsapp,
+    globalEmail: CLINIC.email,
     stats: { ...DEFAULT_STATS },
     specialities: DEFAULT_SPECIALITIES.map((s) => ({ ...s })),
     cliniciansEnabled: false,
@@ -134,12 +135,14 @@ function load(): DB {
       if (!parsed.settings.branches || parsed.settings.branches.length === 0) {
         parsed.settings.branches = [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }];
       }
-      parsed.settings.branches = parsed.settings.branches.map((b) => ({ ...b, hours: b.hours ?? { ...DEFAULT_HOURS } }));
+      parsed.settings.branches = parsed.settings.branches.map((b) => ({ ...b, hours: b.hours ?? { ...DEFAULT_HOURS }, emailId: b.emailId ?? "" }));
       if (!parsed.settings.whatsappNumber) parsed.settings.whatsappNumber = CLINIC.whatsapp;
+      if (typeof parsed.settings.globalEmail !== "string") parsed.settings.globalEmail = CLINIC.email;
       if (!parsed.settings.stats) parsed.settings.stats = { ...DEFAULT_STATS };
       if (!parsed.settings.specialities) parsed.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
       if (typeof parsed.settings.cliniciansEnabled !== "boolean") parsed.settings.cliniciansEnabled = false;
       if (!parsed.settings.clinicians) parsed.settings.clinicians = [];
+      parsed.users = parsed.users.map((u) => ({ ...u, emailId: u.emailId ?? "" }));
       const defId = parsed.settings.branches[0].id;
       parsed.patients = parsed.patients.map((p) => ({
         ...p,
@@ -200,7 +203,7 @@ export const store = {
     persist();
     return nu;
   },
-  updateUser(id: string, patch: Partial<Pick<User, "name" | "email" | "role">>) {
+  updateUser(id: string, patch: Partial<Pick<User, "name" | "email" | "role" | "emailId">>) {
     state = { ...state, users: state.users.map((u) => (u.id === id ? { ...u, ...patch } : u)) };
     persist();
   },

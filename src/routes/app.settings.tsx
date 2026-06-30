@@ -30,7 +30,9 @@ function Settings() {
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [wa, setWa] = useState(settings.whatsappNumber || "");
+  const [gEmail, setGEmail] = useState(settings.globalEmail || "");
   const [stats, setStats] = useState<PublicStats>(settings.stats);
+  const [myEmail, setMyEmail] = useState(user?.emailId || "");
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +42,14 @@ function Settings() {
     store.changePassword(user.id, pw);
     setPw(""); setPw2("");
     toast.success("Password updated");
+  }
+
+  function saveMyEmail() {
+    if (!user) return;
+    const v = myEmail.trim();
+    if (v && !/.+@.+\..+/.test(v)) { toast.error("Enter a valid email"); return; }
+    store.updateUser(user.id, { emailId: v });
+    toast.success("Email updated");
   }
 
   function togglePublicStats() {
@@ -52,6 +62,13 @@ function Settings() {
     if (digits.length < 10) { toast.error("Enter a valid number"); return; }
     store.setSettings({ whatsappNumber: digits });
     toast.success("WhatsApp Business number updated");
+  }
+
+  function saveGEmail() {
+    const v = gEmail.trim();
+    if (v && !/.+@.+\..+/.test(v)) { toast.error("Enter a valid email"); return; }
+    store.setSettings({ globalEmail: v });
+    toast.success("Global Email ID updated");
   }
 
   function saveStats() {
@@ -71,6 +88,15 @@ function Settings() {
         <Button type="submit" className="brand-gradient text-white border-0">Update Password</Button>
       </form>
 
+      <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+        <h2 className="font-semibold">My Email ID</h2>
+        <p className="text-sm text-muted-foreground mt-1">Used for password reset OTP &amp; notifications.</p>
+        <div className="mt-3 flex gap-2 flex-wrap">
+          <Input type="email" value={myEmail} onChange={(e) => setMyEmail(e.target.value)} placeholder="you@example.com" className="flex-1 min-w-[200px]" />
+          <Button onClick={saveMyEmail} className="brand-gradient text-white border-0">Save</Button>
+        </div>
+      </div>
+
       {hasRole("admin") && (
         <>
           <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
@@ -82,6 +108,20 @@ function Settings() {
                 <div className="mt-3 flex gap-2 flex-wrap">
                   <Input value={wa} onChange={(e) => setWa(e.target.value)} placeholder="919900315254" className="flex-1 min-w-[200px]" />
                   <Button onClick={saveWa} className="brand-gradient text-white border-0">Save</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+            <div className="flex items-start gap-3">
+              <div className="size-10 rounded-lg bg-blue-500 grid place-items-center text-white shrink-0"><Globe className="size-5" /></div>
+              <div className="flex-1">
+                <h2 className="font-semibold">Global Email ID</h2>
+                <p className="text-sm text-muted-foreground mt-1">Master fallback email for branches without a custom Email ID and outgoing OTPs.</p>
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <Input type="email" value={gEmail} onChange={(e) => setGEmail(e.target.value)} placeholder="hello@sthairya.in" className="flex-1 min-w-[200px]" />
+                  <Button onClick={saveGEmail} className="brand-gradient text-white border-0">Save</Button>
                 </div>
               </div>
             </div>
@@ -142,7 +182,7 @@ function BranchManager() {
           <div className="mt-5 space-y-3">
             {adding && (
               <BranchEditor
-                initial={{ name: "", address: "", mapUrl: "", phone: "", license: "", enabled: true, hours: { ...EMPTY_HOURS } }}
+                initial={{ name: "", address: "", mapUrl: "", phone: "", emailId: "", license: "", enabled: true, hours: { ...EMPTY_HOURS } }}
                 onCancel={() => setAdding(false)}
                 onSave={(b) => { store.addBranch(b); setAdding(false); toast.success("Branch added"); }}
               />
@@ -213,7 +253,7 @@ function BranchEditor({ initial, onSave, onCancel }: {
 }) {
   const [f, setF] = useState<Omit<Branch, "id">>({
     name: initial.name, address: initial.address, mapUrl: initial.mapUrl,
-    phone: initial.phone, license: initial.license, enabled: initial.enabled,
+    phone: initial.phone, emailId: initial.emailId || "", license: initial.license, enabled: initial.enabled,
     hours: initial.hours ?? { ...EMPTY_HOURS },
   });
   const hours = f.hours ?? EMPTY_HOURS;
@@ -234,7 +274,8 @@ function BranchEditor({ initial, onSave, onCancel }: {
         <div><Label>Phone Number</Label><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="+91 9900315254" /></div>
         <div className="sm:col-span-2"><Label>Address</Label><Input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></div>
         <div><Label>Google Map Link</Label><Input value={f.mapUrl} onChange={(e) => setF({ ...f, mapUrl: e.target.value })} placeholder="https://maps.app.goo.gl/..." /></div>
-        <div><Label>License / Registration Number</Label><Input value={f.license} onChange={(e) => setF({ ...f, license: e.target.value })} /></div>
+        <div><Label>Email ID</Label><Input type="email" value={f.emailId || ""} onChange={(e) => setF({ ...f, emailId: e.target.value })} placeholder="(falls back to Global Email)" /></div>
+        <div className="sm:col-span-2"><Label>License / Registration Number</Label><Input value={f.license} onChange={(e) => setF({ ...f, license: e.target.value })} /></div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />
           Visible on public site
@@ -419,11 +460,29 @@ function ClinicianEditor({ initial, onSave, onCancel }: {
   initial: Omit<Clinician, "id">; onSave: (v: Omit<Clinician, "id">) => void; onCancel: () => void;
 }) {
   const [f, setF] = useState(initial);
+  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please choose an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image exceeds 5 MB limit"); return; }
+    const r = new FileReader();
+    r.onload = () => setF({ ...f, photo: String(r.result || "") });
+    r.onerror = () => toast.error("Failed to read image");
+    r.readAsDataURL(file);
+  }
+
   return (
     <div className="p-4 rounded-xl bg-background border border-brand/30 space-y-3">
       <div className="grid sm:grid-cols-2 gap-3">
         <div><Label>Name</Label><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Dr. Plinija" /></div>
-        <div><Label>Photo URL</Label><Input value={f.photo} onChange={(e) => setF({ ...f, photo: e.target.value })} placeholder="https://..." /></div>
+        <div>
+          <Label>Photo (max 5 MB)</Label>
+          <div className="flex items-center gap-2 mt-1">
+            {f.photo && <img src={f.photo} alt="" className="size-12 rounded-full object-cover border" />}
+            <input type="file" accept="image/*" onChange={onPhoto} className="text-sm flex-1 min-w-0" />
+            {f.photo && <Button type="button" size="sm" variant="ghost" onClick={() => setF({ ...f, photo: "" })} aria-label="Remove photo"><X className="size-4" /></Button>}
+          </div>
+        </div>
         <div><Label>Qualification</Label><Input value={f.qualification} onChange={(e) => setF({ ...f, qualification: e.target.value })} placeholder="BPT, MPT (Orthopaedics)" /></div>
         <div><Label>Years of Experience</Label><Input value={f.experience} onChange={(e) => setF({ ...f, experience: e.target.value })} placeholder="10+ years" /></div>
         <div className="sm:col-span-2"><Label>Speciality</Label><Input value={f.speciality} onChange={(e) => setF({ ...f, speciality: e.target.value })} placeholder="Sports & Musculoskeletal Rehab" /></div>

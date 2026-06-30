@@ -114,38 +114,94 @@ function Reports() {
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
       const pw = pdf.internal.pageSize.getWidth();
       const ph = pdf.internal.pageSize.getHeight();
-      // watermark
-      try {
-        pdf.addImage(LOGO_URL, "JPEG", pw / 2 - 60, ph / 2 - 60, 120, 120, undefined, "FAST");
-      } catch {}
-      pdf.setFontSize(16);
-      pdf.text("Sthairya Physiocare — Patient Report", 10, 14);
-      pdf.setFontSize(9);
-      pdf.text(`Range: ${fmtDate(effective.s)} – ${fmtDate(effective.e)}  ·  Filter: ${source === "registration" ? "Registration date" : "Visit date"}  ·  ${rows.length} records`, 10, 20);
+      const margin = 12;
+
+      const drawChrome = (pageNum: number, totalPages: number) => {
+        // Watermark
+        try {
+          pdf.saveGraphicsState?.();
+          const gs = (pdf as any).GState ? new (pdf as any).GState({ opacity: 0.06 }) : null;
+          if (gs) (pdf as any).setGState(gs);
+          pdf.addImage(LOGO_URL, "JPEG", pw / 2 - 70, ph / 2 - 70, 140, 140, undefined, "FAST");
+          pdf.restoreGraphicsState?.();
+        } catch {}
+        // Header band
+        pdf.setFillColor(2, 132, 199);
+        pdf.rect(0, 0, pw, 18, "F");
+        try { pdf.addImage(LOGO_URL, "JPEG", margin, 3, 12, 12, undefined, "FAST"); } catch {}
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(13);
+        pdf.text("STHAIRYA PHYSIOCARE", margin + 16, 8.5);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.text("Resilience • Firmness • Balance", margin + 16, 13);
+        pdf.setFontSize(8);
+        pdf.text(`Page ${pageNum} of ${totalPages}`, pw - margin, 12, { align: "right" });
+        pdf.setTextColor(0, 0, 0);
+        // Sub header
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(13);
+        pdf.text("Patient Activity Report", margin, 26);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9);
+        pdf.text(
+          `Range: ${fmtDate(effective.s)} – ${fmtDate(effective.e)}   •   Filter: ${source === "registration" ? "Registration date" : "Visit date"}   •   ${rows.length} record(s)`,
+          margin, 31,
+        );
+        pdf.setDrawColor(220);
+        pdf.line(margin, 34, pw - margin, 34);
+        // Footer
+        pdf.setFontSize(8);
+        pdf.setTextColor(120);
+        pdf.text("Note: This is a system generated document. A physical signature or stamp is not required.",
+          pw / 2, ph - 6, { align: "center" });
+        pdf.setTextColor(0);
+      };
 
       const headers = ["PID", "Name", "Age/Sex", "Mobile", "Branch", "Status", "Registered"];
-      const colX = [10, 38, 75, 92, 122, 152, 178];
-      let y = 30;
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", "bold");
-      headers.forEach((h, i) => pdf.text(h, colX[i], y));
-      pdf.setFont("helvetica", "normal");
-      y += 5;
-      pdf.line(10, y - 2, pw - 10, y - 2);
+      const colX = [margin, margin + 24, margin + 64, margin + 82, margin + 112, margin + 148, margin + 178];
+      let y = 42;
+
+      const startPage = () => {
+        drawChrome(pdf.getNumberOfPages(), 0);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(9);
+        headers.forEach((h, i) => pdf.text(h, colX[i], y));
+        pdf.setFont("helvetica", "normal");
+        pdf.line(margin, y + 1.5, pw - margin, y + 1.5);
+        y += 6;
+      };
+
+      startPage();
       rows.forEach((p) => {
-        if (y > ph - 12) {
+        if (y > ph - 16) {
           pdf.addPage();
-          y = 14;
+          y = 42;
+          startPage();
         }
         const age = p.dob ? new Date().getFullYear() - new Date(p.dob).getFullYear() : "—";
         const branch = branchById(settings, p.br)?.name || "";
         const cells = [
-          p.pid, (p.n || "").slice(0, 22), `${age}/${p.g}`,
-          p.m, branch, (p.status || "active"), fmtDate(p.ts),
+          p.pid, (p.n || "").slice(0, 24), `${age}/${p.g}`,
+          p.m, (branch || "").slice(0, 18), (p.status || "active"), fmtDate(p.ts),
         ];
         cells.forEach((c, i) => pdf.text(String(c), colX[i], y));
         y += 6;
       });
+
+      // Fix page numbers
+      const total = pdf.getNumberOfPages();
+      for (let i = 1; i <= total; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setTextColor(255);
+        pdf.setFillColor(2, 132, 199);
+        pdf.rect(pw - 38, 9, 30, 6, "F");
+        pdf.text(`Page ${i} of ${total}`, pw - margin, 13, { align: "right" });
+        pdf.setTextColor(0);
+      }
+
       pdf.save(`Sthairya_Report_${effective.s}_to_${effective.e}.pdf`);
       toast.success("PDF downloaded", { id: "rep" });
     } catch (err) {
@@ -240,9 +296,6 @@ function Reports() {
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-        <Download className="size-3" /> Reports are generated locally — no patient data leaves this device.
-      </div>
     </div>
   );
 }

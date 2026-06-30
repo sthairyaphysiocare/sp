@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { PublicLayout } from "@/components/PublicLayout";
 import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
@@ -42,7 +43,10 @@ function ContactPage() {
   const settings = useStore((s) => s.settings);
   const branches = enabledBranches(settings);
   const wa = whatsappDigits(settings);
-  const primary = branches[0];
+  const globalEmail = settings.globalEmail || CLINIC.email;
+  const [activeId, setActiveId] = useState<string>(branches[0]?.id || "");
+  const active = branches.find((b) => b.id === activeId) || branches[0];
+  const mapQuery = encodeURIComponent(active?.address || CLINIC.mapRef);
 
   return (
     <PublicLayout>
@@ -57,8 +61,17 @@ function ContactPage() {
             {branches.map((b) => {
               const bWa = (b.phone || CLINIC.phone).replace(/[^0-9]/g, "") || wa;
               const bTel = (b.phone || CLINIC.phone).replace(/\s/g, "");
+              const bEmail = b.emailId || globalEmail;
+              const isActive = b.id === activeId;
               return (
-                <div key={b.id} className="p-6 rounded-2xl bg-card border space-y-4">
+                <button
+                  type="button"
+                  key={b.id}
+                  onClick={() => setActiveId(b.id)}
+                  className={`block w-full text-left p-6 rounded-2xl bg-card border space-y-4 transition-all ${
+                    isActive ? "ring-2 ring-brand soft-shadow" : "hover:soft-shadow"
+                  }`}
+                >
                   <div className="flex items-start gap-4">
                     <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><MapPin className="size-5" /></div>
                     <div className="min-w-0 flex-1">
@@ -66,6 +79,7 @@ function ContactPage() {
                       <p className="text-sm text-muted-foreground mt-1">{b.address}</p>
                       {b.mapUrl && (
                         <a href={b.mapUrl} target="_blank" rel="noreferrer"
+                           onClick={(e) => e.stopPropagation()}
                            className="inline-flex items-center gap-1 text-sm text-brand mt-1 hover:underline">
                           View on Google Maps <ExternalLink className="size-3" />
                         </a>
@@ -88,7 +102,7 @@ function ContactPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <a href={`tel:${bTel}`}>
                       <Button size="sm" variant="outline"><Phone className="size-4" /> Call</Button>
                     </a>
@@ -97,29 +111,20 @@ function ContactPage() {
                         <WhatsAppIcon size={14} /> WhatsApp Now
                       </Button>
                     </a>
-                    <a href={`mailto:${CLINIC.email}`}>
+                    <a href={`mailto:${bEmail}?subject=${encodeURIComponent(`Enquiry — ${b.name}`)}`}>
                       <Button size="sm" variant="outline"><Mail className="size-4" /> Send Email</Button>
                     </a>
                   </div>
-                </div>
+                </button>
               );
             })}
-
-            <div className="p-6 rounded-2xl bg-card border">
-              <div className="flex items-start gap-4">
-                <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><Mail className="size-5" /></div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold">Email</h3>
-                  <p className="text-sm text-muted-foreground mt-1 break-all">{CLINIC.email}</p>
-                </div>
-              </div>
-            </div>
           </div>
 
-          <div className="rounded-2xl overflow-hidden border bg-card min-h-[400px]">
+          <div className="rounded-2xl overflow-hidden border bg-card min-h-[400px] lg:sticky lg:top-24 lg:self-start">
             <iframe
-              title="Clinic Location"
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(primary?.address || CLINIC.mapRef)}&output=embed`}
+              key={active?.id}
+              title={`Map — ${active?.name || "Clinic"}`}
+              src={`https://maps.google.com/maps?q=${mapQuery}&output=embed`}
               className="w-full h-full min-h-[400px] border-0"
               loading="lazy"
             />

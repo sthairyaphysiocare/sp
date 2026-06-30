@@ -2,10 +2,11 @@ export type Role = "admin" | "therapist" | "reception" | "other";
 
 export interface User {
   id: string;
-  email: string;
+  email: string; // username
   name: string;
   role: Role;
   password: string;
+  emailId?: string; // contact email for OTP / notifications
 }
 
 export interface BranchHours {
@@ -26,6 +27,7 @@ export interface Branch {
   phone: string;
   license: string;
   enabled: boolean;
+  emailId?: string;
   hours?: BranchHours;
 }
 
@@ -42,9 +44,9 @@ export interface Patient {
   am: string;
   e: string;
   oc: string;
-  em: string; // legacy combined emergency
-  emN?: string; // emergency contact name
-  emP?: string; // emergency contact phone
+  em: string;
+  emN?: string;
+  emP?: string;
   bg: string;
   h: number;
   w: number;
@@ -56,8 +58,8 @@ export interface Patient {
   cm: number[];
   lf: string;
   fh: string;
-  br?: string; // assigned branch id
-  tId?: string; // assigned therapist id
+  br?: string;
+  tId?: string;
   status?: PatientStatus;
   ts: number;
 }
@@ -122,7 +124,7 @@ export interface PublicStats {
 
 export interface SpecialityItem {
   id: string;
-  icon: string; // key into ICON_MAP
+  icon: string;
   title: string;
   desc: string;
 }
@@ -140,6 +142,7 @@ export interface AppSettings {
   publicStatsEnabled: boolean;
   branches: Branch[];
   whatsappNumber: string;
+  globalEmail?: string;
   stats: PublicStats;
   specialities: SpecialityItem[];
   cliniciansEnabled: boolean;

@@ -20,10 +20,11 @@ export const Route = createFileRoute("/app/patients/new")({
 function NewPatient() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
+  const canCreate = hasRole("admin", "therapist", "reception");
   const branches = useStore((s) => enabledBranches(s.settings));
-  const therapists = useStore((s) => s.users.filter((u) => u.role === "therapist" || u.role === "admin"));
+  const therapists = useStore((s) => s.users.filter((u) => u.role === "therapist"));
   const nextPid = store.nextPid();
-  const defaultTherapist = therapists.find((t) => t.role === "therapist")?.id || therapists[0]?.id || "";
+  const defaultTherapist = therapists[0]?.id || "";
   const [f, setF] = useState({
     n: "", dob: "", g: "M" as "M" | "F" | "O", m: "", am: "", e: "", oc: "",
     em: "", emN: "", emP: "",
@@ -32,6 +33,17 @@ function NewPatient() {
     tId: defaultTherapist,
     status: "active" as const,
   });
+
+  if (!canCreate) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-xl font-semibold">Read-only access</h2>
+        <p className="text-muted-foreground mt-2">Your role does not permit creating new patients.</p>
+        <Link to="/app/patients" className="mt-4 inline-block text-brand hover:underline">← Back to patients</Link>
+      </div>
+    );
+  }
+
 
   function toggleCm(id: number) {
     setF({ ...f, cm: f.cm.includes(id) ? f.cm.filter((x) => x !== id) : [...f.cm, id] });
@@ -90,7 +102,6 @@ function NewPatient() {
                 <option value="">Unassigned</option>
                 {therapists.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
-              <p className="text-xs text-muted-foreground mt-1">Defaults to the first available therapist.</p>
             </div>
           </div>
         </section>
