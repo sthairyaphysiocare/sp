@@ -2,7 +2,7 @@ import { LOGO_URL } from "@/lib/logo";
 
 /**
  * Fixed semi-transparent watermark mounted once at the root.
- * Visible across every public + portal page.
+ * Visible across every public + portal page, including authenticated screens.
  */
 export function GlobalWatermark() {
   return (
@@ -13,8 +13,8 @@ export function GlobalWatermark() {
         backgroundImage: `url(${LOGO_URL})`,
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
-        backgroundSize: "min(75vw, 820px) auto",
-        opacity: 0.05,
+        backgroundSize: "min(70vw, 760px) auto",
+        opacity: 0.045,
       }}
     />
   );
