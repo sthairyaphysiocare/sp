@@ -24,7 +24,7 @@ function AuthPage() {
   const { login, user } = useAuth();
   const users = useStore((s) => s.users);
   const settings = useStore((s) => s.settings);
-  const setPasswordForUser = useStore((s) => s.setPassword);
+  const setPasswordForUser = useStore((s) => s.resetPassword);
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>("signin");
