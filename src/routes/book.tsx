@@ -112,8 +112,7 @@ function BookPage() {
             <div className="size-14 rounded-2xl bg-blue-500/10 text-blue-600 grid place-items-center mb-4"><Mail className="size-6" /></div>
             <h2 className="text-xl font-semibold">Email Us</h2>
             <p className="text-sm text-muted-foreground mt-2">Send your details and we'll reply with available slots.</p>
-            <p className="text-sm text-brand mt-2 break-all">{CLINIC.email}</p>
-            <a href={`mailto:${CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
+            <a href={`mailto:${settings.globalEmail || CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
                className="inline-block mt-5">
               <Button className="brand-gradient text-white border-0"><Mail className="size-4" /> Compose Email</Button>
             </a>
@@ -145,7 +144,6 @@ function BookPage() {
                 <Label htmlFor="prefDate">Preferred Date *</Label>
                 <Input id="prefDate" type="date" min={today} value={form.prefDate}
                        onChange={(e) => setForm({ ...form, prefDate: e.target.value, prefTime: "" })} required />
-                <div className="text-xs text-muted-foreground mt-1">{fmtDate(form.prefDate)}</div>
               </div>
               <div>
                 <Label htmlFor="prefTime">Preferred Time Slot *</Label>

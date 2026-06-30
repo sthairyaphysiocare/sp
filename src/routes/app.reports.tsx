@@ -240,9 +240,6 @@ function Reports() {
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-        <Download className="size-3" /> Reports are generated locally — no patient data leaves this device.
-      </div>
     </div>
   );
 }
