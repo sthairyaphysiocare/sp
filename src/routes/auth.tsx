@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { useStore } from "@/lib/store";
+import { useStore, store } from "@/lib/store";
 import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
 import { CLINIC } from "@/lib/logo";
 
@@ -24,7 +24,7 @@ function AuthPage() {
   const { login, user } = useAuth();
   const users = useStore((s) => s.users);
   const settings = useStore((s) => s.settings);
-  const changePassword = useStore((s) => s.changePassword);
+  
   const navigate = useNavigate();
 
   const [mode, setMode] = useState<Mode>("signin");
@@ -83,7 +83,7 @@ function AuthPage() {
     e.preventDefault();
     if (newPwd.length < 4) { toast.error("Password too short"); return; }
     if (newPwd !== confirmPwd) { toast.error("Passwords don't match"); return; }
-    setPasswordForUser(otpUserId, newPwd);
+    store.changePassword(otpUserId, newPwd);
     toast.success("Password updated. Please sign in.");
     setMode("signin"); setOtp(""); setOtpInput(""); setNewPwd(""); setConfirmPwd("");
     setForgotEmail("");
