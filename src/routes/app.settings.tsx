@@ -182,7 +182,7 @@ function BranchManager() {
           <div className="mt-5 space-y-3">
             {adding && (
               <BranchEditor
-                initial={{ name: "", address: "", mapUrl: "", phone: "", email: "", license: "", enabled: true, hours: { ...EMPTY_HOURS } }}
+                initial={{ name: "", address: "", mapUrl: "", phone: "", emailId: "", license: "", enabled: true, hours: { ...EMPTY_HOURS } }}
                 onCancel={() => setAdding(false)}
                 onSave={(b) => { store.addBranch(b); setAdding(false); toast.success("Branch added"); }}
               />
@@ -253,7 +253,7 @@ function BranchEditor({ initial, onSave, onCancel }: {
 }) {
   const [f, setF] = useState<Omit<Branch, "id">>({
     name: initial.name, address: initial.address, mapUrl: initial.mapUrl,
-    phone: initial.phone, email: initial.email || "", license: initial.license, enabled: initial.enabled,
+    phone: initial.phone, emailId: initial.emailId || "", license: initial.license, enabled: initial.enabled,
     hours: initial.hours ?? { ...EMPTY_HOURS },
   });
   const hours = f.hours ?? EMPTY_HOURS;
@@ -274,7 +274,7 @@ function BranchEditor({ initial, onSave, onCancel }: {
         <div><Label>Phone Number</Label><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="+91 9900315254" /></div>
         <div className="sm:col-span-2"><Label>Address</Label><Input value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></div>
         <div><Label>Google Map Link</Label><Input value={f.mapUrl} onChange={(e) => setF({ ...f, mapUrl: e.target.value })} placeholder="https://maps.app.goo.gl/..." /></div>
-        <div><Label>Email ID</Label><Input type="email" value={f.email || ""} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="(falls back to Global Email)" /></div>
+        <div><Label>Email ID</Label><Input type="email" value={f.emailId || ""} onChange={(e) => setF({ ...f, emailId: e.target.value })} placeholder="(falls back to Global Email)" /></div>
         <div className="sm:col-span-2"><Label>License / Registration Number</Label><Input value={f.license} onChange={(e) => setF({ ...f, license: e.target.value })} /></div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input type="checkbox" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />
