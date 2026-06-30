@@ -17,9 +17,9 @@ export const Route = createFileRoute("/app/staff")({
 function Staff() {
   const { hasRole, user } = useAuth();
   const users = useStore((s) => s.users);
-  const [form, setForm] = useState({ name: "", username: "", role: "therapist" as Role, password: "" });
+  const [form, setForm] = useState({ name: "", username: "", role: "therapist" as Role, password: "", emailId: "" });
   const [editing, setEditing] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ name: string; username: string }>({ name: "", username: "" });
+  const [editForm, setEditForm] = useState<{ name: string; username: string; emailId: string }>({ name: "", username: "", emailId: "" });
 
   if (!hasRole("admin")) {
     return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
@@ -31,8 +31,8 @@ function Staff() {
     if (users.some((u) => u.email.toLowerCase() === form.username.toLowerCase())) {
       toast.error("Username already exists"); return;
     }
-    store.addUser({ name: form.name, email: form.username, role: form.role, password: form.password });
-    setForm({ name: "", username: "", role: "therapist", password: "" });
+    store.addUser({ name: form.name, email: form.username, role: form.role, password: form.password, emailId: form.emailId.trim() });
+    setForm({ name: "", username: "", role: "therapist", password: "", emailId: "" });
     toast.success("Staff member added");
   }
 
@@ -48,7 +48,7 @@ function Staff() {
 
   function startEdit(u: User) {
     setEditing(u.id);
-    setEditForm({ name: u.name, username: u.email });
+    setEditForm({ name: u.name, username: u.email, emailId: u.emailId || "" });
   }
 
   function saveEdit(id: string) {
@@ -56,7 +56,7 @@ function Staff() {
     if (users.some((u) => u.id !== id && u.email.toLowerCase() === editForm.username.toLowerCase())) {
       toast.error("Username already in use"); return;
     }
-    store.updateUser(id, { name: editForm.name.trim(), email: editForm.username.trim() });
+    store.updateUser(id, { name: editForm.name.trim(), email: editForm.username.trim(), emailId: editForm.emailId.trim() });
     setEditing(null);
     toast.success("Staff updated");
   }
@@ -67,16 +67,17 @@ function Staff() {
       <h1 className="text-2xl sm:text-3xl font-bold">Staff & Roles</h1>
       <p className="text-sm text-muted-foreground mt-1">Manage staff usernames, roles and passwords.</p>
 
-      <form onSubmit={add} className="mt-6 p-6 rounded-2xl bg-card border grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <form onSubmit={add} className="mt-6 p-6 rounded-2xl bg-card border grid sm:grid-cols-2 lg:grid-cols-6 gap-3">
         <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div><Label>Username</Label><Input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="e.g. dr.plinija" /></div>
+        <div><Label>Email ID</Label><Input type="email" value={form.emailId} onChange={(e) => setForm({ ...form, emailId: e.target.value })} placeholder="for OTP & notices" /></div>
         <div>
           <Label>Role</Label>
           <select className="w-full h-9 px-3 rounded-md border bg-background" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
             <option value="admin">Admin</option>
             <option value="therapist">Therapist</option>
             <option value="reception">Reception</option>
-            <option value="other">Other (view-only)</option>
+            <option value="other">Other</option>
           </select>
         </div>
         <div><Label>Password</Label><Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
@@ -89,6 +90,7 @@ function Staff() {
             <tr>
               <th className="text-left px-4 py-3">Name</th>
               <th className="text-left px-4 py-3">Username</th>
+              <th className="text-left px-4 py-3">Email ID</th>
               <th className="text-left px-4 py-3">Role</th>
               <th className="text-right px-4 py-3">Actions</th>
             </tr>
@@ -107,6 +109,11 @@ function Staff() {
                     {isEditing
                       ? <Input value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} />
                       : u.email}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {isEditing
+                      ? <Input type="email" value={editForm.emailId} onChange={(e) => setEditForm({ ...editForm, emailId: e.target.value })} />
+                      : (u.emailId || <span className="text-muted-foreground italic">—</span>)}
                   </td>
                   <td className="px-4 py-3 capitalize">{u.role}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
