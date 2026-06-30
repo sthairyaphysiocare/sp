@@ -19,9 +19,9 @@ interface DB {
 }
 
 const DEFAULT_USERS: User[] = [
-  { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password" },
-  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password" },
-  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password" },
+  { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password", emailId: "" },
+  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password", emailId: "" },
+  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password", emailId: "" },
 ];
 
 const DEFAULT_HOURS: BranchHours = {
@@ -42,11 +42,11 @@ const DEFAULT_STATS: PublicStats = {
 };
 
 const DEFAULT_SPECIALITIES: SpecialityItem[] = [
-  { id: "sp1", icon: "Activity", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
-  { id: "sp2", icon: "HeartPulse", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
+  { id: "sp1", icon: "Bone", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
+  { id: "sp2", icon: "Bandage", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
   { id: "sp3", icon: "Dumbbell", title: "Sports Injuries", desc: "Performance-driven rehabilitation for athletes." },
   { id: "sp4", icon: "Stethoscope", title: "Frozen Shoulder", desc: "Manual therapy and progressive ROM restoration." },
-  { id: "sp5", icon: "Bone", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
+  { id: "sp5", icon: "Accessibility", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
   { id: "sp6", icon: "Brain", title: "Neurological Rehab", desc: "Stroke recovery, Parkinson's, balance training." },
   { id: "sp7", icon: "Footprints", title: "Gait & Posture", desc: "Gait analysis and biomechanical correction." },
   { id: "sp8", icon: "Baby", title: "Paediatric & Geriatric", desc: "Developmental and mobility programs for all ages." },
