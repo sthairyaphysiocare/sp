@@ -159,8 +159,19 @@ function load(): DB {
   return db;
 }
 
-let state: DB = load();
+// SSR-safe: always start from defaults so server + first client render agree.
+// Real localStorage state is swapped in after mount via ensureHydrated().
+const SERVER_SNAPSHOT: DB = defaultDb();
+let state: DB = SERVER_SNAPSHOT;
+let hydrated = false;
 const listeners = new Set<() => void>();
+
+function ensureHydrated() {
+  if (hydrated || typeof window === "undefined") return;
+  hydrated = true;
+  state = load();
+  listeners.forEach((l) => l());
+}
 
 function persist() {
   if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
@@ -169,11 +180,15 @@ function persist() {
 
 function subscribe(l: () => void) {
   listeners.add(l);
+  // Trigger one-time hydration on first subscription (post-mount on client).
+  if (typeof window !== "undefined" && !hydrated) {
+    queueMicrotask(ensureHydrated);
+  }
   return () => listeners.delete(l);
 }
 
 export function useStore<T>(selector: (s: DB) => T): T {
-  const snap = useSyncExternalStore(subscribe, () => state, () => state);
+  const snap = useSyncExternalStore(subscribe, () => state, () => SERVER_SNAPSHOT);
   return selector(snap);
 }
 
