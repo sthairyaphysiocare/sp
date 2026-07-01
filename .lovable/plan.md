@@ -1,50 +1,92 @@
-## Sthairya Physiocare — Major Refinement Pass
+# Sthairya Physiocare — Major Upgrade Plan
 
-A large, multi-area scope. I'll execute in five grouped phases. Each phase is independently shippable and I'll batch parallel file edits inside each.
+This is a very large batch of changes. I'll execute it in ordered phases so nothing regresses. Please confirm before I start — especially the Turso migration, which has significant implications (see "Important decisions to confirm" at the end).
 
-### Phase 1 — Global UI/UX foundations
-- **GlobalWatermark component**: extract the fixed semi-transparent logo background from `index.tsx` into `src/components/GlobalWatermark.tsx`; mount once in `__root.tsx` so it appears on every public + portal page.
-- **Top-left brand text**: update `Logo.tsx` so the "STHAIRYA / Physiocare" lockup matches the hero font weight/size/color (bold display, `text-brand-gradient` for STHAIRYA).
-- **Tooltips**: wrap icon-only buttons across the app with shadcn `Tooltip`. Add a small `<IconButton tooltip="Edit">` helper in `src/components/IconButton.tsx` to standardize.
-- **Date picker**: new `src/components/MonthYearDatePicker.tsx` built on shadcn `Calendar` + `Popover` with month/year dropdown selects in the caption. Replace `<input type="date">` usages in patient form, visit, booking, reports.
+## Phase 0 — Turso Cloud DB Migration (foundational)
+- Install `@libsql/client`.
+- Add `VITE_TURSO_DB_URL` and `VITE_TURSO_AUTH_TOKEN` as secrets (env vars). Never hardcoded.
+- New `src/lib/turso.ts` — creates client via `createClient` from `@libsql/client/web`, reads env only.
+- New `src/lib/db/schema.ts` — idempotent `CREATE TABLE IF NOT EXISTS` for: users, patients, visits, clinical_notes, bookings, branches, settings, specialities, clinicians, otp_attempts, locked_accounts. FK constraints on, unique keys on PID / username / email. Text/number/date/bool only — no blobs.
+- Passwords hashed with PBKDF2-SHA256 (Web Crypto, salted, 100k iters). Migration re-hashes existing plaintext once, then discards.
+- Rewrite `src/lib/store.ts` as an async data layer backed by Turso. Public API becomes async (`await store.addPatient(...)`). All consumers updated to `await` / React Query.
+- Add global `<QueryClientProvider>` and skeleton/spinner states on every list/detail page.
+- Wrap all DB calls in try/catch → toast on failure ("Unable to connect…").
+- **One-time migration**: on app boot, if `localStorage['stpc:v1']` exists and Turso has no rows for this workspace, read the legacy blob, insert everything preserving IDs, then set a `migrated=1` flag in Turso and clear the localStorage blob.
 
-### Phase 2 — Public site revisions
-- **Hero (`routes/index.tsx`)**: remove the right-column placeholder card. Replace with three stacked taglines (Relieve / Restore / Renew) each with a Lucide icon (Feather, Activity, Sparkles) and staggered `animate-fade-in` (delays 0/150/300ms via inline style).
-- **Contact (`routes/contact.tsx`)**: change intro copy; per-branch action row with Call / WhatsApp / Email buttons aligned with each branch card; remove duplicated bottom CTA block.
-- **Book (`routes/book.tsx`)**: 3-button toggle row (In App Form / WhatsApp / Email), same base bg, active variant differentiated. Remove subtitles. Show selected channel content below.
-- **Auth (`routes/auth.tsx`)**: center wrapper (`min-h-screen grid place-items-center`), remove username placeholder, ensure watermark inherits from root.
+## Phase 1 — Auth / Session Security
+- Move session (`userId`, role) from localStorage → `sessionStorage`. Never write auth to localStorage.
+- Rewrite `AuthProvider` to hydrate from sessionStorage only; expose `isAuthenticated`.
+- `PublicLayout` nav: "Open Dashboard" renders **only** when both sessionStorage token AND context confirm auth; otherwise "Staff Login".
+- Global route guard on `/app/*`: verify session on mount, purge + redirect to `/auth` if missing/expired.
+- Session ends on tab close (sessionStorage native behavior).
 
-### Phase 3 — Admin settings & multi-branch expansion
-- **Settings (`routes/app.settings.tsx`)** rebuilt with sections:
-  - Branches: add per-branch hours (mon–sun text fields, simple `hours: Record<string,string>` map). Disable delete when `branches.length===1`. On delete, reassign affected patients to remaining first branch (`store.removeBranch` already handles? – update if not).
-  - Editable stats: 4 inputs stored in `settings.stats` (defaults 6+/10+/61%/20+). Home page reads them.
-  - Specialities CRUD: `settings.specialities: {icon, title, desc}[]` (icon is a string key mapped to Lucide map). Home + Specialities pages read from this.
-  - Clinician Profiles CRUD: `settings.cliniciansEnabled` toggle + `settings.clinicians: {name, photo, qualification, exp, speciality}[]`.
-- **Sidebar (`AppLayout.tsx`)**: relocate user info + logout to below Settings link.
+## Phase 2 — OTP Hardening (Forgot Password)
+- 5-minute TTL with live countdown (`OTP expires in 4:32`).
+- OTP kept in component-local React state; cleaned on unmount / success.
+- Attempt counter: 3 wrong → disable Verify, show "Too many failed attempts…".
+- Numeric-only masked input, auto-focus.
+- Strict `===` compare, wipe on success before redirect.
+- Remove "Sent from: …" line under Registered Email ID.
 
-### Phase 4 — Patient management & workflows
-- **Types/store**: add `status: "active"|"inactive"|"completed"` to Patient; split `em` into `emN`/`emP`; add `tId` therapist assignment to Patient; persist edits.
-- **Patients list (`app.patients.index.tsx`)**: paginate top 10 with Load More.
-- **Patient detail (`app.patients.$id.tsx`)**: status toggle, lock edits unless active, full demographic + clinical edit, visit edit dialog.
-- **New patient (`app.patients.new.tsx`)**: two emergency fields, therapist dropdown with default.
-- **Dashboard (`app.index.tsx`)**: "Active Rehab" counts only `status==="active"`.
-- **Bookings (`app.bookings.tsx`)**: allow therapist role; add "Clear Closed" button.
-- **Reports (new `app.reports.tsx`)**: date filter presets + custom range; export PDF (jsPDF table) and CSV (no xlsx dep) — labeled "Excel (CSV)". Add route to sidebar.
-- **Auth (`lib/auth.tsx`)**: add `"other"` role, default admin name → "Admin".
+## Phase 3 — Account Lockout
+- Track failed logins per user in DB. Roles `therapist`/`reception`/`other`: lock after 4 consecutive fails → "Account locked due to multiple failed attempts. Contact Admin."
+- Admin: never locked; add 2s artificial delay on wrong password.
+- Admin Settings → Staff & Roles: "Locked Accounts" panel with Unlock button.
 
-### Phase 5 — Prescription engine rework
-- **`PrescriptionDialog.tsx`** rebuilt as a 2-tab wizard (Tabs: "Content" / "Preview & Print"):
-  - Content tab: full-width form, optional fields.
-  - Preview tab: A4 sheet with branch letterhead (no word "Branch"), centered "Physiotherapist Signature" under signature line.
-  - Fix PDF: await `html2canvas` properly, then `jsPDF`; catch + toast actual error.
-  - WhatsApp: prompt with editable number prefilled from patient phone; build `wa.me` link with message; no PDF attach (text fallback as before).
+## Phase 4 — Prescription / Receipt / Reports fixes
+- Fix PDF + WhatsApp export in `PrescriptionDialog` by mirroring the working `app.reports.tsx` jsPDF pattern (no `html2canvas` for the doc body — draw with jsPDF primitives, same header/watermark/footer chrome).
+- Footer note pinned to page bottom.
+- Fix desktop button overlap on both wizard pages.
+- Header shows branch Email ID + configurable clinic URL (`sthairyaphysiocare.pages.dev`) — new toggle + editable field in Admin Settings.
+- Receipt: "Qty" → "Sessions". Add "Total in words: Rupees … Only" (number-to-words util).
+- Reports: add **Find** button; render first 10 in UI with **Load More**; PDF/CSV buttons appear only after results load.
 
-### Technical notes
-- All new settings fields backfilled with defaults in `store.ts` migration block to avoid breaking existing localStorage.
-- No new heavy deps; reuse jsPDF/html2canvas/shadcn/lucide already installed.
-- Watermark moves to root → remove duplicated fixed bg from `index.tsx`.
-- Tooltips require `TooltipProvider` in `__root.tsx` if not already.
+## Phase 5 — Clinical Scheduling Engine
+- New util `src/lib/scheduling.ts`: given a date, fetch all visits + scheduled bookings, compute `[start, start+duration)` blocked intervals; expose `getDisabledSlots(date)` and `checkOverlap(date, start, duration)`.
+- Log Visit: rename "Next Review Time Slot" → "Next Review Time"; "Slot Duration" → "Duration"; default "Select Time". "Next Review Date" min = tomorrow. Disable overlapping slots; block submit + toast on forward-overlap.
+- Bookings dashboard: propose-new-time date min = tomorrow. Remove "Submissions from the public website appear here."
+- Public Book Visit: "Preferred Time Slot" → "Preferred Time", placeholder "Select Time". Preferred Date min = today+1 (24h), auto-skip Sundays / non-working days per selected branch's clinic hours.
 
-### Out of scope / deferred
-- Real XLSX export (would need `xlsx` dep) — CSV is offered instead under the same "Excel" button label. I'll flag this in the closing message.
-- Real photo uploads — clinician photo uses URL input + default avatar fallback (no storage backend wired).
+## Phase 6 — New "Upcoming Visits" Dashboard
+- New route `src/routes/app.upcoming.tsx` + sidebar entry.
+- Toggle: Tomorrow / Next 3 Days / Next 7 Days.
+- Unified query: visits (`Next Review Date`) + bookings (`status='scheduled'`), merged & sorted chronologically.
+- Columns: Name, Contact, Source ("Clinical Appointment" | "Public Web Booking"), Date/Time, Reason.
+- "Send Reminder" per row → WhatsApp with source-specific template (clinical vs public). Digits-only sanitization + `+91` fallback.
+- Also add "Send Reminder" to existing "Today's Visits" with the "…scheduled visit today…" template.
+
+## Phase 7 — Convert Booking → Patient
+- On `scheduled` bookings, add "Convert to Patient" action.
+- Field mapping: Full Name→Name, Phone→Mobile, Email→Email, Concern→CC, Preferred Date&Time→Next Scheduled Visit, Preferred Location→Branch (fallback default).
+- Opens patient-new form pre-filled; on save marks booking as `closed` and links.
+
+## Phase 8 — Global UI / Branding
+- Global watermark + hero background already exist — audit and ensure applied on public routes (home/about/specialities/contact/book).
+- Enlarge header/footer/staff-login/staff-shell logos; add "Resilience • Firmness • Balance" tagline under wordmark everywhere.
+- Staff login logo + wordmark clickable → `/`.
+- About page Vision → "Be the most trusted physiotherapy partner."
+- Home CTA email uses `settings.globalEmail`; default globalEmail = `SthairyaPhysiocare@gmail.com`.
+- Footer: Mail icon + Global Email; Phone icon + all clinic numbers.
+- Contact page: highlight selected branch card with brand tint.
+- Book Visit: highlight active channel (In-App / WhatsApp / Email) with brand tint.
+- Branch clinic-hours default when blank: Mon–Fri 9–1 & 4–8, Sat 9–1, Sun by appointment.
+
+## Phase 9 — Mobile Patient Profile
+- Header: `flex-col` on mobile, name first (bold, full-width, `break-words`), demographics row second (`whitespace-nowrap`, comfortable line-height).
+- Actions: separate `flex-wrap` container, `mt-4`.
+- Parent card `p-4` / `sm:p-6`.
+
+## Phase 10 — Runtime cleanup
+- Fix current hydration mismatch on home page (MapPin/Mail icon divergence causing SSR/CSR mismatch).
+
+---
+
+## Important decisions to confirm before I start
+
+1. **Turso credentials in chat.** You pasted the auth token in plaintext. I will store it via the secret tool (not in code), but I strongly recommend you **rotate that token in the Turso dashboard now** since it's been exposed in this chat history. Confirm you understand.
+2. **Async store rewrite is large.** Every route that reads `useStore(...)` becomes a React Query hook + async mutation. Expect churn across ~15 files. Confirm you want the full migration now vs. incrementally per module.
+3. **Password re-hash.** Existing localStorage passwords are plaintext. On first migration I'll hash them in place. Users log in normally; no reset needed. OK?
+4. **libSQL from the browser.** Using `@libsql/client/web` means the auth token ships to the client (any `VITE_*` env is public). This is acceptable for a small internal clinic app but is **not** a hardened production posture — a real deployment should proxy through a server function. Confirm you accept the tradeoff for now, or want me to route DB calls through TanStack server functions (adds a phase but is materially more secure).
+5. **Scope size.** This plan is ~10–15 substantial file changes across auth, store, and 8+ routes plus a new route and new schema. I'll implement top-to-bottom but it will take several turns. OK to proceed?
+
+Reply "go" (and answer Q4: **client** or **server-proxy**) and I'll start with Phase 0.
