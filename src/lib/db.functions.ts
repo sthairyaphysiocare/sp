@@ -36,7 +36,25 @@ export const saveAppState = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const { writeState, auditEvent } = await import("./turso.server");
-    await writeState(data.data);
+    const { hashPassword, isHashed } = await import("./crypto.server");
+    // Transparently upgrade any plaintext user passwords to PBKDF2 before writing.
+    let payload = data.data;
+    try {
+      const parsed = JSON.parse(payload) as { users?: Array<{ password?: string }> };
+      if (Array.isArray(parsed.users)) {
+        let changed = false;
+        for (const u of parsed.users) {
+          if (typeof u.password === "string" && u.password.length > 0 && !isHashed(u.password)) {
+            u.password = await hashPassword(u.password);
+            changed = true;
+          }
+        }
+        if (changed) payload = JSON.stringify(parsed);
+      }
+    } catch {
+      // If parsing fails, persist as-is; readers already handle bad payloads.
+    }
+    await writeState(payload);
     await auditEvent("app_state.save");
     return { ok: true as const };
   });
