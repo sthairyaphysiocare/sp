@@ -36,10 +36,9 @@ export const saveAppState = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const { writeState, auditEvent } = await import("./turso.server");
-    const upgraded = await upgradePasswords(data.data);
-    await writeState(upgraded);
+    await writeState(data.data);
     await auditEvent("app_state.save");
-    return { ok: true as const, upgraded: upgraded !== data.data };
+    return { ok: true as const };
   });
 
 /**
