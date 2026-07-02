@@ -4,6 +4,15 @@ import type {
   Patient, PublicStats, SpecialityItem, User, Visit, Role, BranchHours,
 } from "./types";
 import { DEFAULT_BRANCH, CLINIC } from "./logo";
+import {
+  loadSession as sessLoad,
+  saveSession as sessSave,
+  clearSession as sessClear,
+  touchSession as sessTouch,
+  registerLoginFailure,
+  clearLoginFailures,
+  lockoutRemainingMs,
+} from "./session";
 
 const KEY = "sthairya.db.v2";
 
