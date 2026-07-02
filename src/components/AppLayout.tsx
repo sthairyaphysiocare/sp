@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Users, CalendarClock, Settings, LogOut, UserCog, Menu, FileBarChart2,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
 
