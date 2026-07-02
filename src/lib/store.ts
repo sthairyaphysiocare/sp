@@ -1,7 +1,18 @@
 import { useSyncExternalStore } from "react";
 import type {
-  AppSettings, BlockedSlot, Booking, Branch, ClinicalNote, Clinician,
-  Patient, PublicStats, SpecialityItem, User, Visit, Role, BranchHours,
+  AppSettings,
+  BlockedSlot,
+  Booking,
+  Branch,
+  ClinicalNote,
+  Clinician,
+  Patient,
+  PublicStats,
+  SpecialityItem,
+  User,
+  Visit,
+  Role,
+  BranchHours,
 } from "./types";
 import { DEFAULT_BRANCH, CLINIC } from "./logo";
 import {
@@ -29,8 +40,22 @@ interface DB {
 
 const DEFAULT_USERS: User[] = [
   { id: "u1", email: "admin", name: "Admin", role: "admin", password: "password", emailId: "" },
-  { id: "u2", email: "therapist", name: "Dr. Plinija", role: "therapist", password: "password", emailId: "" },
-  { id: "u3", email: "reception", name: "Reception Desk", role: "reception", password: "password", emailId: "" },
+  {
+    id: "u2",
+    email: "therapist",
+    name: "Dr. Plinija",
+    role: "therapist",
+    password: "password",
+    emailId: "",
+  },
+  {
+    id: "u3",
+    email: "reception",
+    name: "Reception Desk",
+    role: "reception",
+    password: "password",
+    emailId: "",
+  },
 ];
 
 const DEFAULT_HOURS: BranchHours = {
@@ -51,23 +76,188 @@ const DEFAULT_STATS: PublicStats = {
 };
 
 const DEFAULT_SPECIALITIES: SpecialityItem[] = [
-  { id: "sp1", icon: "Bone", title: "Back & Neck Pain", desc: "Targeted relief for spinal and postural dysfunction." },
-  { id: "sp2", icon: "Bandage", title: "Post-Operative Rehab", desc: "Structured recovery after TKR, ACL, and shoulder surgery." },
-  { id: "sp3", icon: "Dumbbell", title: "Sports Injuries", desc: "Performance-driven rehabilitation for athletes." },
-  { id: "sp4", icon: "Stethoscope", title: "Frozen Shoulder", desc: "Manual therapy and progressive ROM restoration." },
-  { id: "sp5", icon: "Accessibility", title: "Orthopaedic Conditions", desc: "Arthritis, tendinopathies, fractures, degenerative joints." },
-  { id: "sp6", icon: "Brain", title: "Neurological Rehab", desc: "Stroke recovery, Parkinson's, balance training." },
-  { id: "sp7", icon: "Footprints", title: "Gait & Posture", desc: "Gait analysis and biomechanical correction." },
-  { id: "sp8", icon: "Baby", title: "Paediatric & Geriatric", desc: "Developmental and mobility programs for all ages." },
+  {
+    id: "sp1",
+    icon: "Bone",
+    title: "Back & Neck Pain",
+    desc: "Targeted relief for spinal and postural dysfunction.",
+  },
+  {
+    id: "sp2",
+    icon: "Bandage",
+    title: "Post-Operative Rehab",
+    desc: "Structured recovery after TKR, ACL, and shoulder surgery.",
+  },
+  {
+    id: "sp3",
+    icon: "Dumbbell",
+    title: "Sports Injuries",
+    desc: "Performance-driven rehabilitation for athletes.",
+  },
+  {
+    id: "sp4",
+    icon: "Stethoscope",
+    title: "Frozen Shoulder",
+    desc: "Manual therapy and progressive ROM restoration.",
+  },
+  {
+    id: "sp5",
+    icon: "Accessibility",
+    title: "Orthopaedic Conditions",
+    desc: "Arthritis, tendinopathies, fractures, degenerative joints.",
+  },
+  {
+    id: "sp6",
+    icon: "Brain",
+    title: "Neurological Rehab",
+    desc: "Stroke recovery, Parkinson's, balance training.",
+  },
+  {
+    id: "sp7",
+    icon: "Footprints",
+    title: "Gait & Posture",
+    desc: "Gait analysis and biomechanical correction.",
+  },
+  {
+    id: "sp8",
+    icon: "Baby",
+    title: "Paediatric & Geriatric",
+    desc: "Developmental and mobility programs for all ages.",
+  },
 ];
 
 function seedPatients(): Patient[] {
   const base: Omit<Patient, "id" | "pid" | "sn" | "ts">[] = [
-    { n: "Ramesh Kamath", dob: "1972-04-12", g: "M", m: "9845012345", am: "", e: "ramesh@example.com", oc: "Teacher", em: "Sushma 9845011111", emN: "Sushma", emP: "9845011111", bg: "B+", h: 172, w: 78, cc: "Low back pain radiating to right leg", pi: "Onset 3 weeks ago after lifting", sx: "Nil", med: "Paracetamol PRN", al: "Nil", cm: [2], lf: "Sedentary", fh: "Father diabetic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
-    { n: "Anjali Shenoy", dob: "1995-09-23", g: "F", m: "9742056789", am: "", e: "anjali@example.com", oc: "IT Engineer", em: "Rohit 9742000000", emN: "Rohit", emP: "9742000000", bg: "O+", h: 162, w: 58, cc: "Neck stiffness, headaches", pi: "Desk work, 6 weeks", sx: "Nil", med: "Nil", al: "Dust", cm: [], lf: "Active weekends", fh: "Nil", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
-    { n: "Vinod Bhat", dob: "1965-01-30", g: "M", m: "9986234567", am: "", e: "vinod@example.com", oc: "Retired", em: "Lata 9986200000", emN: "Lata", emP: "9986200000", bg: "A+", h: 168, w: 82, cc: "Frozen shoulder right side", pi: "Gradual onset 2 months", sx: "Appendectomy 1995", med: "Metformin", al: "Nil", cm: [1, 2], lf: "Walks daily", fh: "Diabetic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
-    { n: "Priya Pai", dob: "1988-07-18", g: "F", m: "9663112233", am: "", e: "priya@example.com", oc: "Homemaker", em: "Suresh 9663100000", emN: "Suresh", emP: "9663100000", bg: "AB+", h: 158, w: 65, cc: "Post-op knee rehab (TKR)", pi: "TKR done 3 weeks back", sx: "TKR Right knee", med: "Calcium, D3", al: "Nil", cm: [], lf: "Limited mobility", fh: "Mother arthritic", br: DEFAULT_BRANCH.id, tId: "u2", status: "active" },
-    { n: "Karthik Hegde", dob: "2001-03-05", g: "M", m: "9036778899", am: "", e: "karthik@example.com", oc: "Cricketer", em: "Rajesh 9036700000", emN: "Rajesh", emP: "9036700000", bg: "O-", h: 178, w: 74, cc: "Right shoulder impingement", pi: "Sports injury 10 days back", sx: "Nil", med: "Nil", al: "Nil", cm: [], lf: "Athlete", fh: "Nil", br: DEFAULT_BRANCH.id, tId: "u2", status: "completed" },
+    {
+      n: "Ramesh Kamath",
+      dob: "1972-04-12",
+      g: "M",
+      m: "9845012345",
+      am: "",
+      e: "ramesh@example.com",
+      oc: "Teacher",
+      em: "Sushma 9845011111",
+      emN: "Sushma",
+      emP: "9845011111",
+      bg: "B+",
+      h: 172,
+      w: 78,
+      cc: "Low back pain radiating to right leg",
+      pi: "Onset 3 weeks ago after lifting",
+      sx: "Nil",
+      med: "Paracetamol PRN",
+      al: "Nil",
+      cm: [2],
+      lf: "Sedentary",
+      fh: "Father diabetic",
+      br: DEFAULT_BRANCH.id,
+      tId: "u2",
+      status: "active",
+    },
+    {
+      n: "Anjali Shenoy",
+      dob: "1995-09-23",
+      g: "F",
+      m: "9742056789",
+      am: "",
+      e: "anjali@example.com",
+      oc: "IT Engineer",
+      em: "Rohit 9742000000",
+      emN: "Rohit",
+      emP: "9742000000",
+      bg: "O+",
+      h: 162,
+      w: 58,
+      cc: "Neck stiffness, headaches",
+      pi: "Desk work, 6 weeks",
+      sx: "Nil",
+      med: "Nil",
+      al: "Dust",
+      cm: [],
+      lf: "Active weekends",
+      fh: "Nil",
+      br: DEFAULT_BRANCH.id,
+      tId: "u2",
+      status: "active",
+    },
+    {
+      n: "Vinod Bhat",
+      dob: "1965-01-30",
+      g: "M",
+      m: "9986234567",
+      am: "",
+      e: "vinod@example.com",
+      oc: "Retired",
+      em: "Lata 9986200000",
+      emN: "Lata",
+      emP: "9986200000",
+      bg: "A+",
+      h: 168,
+      w: 82,
+      cc: "Frozen shoulder right side",
+      pi: "Gradual onset 2 months",
+      sx: "Appendectomy 1995",
+      med: "Metformin",
+      al: "Nil",
+      cm: [1, 2],
+      lf: "Walks daily",
+      fh: "Diabetic",
+      br: DEFAULT_BRANCH.id,
+      tId: "u2",
+      status: "active",
+    },
+    {
+      n: "Priya Pai",
+      dob: "1988-07-18",
+      g: "F",
+      m: "9663112233",
+      am: "",
+      e: "priya@example.com",
+      oc: "Homemaker",
+      em: "Suresh 9663100000",
+      emN: "Suresh",
+      emP: "9663100000",
+      bg: "AB+",
+      h: 158,
+      w: 65,
+      cc: "Post-op knee rehab (TKR)",
+      pi: "TKR done 3 weeks back",
+      sx: "TKR Right knee",
+      med: "Calcium, D3",
+      al: "Nil",
+      cm: [],
+      lf: "Limited mobility",
+      fh: "Mother arthritic",
+      br: DEFAULT_BRANCH.id,
+      tId: "u2",
+      status: "active",
+    },
+    {
+      n: "Karthik Hegde",
+      dob: "2001-03-05",
+      g: "M",
+      m: "9036778899",
+      am: "",
+      e: "karthik@example.com",
+      oc: "Cricketer",
+      em: "Rajesh 9036700000",
+      emN: "Rajesh",
+      emP: "9036700000",
+      bg: "O-",
+      h: 178,
+      w: 74,
+      cc: "Right shoulder impingement",
+      pi: "Sports injury 10 days back",
+      sx: "Nil",
+      med: "Nil",
+      al: "Nil",
+      cm: [],
+      lf: "Athlete",
+      fh: "Nil",
+      br: DEFAULT_BRANCH.id,
+      tId: "u2",
+      status: "completed",
+    },
   ];
   const now = Date.now();
   return base.map((b, i) => ({
@@ -133,39 +323,59 @@ function defaultDb(): DB {
   };
 }
 
-function load(): DB {
-  if (typeof window === "undefined") return defaultDb();
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as DB;
-      if (!parsed.blocked) parsed.blocked = [];
-      if (!parsed.settings) parsed.settings = defaultSettings();
-      if (!parsed.settings.branches || parsed.settings.branches.length === 0) {
-        parsed.settings.branches = [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }];
-      }
-      parsed.settings.branches = parsed.settings.branches.map((b) => ({ ...b, hours: b.hours ?? { ...DEFAULT_HOURS }, emailId: b.emailId ?? "" }));
-      if (!parsed.settings.whatsappNumber) parsed.settings.whatsappNumber = CLINIC.whatsapp;
-      if (typeof parsed.settings.globalEmail !== "string") parsed.settings.globalEmail = CLINIC.email;
-      if (!parsed.settings.stats) parsed.settings.stats = { ...DEFAULT_STATS };
-      if (!parsed.settings.specialities) parsed.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
-      if (typeof parsed.settings.cliniciansEnabled !== "boolean") parsed.settings.cliniciansEnabled = false;
-      if (!parsed.settings.clinicians) parsed.settings.clinicians = [];
-      parsed.users = parsed.users.map((u) => ({ ...u, emailId: u.emailId ?? "" }));
-      const defId = parsed.settings.branches[0].id;
-      parsed.patients = parsed.patients.map((p) => ({
-        ...p,
-        br: p.br || defId,
-        status: p.status || "active",
-        emN: p.emN ?? "",
-        emP: p.emP ?? "",
-      }));
-      return parsed;
-    }
-  } catch {}
-  const db = defaultDb();
-  localStorage.setItem(KEY, JSON.stringify(db));
+/**
+ * Pure shape-repair: fills defaults for any missing/legacy fields so the UI
+ * always sees a complete DB regardless of which era the data came from.
+ */
+function normalizeDb(parsed: Partial<DB>): DB {
+  const db: DB = {
+    users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : DEFAULT_USERS,
+    patients: Array.isArray(parsed.patients) ? parsed.patients : [],
+    visits: Array.isArray(parsed.visits) ? parsed.visits : [],
+    notes: Array.isArray(parsed.notes) ? parsed.notes : [],
+    bookings: Array.isArray(parsed.bookings) ? parsed.bookings : [],
+    blocked: Array.isArray(parsed.blocked) ? parsed.blocked : [],
+    settings: parsed.settings ?? defaultSettings(),
+    session: { userId: null },
+  };
+  if (!db.settings.branches || db.settings.branches.length === 0) {
+    db.settings.branches = [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS } }];
+  }
+  db.settings.branches = db.settings.branches.map((b) => ({
+    ...b,
+    hours: b.hours ?? { ...DEFAULT_HOURS },
+    emailId: b.emailId ?? "",
+  }));
+  if (!db.settings.whatsappNumber) db.settings.whatsappNumber = CLINIC.whatsapp;
+  if (typeof db.settings.globalEmail !== "string") db.settings.globalEmail = CLINIC.email;
+  if (!db.settings.stats) db.settings.stats = { ...DEFAULT_STATS };
+  if (!db.settings.specialities)
+    db.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
+  if (typeof db.settings.cliniciansEnabled !== "boolean") db.settings.cliniciansEnabled = false;
+  if (!db.settings.clinicians) db.settings.clinicians = [];
+  db.users = db.users.map((u) => ({ ...u, emailId: u.emailId ?? "" }));
+  const defId = db.settings.branches[0].id;
+  db.patients = db.patients.map((p) => ({
+    ...p,
+    br: p.br || defId,
+    status: p.status || "active",
+    emN: p.emN ?? "",
+    emP: p.emP ?? "",
+  }));
   return db;
+}
+
+/**
+ * Legacy localStorage blob — read ONLY as a one-time migration source when
+ * the cloud database is empty. localStorage is otherwise fully bypassed.
+ */
+function readLegacyLocalStorage(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
 }
 
 // SSR-safe: always start from defaults so server + first client render agree.
@@ -208,21 +418,20 @@ async function flushToCloud() {
   saveInFlight = true;
   setSyncStatus("syncing");
   try {
-    const { saveAppState } = await import("./db.functions");
+    const { syncState } = await import("./db.functions");
     // Session state is per-browser (sessionStorage) — never persist to cloud.
     const toSave = { ...state, session: { userId: null } };
-    await saveAppState({ data: { data: JSON.stringify(toSave) } });
-    setSyncStatus("idle");
+    const res = await syncState({ data: { data: JSON.stringify(toSave) } });
+    if (res.failures.length > 0) {
+      console.error("[store] some records failed to sync:", res.failures);
+      setSyncStatus("error");
+    } else {
+      setSyncStatus("idle");
+    }
   } catch (err) {
     console.error("[store] cloud save failed", err);
     setSyncStatus("error");
-    // Fall back to localStorage so no data is lost if the cloud is down.
-    try {
-      if (typeof window !== "undefined") {
-        const toSave = { ...state, session: { userId: null } };
-        localStorage.setItem(KEY, JSON.stringify(toSave));
-      }
-    } catch {}
+    // A retry fires automatically on the next mutation; state stays in memory.
   } finally {
     saveInFlight = false;
     if (pendingSave) {
@@ -242,27 +451,55 @@ async function ensureHydrated() {
   if (hydrated || hydrating || typeof window === "undefined") return;
   hydrating = true;
   try {
-    const { loadAppState } = await import("./db.functions");
-    const res = await loadAppState();
-    if (res.data) {
+    const { loadSnapshot, migrateLocalStorageToTurso } = await import("./db.functions");
+    let snap = await loadSnapshot();
+
+    if (snap.empty) {
+      // Cloud database is empty. If a legacy localStorage blob exists,
+      // migrate it record-by-record on the server, then reload.
+      const legacy = readLegacyLocalStorage();
+      if (legacy) {
+        try {
+          const report = await migrateLocalStorageToTurso({ data: { data: legacy } });
+          console.info("[store] localStorage migration report:", report);
+          snap = await loadSnapshot();
+        } catch (err) {
+          console.error("[store] localStorage migration failed:", err);
+        }
+      }
+    }
+
+    if (snap.empty) {
+      // Truly fresh install: seed defaults in memory and push them to Turso.
+      state = defaultDb();
+      queueMicrotask(flushToCloud);
+    } else {
+      state = normalizeDb({
+        users: snap.users,
+        patients: snap.patients,
+        visits: snap.visits,
+        notes: snap.notes,
+        bookings: snap.bookings,
+        blocked: snap.blocked,
+        settings: snap.settings ?? undefined,
+      });
+    }
+  } catch (err) {
+    console.error("[store] cloud hydrate failed — database unreachable", err);
+    setSyncStatus("offline");
+    // Read-only emergency view from the legacy blob (if any) so the clinic
+    // can still see data while the connection is down. Nothing is written
+    // back to localStorage; the next successful sync goes straight to Turso.
+    const legacy = readLegacyLocalStorage();
+    if (legacy) {
       try {
-        // Route through load() to run the same shape-migration/defaults logic.
-        localStorage.setItem(KEY, res.data);
-        state = load();
+        state = normalizeDb(JSON.parse(legacy) as Partial<DB>);
       } catch {
         state = defaultDb();
       }
     } else {
-      // Legacy path: use existing localStorage (if any) as the seed, then
-      // push it to the cloud so future loads are cloud-first.
-      state = load();
-      // Fire and forget — don't block hydration on the write.
-      queueMicrotask(flushToCloud);
+      state = defaultDb();
     }
-  } catch (err) {
-    console.error("[store] cloud hydrate failed, falling back to localStorage", err);
-    setSyncStatus("offline");
-    state = load();
   } finally {
     // Restore per-browser session from sessionStorage (never persisted to cloud).
     const sess = sessLoad();
@@ -292,13 +529,22 @@ function subscribe(l: () => void) {
 }
 
 export function useStore<T>(selector: (s: DB) => T): T {
-  const snap = useSyncExternalStore(subscribe, () => state, () => SERVER_SNAPSHOT);
+  const snap = useSyncExternalStore(
+    subscribe,
+    () => state,
+    () => SERVER_SNAPSHOT,
+  );
   return selector(snap);
 }
 
 export type LoginResult =
   | { ok: true; user: User }
-  | { ok: false; reason: "locked" | "bad-credentials" | "network"; remainingMs?: number; failsLeft?: number };
+  | {
+      ok: false;
+      reason: "locked" | "bad-credentials" | "network";
+      remainingMs?: number;
+      failsLeft?: number;
+    };
 
 export const store = {
   get: () => state,
@@ -326,9 +572,10 @@ export const store = {
       matched = state.users.find((u) => u.id === serverOk) ?? null;
     } else if (!serverReachable) {
       // Offline / no cloud state yet — allow legacy plaintext local match.
-      matched = state.users.find(
-        (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
-      ) ?? null;
+      matched =
+        state.users.find(
+          (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
+        ) ?? null;
     }
 
     if (!matched) {
@@ -343,7 +590,9 @@ export const store = {
     persist();
     return { ok: true, user: matched };
   },
-  touchSession() { sessTouch(); },
+  touchSession() {
+    sessTouch();
+  },
   logout() {
     sessClear();
     state = { ...state, session: { userId: null } };
@@ -353,7 +602,10 @@ export const store = {
     return state.users.find((u) => u.id === state.session.userId) ?? null;
   },
   changePassword(userId: string, newPw: string) {
-    state = { ...state, users: state.users.map((u) => (u.id === userId ? { ...u, password: newPw } : u)) };
+    state = {
+      ...state,
+      users: state.users.map((u) => (u.id === userId ? { ...u, password: newPw } : u)),
+    };
     persist();
   },
   addUser(u: Omit<User, "id">) {
@@ -396,7 +648,9 @@ export const store = {
   updatePatient(id: string, patch: Partial<Patient>) {
     state = {
       ...state,
-      patients: state.patients.map((p) => (p.id === id ? { ...p, ...patch, sn: (patch.n ?? p.n).toLowerCase() } : p)),
+      patients: state.patients.map((p) =>
+        p.id === id ? { ...p, ...patch, sn: (patch.n ?? p.n).toLowerCase() } : p,
+      ),
     };
     persist();
   },
@@ -432,7 +686,10 @@ export const store = {
     return nb;
   },
   updateBooking(id: string, patch: Partial<Booking>) {
-    state = { ...state, bookings: state.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)) };
+    state = {
+      ...state,
+      bookings: state.bookings.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+    };
     persist();
   },
   clearClosedBookings() {
@@ -454,7 +711,10 @@ export const store = {
   },
   addBranch(b: Omit<Branch, "id">): Branch {
     const nb: Branch = { ...b, id: `br${Date.now()}`, hours: b.hours ?? { ...DEFAULT_HOURS } };
-    state = { ...state, settings: { ...state.settings, branches: [...state.settings.branches, nb] } };
+    state = {
+      ...state,
+      settings: { ...state.settings, branches: [...state.settings.branches, nb] },
+    };
     persist();
     return nb;
   },
@@ -482,35 +742,61 @@ export const store = {
   // Specialities
   addSpeciality(s: Omit<SpecialityItem, "id">) {
     const ns: SpecialityItem = { ...s, id: `sp${Date.now()}` };
-    state = { ...state, settings: { ...state.settings, specialities: [...state.settings.specialities, ns] } };
+    state = {
+      ...state,
+      settings: { ...state.settings, specialities: [...state.settings.specialities, ns] },
+    };
     persist();
   },
   updateSpeciality(id: string, patch: Partial<SpecialityItem>) {
     state = {
       ...state,
-      settings: { ...state.settings, specialities: state.settings.specialities.map((s) => (s.id === id ? { ...s, ...patch } : s)) },
+      settings: {
+        ...state.settings,
+        specialities: state.settings.specialities.map((s) =>
+          s.id === id ? { ...s, ...patch } : s,
+        ),
+      },
     };
     persist();
   },
   removeSpeciality(id: string) {
-    state = { ...state, settings: { ...state.settings, specialities: state.settings.specialities.filter((s) => s.id !== id) } };
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        specialities: state.settings.specialities.filter((s) => s.id !== id),
+      },
+    };
     persist();
   },
   // Clinicians
   addClinician(c: Omit<Clinician, "id">) {
     const nc: Clinician = { ...c, id: `cl${Date.now()}` };
-    state = { ...state, settings: { ...state.settings, clinicians: [...state.settings.clinicians, nc] } };
+    state = {
+      ...state,
+      settings: { ...state.settings, clinicians: [...state.settings.clinicians, nc] },
+    };
     persist();
   },
   updateClinician(id: string, patch: Partial<Clinician>) {
     state = {
       ...state,
-      settings: { ...state.settings, clinicians: state.settings.clinicians.map((c) => (c.id === id ? { ...c, ...patch } : c)) },
+      settings: {
+        ...state.settings,
+        clinicians: state.settings.clinicians.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      },
     };
     persist();
   },
   removeClinician(id: string) {
-    state = { ...state, settings: { ...state.settings, clinicians: state.settings.clinicians.filter((c) => c.id !== id) } };
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        clinicians: state.settings.clinicians.filter((c) => c.id !== id),
+      },
+    };
     persist();
   },
 };
@@ -524,7 +810,8 @@ export function takenSlotsForDate(s: DB, date: string): string[] {
     }
   }
   for (const b of s.bookings) {
-    if (b.status === "scheduled" && b.prefDate === date && b.prefTime) addRange(out, b.prefTime, 30);
+    if (b.status === "scheduled" && b.prefDate === date && b.prefTime)
+      addRange(out, b.prefTime, 30);
   }
   for (const bk of s.blocked) {
     if (bk.date === date) addRange(out, bk.time, bk.dur);
@@ -537,7 +824,9 @@ function addRange(out: Set<string>, start: string, dur: number) {
   let mins = h * 60 + m;
   const end = mins + dur;
   while (mins < end) {
-    out.add(`${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`);
+    out.add(
+      `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`,
+    );
     mins += 30;
   }
 }
