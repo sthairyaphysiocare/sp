@@ -10,6 +10,7 @@ import { LOGO_URL, CLINIC } from "@/lib/logo";
 import { AuthProvider } from "@/lib/auth";
 import { GlobalWatermark } from "@/components/GlobalWatermark";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { CloudSyncIndicator } from "@/components/CloudSyncIndicator";
 
 function NotFoundComponent() {
   return (
@@ -99,6 +100,7 @@ function RootComponent() {
           <div className="relative z-10">
             <Outlet />
           </div>
+          <CloudSyncIndicator />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
