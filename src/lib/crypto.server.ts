@@ -26,15 +26,20 @@ function b64decode(s: string): Uint8Array {
 
 async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<ArrayBuffer> {
   const enc = new TextEncoder();
+  const pwBytes = enc.encode(password);
+  const pwBuf = new ArrayBuffer(pwBytes.byteLength);
+  new Uint8Array(pwBuf).set(pwBytes);
+  const saltBuf = new ArrayBuffer(salt.byteLength);
+  new Uint8Array(saltBuf).set(salt);
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode(password),
+    pwBuf,
     { name: "PBKDF2" },
     false,
     ["deriveBits"],
   );
   return crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    { name: "PBKDF2", hash: "SHA-256", salt: saltBuf, iterations },
     key,
     HASH_LEN * 8,
   );
