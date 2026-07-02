@@ -264,6 +264,14 @@ async function ensureHydrated() {
     setSyncStatus("offline");
     state = load();
   } finally {
+    // Restore per-browser session from sessionStorage (never persisted to cloud).
+    const sess = sessLoad();
+    if (sess && state.users.some((u) => u.id === sess.userId)) {
+      state = { ...state, session: { userId: sess.userId } };
+    } else {
+      state = { ...state, session: { userId: null } };
+      sessClear();
+    }
     hydrated = true;
     hydrating = false;
     listeners.forEach((l) => l());
