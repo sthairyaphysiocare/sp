@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useStore, store } from "@/lib/store";
 import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
+import { saveOtp, loadOtp, clearOtp, OTP_TTL_MINUTES } from "@/lib/session";
 import { CLINIC } from "@/lib/logo";
 
 export const Route = createFileRoute("/auth")({
