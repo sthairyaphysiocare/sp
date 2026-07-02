@@ -16,27 +16,11 @@ import { createServerFn } from "@tanstack/react-start";
  *   the session-based auth middleware, mutation endpoints will require it.
  */
 
-async function upgradePasswords(raw: string): Promise<string> {
-  const { hashPassword, isHashed } = await import("./crypto.server");
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.users)) return raw;
-    let changed = false;
-    const users = await Promise.all(
-      parsed.users.map(async (u: { password?: string }) => {
-        if (typeof u.password === "string" && u.password.length > 0 && !isHashed(u.password)) {
-          changed = true;
-          return { ...u, password: await hashPassword(u.password) };
-        }
-        return u;
-      }),
-    );
-    if (!changed) return raw;
-    return JSON.stringify({ ...parsed, users });
-  } catch {
-    return raw;
-  }
-}
+// Phase B will introduce transparent PBKDF2 upgrade of user passwords at
+// persist time, alongside the async login refactor. For Phase A we keep the
+// on-disk shape byte-identical to the legacy localStorage blob so the sync
+// login path in src/lib/auth.tsx keeps working without changes.
+
 
 export const loadAppState = createServerFn({ method: "GET" }).handler(async () => {
   const { readState } = await import("./turso.server");
