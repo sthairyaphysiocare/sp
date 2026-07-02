@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useStore, store } from "@/lib/store";
 import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
+import { saveOtp, loadOtp, clearOtp, OTP_TTL_MINUTES } from "@/lib/session";
 import { CLINIC } from "@/lib/logo";
 
 export const Route = createFileRoute("/auth")({
@@ -42,12 +43,27 @@ function AuthPage() {
   useEffect(() => { if (user) navigate({ to: "/app", replace: true }); }, [user, navigate]);
   useEffect(() => { usernameRef.current?.focus(); }, []);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const u = login(username, password);
-    if (!u) { toast.error("Invalid credentials"); return; }
-    toast.success(`Welcome, ${u.name}`);
-    navigate({ to: "/app" });
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await login(username, password);
+      if (res.ok) {
+        toast.success(`Welcome, ${res.user.name}`);
+        navigate({ to: "/app" });
+        return;
+      }
+      if (res.reason === "locked") {
+        const mins = Math.max(1, Math.ceil((res.remainingMs ?? 0) / 60000));
+        toast.error(`Too many attempts. Try again in ${mins} min.`);
+      } else if (res.reason === "bad-credentials") {
+        const left = res.failsLeft ?? 0;
+        toast.error(left > 0 ? `Invalid credentials. ${left} attempt${left === 1 ? "" : "s"} left.` : "Invalid credentials.");
+      } else {
+        toast.error("Sign-in failed. Please try again.");
+      }
+    } finally { setBusy(false); }
   }
 
   async function sendOtp(e: React.FormEvent) {
@@ -63,10 +79,11 @@ function AuthPage() {
         toEmail: target, toName: found.name, otp: code,
         fromEmail: settings.globalEmail || CLINIC.email,
       });
+      saveOtp(found.id, code, target);
       setOtp(code);
       setOtpUserId(found.id);
       setMode("forgot-otp");
-      toast.success(`OTP sent to ${target}`, { id: t });
+      toast.success(`OTP sent to ${target}. Expires in ${OTP_TTL_MINUTES} minutes.`, { id: t });
     } catch (err) {
       console.error(err);
       toast.error("Couldn't send OTP. Check email configuration.", { id: t });
@@ -75,15 +92,22 @@ function AuthPage() {
 
   function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (otpInput.trim() !== otp) { toast.error("Incorrect OTP"); return; }
+    const stored = loadOtp();
+    if (!stored || stored.userId !== otpUserId) {
+      toast.error("OTP expired. Please request a new one.");
+      setMode("forgot-email");
+      return;
+    }
+    if (otpInput.trim() !== stored.code) { toast.error("Incorrect OTP"); return; }
     setMode("forgot-reset");
   }
 
   function resetPwd(e: React.FormEvent) {
     e.preventDefault();
-    if (newPwd.length < 4) { toast.error("Password too short"); return; }
+    if (newPwd.length < 6) { toast.error("Password must be at least 6 characters"); return; }
     if (newPwd !== confirmPwd) { toast.error("Passwords don't match"); return; }
     store.changePassword(otpUserId, newPwd);
+    clearOtp();
     toast.success("Password updated. Please sign in.");
     setMode("signin"); setOtp(""); setOtpInput(""); setNewPwd(""); setConfirmPwd("");
     setForgotEmail("");

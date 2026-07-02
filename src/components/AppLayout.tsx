@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Users, CalendarClock, Settings, LogOut, UserCog, Menu, FileBarChart2,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
 
@@ -29,6 +29,21 @@ export function AppLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+
+  // Re-check session expiry once a minute; auto-logout on idle timeout.
+  useEffect(() => {
+    if (!user) return;
+    const t = setInterval(() => {
+      // loadSession returns null when expired, and store.session is per-tab.
+      import("@/lib/session").then(({ loadSession }) => {
+        if (!loadSession()) {
+          logout();
+          navigate({ to: "/auth", replace: true });
+        }
+      });
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [user, logout, navigate]);
 
   if (!user) {
     if (typeof window !== "undefined") navigate({ to: "/auth", replace: true });

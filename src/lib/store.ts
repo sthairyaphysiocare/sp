@@ -4,6 +4,15 @@ import type {
   Patient, PublicStats, SpecialityItem, User, Visit, Role, BranchHours,
 } from "./types";
 import { DEFAULT_BRANCH, CLINIC } from "./logo";
+import {
+  loadSession as sessLoad,
+  saveSession as sessSave,
+  clearSession as sessClear,
+  touchSession as sessTouch,
+  registerLoginFailure,
+  clearLoginFailures,
+  lockoutRemainingMs,
+} from "./session";
 
 const KEY = "sthairya.db.v2";
 
@@ -200,14 +209,19 @@ async function flushToCloud() {
   setSyncStatus("syncing");
   try {
     const { saveAppState } = await import("./db.functions");
-    await saveAppState({ data: { data: JSON.stringify(state) } });
+    // Session state is per-browser (sessionStorage) — never persist to cloud.
+    const toSave = { ...state, session: { userId: null } };
+    await saveAppState({ data: { data: JSON.stringify(toSave) } });
     setSyncStatus("idle");
   } catch (err) {
     console.error("[store] cloud save failed", err);
     setSyncStatus("error");
     // Fall back to localStorage so no data is lost if the cloud is down.
     try {
-      if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
+      if (typeof window !== "undefined") {
+        const toSave = { ...state, session: { userId: null } };
+        localStorage.setItem(KEY, JSON.stringify(toSave));
+      }
     } catch {}
   } finally {
     saveInFlight = false;
@@ -250,6 +264,14 @@ async function ensureHydrated() {
     setSyncStatus("offline");
     state = load();
   } finally {
+    // Restore per-browser session from sessionStorage (never persisted to cloud).
+    const sess = sessLoad();
+    if (sess && state.users.some((u) => u.id === sess.userId)) {
+      state = { ...state, session: { userId: sess.userId } };
+    } else {
+      state = { ...state, session: { userId: null } };
+      sessClear();
+    }
     hydrated = true;
     hydrating = false;
     listeners.forEach((l) => l());
@@ -274,16 +296,56 @@ export function useStore<T>(selector: (s: DB) => T): T {
   return selector(snap);
 }
 
+export type LoginResult =
+  | { ok: true; user: User }
+  | { ok: false; reason: "locked" | "bad-credentials" | "network"; remainingMs?: number; failsLeft?: number };
+
 export const store = {
   get: () => state,
-  login(username: string, password: string): User | null {
-    const u = state.users.find((x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password);
-    if (!u) return null;
-    state = { ...state, session: { userId: u.id } };
+  async login(username: string, password: string): Promise<LoginResult> {
+    const rem = lockoutRemainingMs(username);
+    if (rem > 0) return { ok: false, reason: "locked", remainingMs: rem };
+
+    // Ensure current state is in cloud so verifyLogin can read it.
+    if (!hydrated) await ensureHydrated();
+
+    let serverOk: string | null = null;
+    let serverReachable = true;
+    try {
+      const { verifyLogin } = await import("./db.functions");
+      const res = await verifyLogin({ data: { username, password } });
+      if (res.ok) serverOk = res.userId;
+      else if (res.reason === "no-state") serverReachable = false; // fall through to local
+    } catch (err) {
+      console.warn("[store] verifyLogin unreachable, using local fallback", err);
+      serverReachable = false;
+    }
+
+    let matched: User | null = null;
+    if (serverOk) {
+      matched = state.users.find((u) => u.id === serverOk) ?? null;
+    } else if (!serverReachable) {
+      // Offline / no cloud state yet — allow legacy plaintext local match.
+      matched = state.users.find(
+        (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
+      ) ?? null;
+    }
+
+    if (!matched) {
+      const info = registerLoginFailure(username);
+      if (info.locked) return { ok: false, reason: "locked", remainingMs: info.remainingMs };
+      return { ok: false, reason: "bad-credentials", failsLeft: info.failsLeft };
+    }
+
+    clearLoginFailures(username);
+    sessSave(matched.id);
+    state = { ...state, session: { userId: matched.id } };
     persist();
-    return u;
+    return { ok: true, user: matched };
   },
+  touchSession() { sessTouch(); },
   logout() {
+    sessClear();
     state = { ...state, session: { userId: null } };
     persist();
   },
