@@ -30,6 +30,21 @@ export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
 
+  // Re-check session expiry once a minute; auto-logout on idle timeout.
+  useEffect(() => {
+    if (!user) return;
+    const t = setInterval(() => {
+      // loadSession returns null when expired, and store.session is per-tab.
+      import("@/lib/session").then(({ loadSession }) => {
+        if (!loadSession()) {
+          logout();
+          navigate({ to: "/auth", replace: true });
+        }
+      });
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [user, logout, navigate]);
+
   if (!user) {
     if (typeof window !== "undefined") navigate({ to: "/auth", replace: true });
     return null;
