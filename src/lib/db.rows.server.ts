@@ -209,6 +209,7 @@ export function rowToUser(r: Row): User {
     role: (s(r.role) || "other") as User["role"],
     password: s(r.password_hash),
     emailId: s(r.contact_email),
+    locked: Number(r.locked ?? 0) === 1,
   };
 }
 

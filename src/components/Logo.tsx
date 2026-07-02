@@ -30,6 +30,9 @@ export function Logo({
           <div className="font-display font-semibold text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-brand">
             Physiocare
           </div>
+          <div className="text-[8px] sm:text-[9px] font-medium tracking-[0.14em] opacity-70 mt-0.5 whitespace-nowrap">
+            {CLINIC.tagline}
+          </div>
         </div>
       )}
     </div>

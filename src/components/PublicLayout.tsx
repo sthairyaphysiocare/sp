@@ -4,7 +4,7 @@ import { Logo } from "@/components/Logo";
 import { CLINIC, enabledBranches } from "@/lib/logo";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { ExternalLink, Menu, X } from "lucide-react";
+import { ExternalLink, Mail as MailIcon, Menu, Phone as PhoneIcon, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -20,17 +20,18 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const settings = useStore((s) => s.settings);
   const branches = enabledBranches(settings);
+  const globalEmail = settings.globalEmail || CLINIC.email;
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const signedIn = mounted && !!user;
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface">
+    <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center">
-            <Logo size={40} />
+            <Logo size={52} />
           </Link>
           <nav className="hidden md:flex items-center gap-1">
             {NAV.map((n) => (
@@ -79,19 +80,16 @@ export function PublicLayout({ children }: { children: ReactNode }) {
         )}
       </header>
 
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
 
       <footer className="bg-foreground text-background mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 grid gap-8 md:grid-cols-4">
           <div className="md:col-span-2">
-            <Logo size={48} textClassName="text-background" />
+            <Logo size={60} textClassName="text-background" />
             <p className="mt-4 text-sm text-background/70 max-w-md">
-              Expert care for everything from musculoskeletal conditions and sports injuries
-              to post surgical recovery.
+              Expert care for everything from musculoskeletal conditions and sports injuries to post
+              surgical recovery.
             </p>
-            <p className="mt-3 text-xs text-background/60 italic">{CLINIC.tagline}</p>
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Visit Us</h4>
@@ -101,8 +99,12 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                   <div className="text-sm font-medium text-background/90">{b.name}</div>
                   <p className="text-xs text-background/70 mt-0.5">{b.address}</p>
                   {b.mapUrl && (
-                    <a href={b.mapUrl} target="_blank" rel="noreferrer"
-                       className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-1 underline-offset-2 hover:underline">
+                    <a
+                      href={b.mapUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-background/80 hover:text-background mt-1 underline-offset-2 hover:underline"
+                    >
                       View on Google Maps <ExternalLink className="size-3" />
                     </a>
                   )}
@@ -112,13 +114,28 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </div>
           <div>
             <h4 className="text-sm font-semibold mb-3">Contact</h4>
-            <div className="space-y-1.5">
-              {branches.map((b) => (
-                <p key={b.id} className="text-sm text-background/70">
-                  <span className="text-background/90">{b.name}:</span> {b.phone}
-                </p>
-              ))}
-              <p className="text-sm text-background/70 break-all pt-1">{CLINIC.email}</p>
+            <div className="space-y-2">
+              {branches.map((b) =>
+                b.phone ? (
+                  <a
+                    key={b.id}
+                    href={`tel:${b.phone.replace(/\s/g, "")}`}
+                    className="flex items-center gap-2 text-sm text-background/70 hover:text-background transition-colors"
+                  >
+                    <PhoneIcon className="size-3.5 shrink-0 text-background/90" />
+                    <span>
+                      <span className="text-background/90">{b.name}:</span> {b.phone}
+                    </span>
+                  </a>
+                ) : null,
+              )}
+              <a
+                href={`mailto:${globalEmail}`}
+                className="flex items-center gap-2 text-sm text-background/70 hover:text-background transition-colors break-all pt-1"
+              >
+                <MailIcon className="size-3.5 shrink-0 text-background/90" />
+                <span className="break-all">{globalEmail}</span>
+              </a>
             </div>
           </div>
         </div>

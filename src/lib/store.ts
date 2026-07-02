@@ -541,7 +541,7 @@ export type LoginResult =
   | { ok: true; user: User }
   | {
       ok: false;
-      reason: "locked" | "bad-credentials" | "network";
+      reason: "locked" | "account-locked" | "bad-credentials" | "network";
       remainingMs?: number;
       failsLeft?: number;
     };
@@ -549,19 +549,34 @@ export type LoginResult =
 export const store = {
   get: () => state,
   async login(username: string, password: string): Promise<LoginResult> {
-    const rem = lockoutRemainingMs(username);
-    if (rem > 0) return { ok: false, reason: "locked", remainingMs: rem };
-
     // Ensure current state is in cloud so verifyLogin can read it.
     if (!hydrated) await ensureHydrated();
 
+    // The Admin account is NEVER locked out — neither by the server-side
+    // account lock nor by the client-side offline rate limit. Brute force
+    // against admin is mitigated server-side with a progressive delay.
+    const knownLocal = state.users.find((x) => x.email.toLowerCase() === username.toLowerCase());
+    const isAdminAccount = knownLocal?.role === "admin";
+
+    if (!isAdminAccount) {
+      const rem = lockoutRemainingMs(username);
+      if (rem > 0) return { ok: false, reason: "locked", remainingMs: rem };
+    }
+
     let serverOk: string | null = null;
     let serverReachable = true;
+    let serverFailsLeft: number | undefined;
     try {
       const { verifyLogin } = await import("./db.functions");
       const res = await verifyLogin({ data: { username, password } });
       if (res.ok) serverOk = res.userId;
-      else if (res.reason === "no-state") serverReachable = false; // fall through to local
+      else if (res.reason === "no-state")
+        serverReachable = false; // fall through to local
+      else if (res.reason === "account-locked") {
+        return { ok: false, reason: "account-locked" };
+      } else if (res.reason === "bad-password" && "failsLeft" in res) {
+        serverFailsLeft = res.failsLeft;
+      }
     } catch (err) {
       console.warn("[store] verifyLogin unreachable, using local fallback", err);
       serverReachable = false;
@@ -579,6 +594,11 @@ export const store = {
     }
 
     if (!matched) {
+      if (serverReachable) {
+        // Server is authoritative for attempt counting; don't double-count.
+        return { ok: false, reason: "bad-credentials", failsLeft: serverFailsLeft };
+      }
+      if (isAdminAccount) return { ok: false, reason: "bad-credentials" };
       const info = registerLoginFailure(username);
       if (info.locked) return { ok: false, reason: "locked", remainingMs: info.remainingMs };
       return { ok: false, reason: "bad-credentials", failsLeft: info.failsLeft };
@@ -589,6 +609,22 @@ export const store = {
     state = { ...state, session: { userId: matched.id } };
     persist();
     return { ok: true, user: matched };
+  },
+  /** Clear a staff account lockout (admin action, or after OTP password reset). */
+  async unlockUser(id: string): Promise<boolean> {
+    try {
+      const { unlockUser } = await import("./db.functions");
+      await unlockUser({ data: { userId: id } });
+      state = {
+        ...state,
+        users: state.users.map((u) => (u.id === id ? { ...u, locked: false } : u)),
+      };
+      persist();
+      return true;
+    } catch (err) {
+      console.error("[store] unlockUser failed", err);
+      return false;
+    }
   },
   touchSession() {
     sessTouch();

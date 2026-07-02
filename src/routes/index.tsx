@@ -6,9 +6,24 @@ import { useStore } from "@/lib/store";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { getIcon } from "@/lib/icons";
 import {
-  Activity, HeartPulse, ShieldCheck, Sparkles, MapPin, Phone, Mail, ArrowRight,
-  ExternalLink, Feather, Sun, Award, GraduationCap, Clock, User, PersonStanding,
-  TrendingUp, UserCheck,
+  Activity,
+  HeartPulse,
+  ShieldCheck,
+  Sparkles,
+  MapPin,
+  Phone,
+  Mail,
+  ArrowRight,
+  ExternalLink,
+  Feather,
+  Sun,
+  Award,
+  GraduationCap,
+  Clock,
+  User,
+  PersonStanding,
+  TrendingUp,
+  UserCheck,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -45,10 +60,10 @@ function HomePage() {
               Move better. <span className="text-brand-gradient">Live stronger.</span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
-              At Sthairya Physiocare, evidence based practice meets personalized care. Whether
-              you are managing complex musculoskeletal disorders, recovering from a sports
-              injury, rehabilitating after surgery or overcoming everyday mobility challenges,
-              we are dedicated to helping you live a pain free life.
+              At Sthairya Physiocare, evidence based practice meets personalized care. Whether you
+              are managing complex musculoskeletal disorders, recovering from a sports injury,
+              rehabilitating after surgery or overcoming everyday mobility challenges, we are
+              dedicated to helping you live a pain free life.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/book">
@@ -108,7 +123,10 @@ function HomePage() {
             {settings.specialities.slice(0, 4).map((s) => {
               const Icon = getIcon(s.icon);
               return (
-                <div key={s.id} className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all hover:-translate-y-1">
+                <div
+                  key={s.id}
+                  className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all hover:-translate-y-1"
+                >
                   <div className="size-12 rounded-xl brand-gradient grid place-items-center text-white mb-4">
                     <Icon className="size-5" />
                   </div>
@@ -119,7 +137,11 @@ function HomePage() {
             })}
           </div>
           <div className="text-center mt-10">
-            <Link to="/specialities"><Button variant="outline">View all specialities <ArrowRight className="size-4" /></Button></Link>
+            <Link to="/specialities">
+              <Button variant="outline">
+                View all specialities <ArrowRight className="size-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -139,14 +161,16 @@ function HomePage() {
                 >
                   <div className="mx-auto size-24 rounded-full bg-brand/10 grid place-items-center overflow-hidden ring-2 ring-brand/20">
                     {c.photo ? (
-                      <img src={c.photo} alt={c.name || "Clinician"} className="w-full h-full object-cover" />
+                      <img
+                        src={c.photo}
+                        alt={c.name || "Clinician"}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <User className="size-12 text-brand" />
                     )}
                   </div>
-                  {c.name && (
-                    <h3 className="mt-4 text-center font-semibold text-lg">{c.name}</h3>
-                  )}
+                  {c.name && <h3 className="mt-4 text-center font-semibold text-lg">{c.name}</h3>}
                   <div className="mt-3 space-y-2 text-sm">
                     {c.qualification && (
                       <div className="flex items-center gap-2 text-foreground/80">
@@ -177,9 +201,21 @@ function HomePage() {
       <section className="py-16 sm:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-3 gap-6">
           {[
-            { icon: ShieldCheck, t: "Evidence-Based Care", d: "Protocols backed by latest clinical research and outcome tracking." },
-            { icon: UserCheck, t: "Personalised Plans", d: "Every recovery plan is tailored to your goals and lifestyle." },
-            { icon: TrendingUp, t: "Progress You See", d: "Proactively tracking pain reduction and functional recovery." },
+            {
+              icon: ShieldCheck,
+              t: "Evidence-Based Care",
+              d: "Protocols backed by latest clinical research and outcome tracking.",
+            },
+            {
+              icon: UserCheck,
+              t: "Personalised Plans",
+              d: "Every recovery plan is tailored to your goals and lifestyle.",
+            },
+            {
+              icon: TrendingUp,
+              t: "Progress You See",
+              d: "Proactively tracking pain reduction and functional recovery.",
+            },
           ].map((x) => (
             <div key={x.t} className="p-6 rounded-2xl bg-card border">
               <x.icon className="size-8 text-brand" />
@@ -194,7 +230,9 @@ function HomePage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 rounded-3xl brand-gradient text-white p-8 sm:p-12 grid md:grid-cols-2 gap-8">
           <div>
             <h2 className="text-3xl font-bold">Ready to start your recovery?</h2>
-            <p className="mt-3 text-white/90">Reach out and our team will schedule your first session.</p>
+            <p className="mt-3 text-white/90">
+              Reach out and our team will schedule your first session.
+            </p>
             <div className="mt-6 space-y-3 text-sm">
               {branches.map((b) => (
                 <div key={b.id} className="flex items-start gap-3">
@@ -202,8 +240,12 @@ function HomePage() {
                   <div>
                     <div className="font-medium">{b.name}</div>
                     {b.mapUrl && (
-                      <a href={b.mapUrl} target="_blank" rel="noreferrer"
-                         className="inline-flex items-center gap-1 underline-offset-2 hover:underline text-white/90">
+                      <a
+                        href={b.mapUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 underline-offset-2 hover:underline text-white/90"
+                      >
                         View on Google Maps <ExternalLink className="size-3.5" />
                       </a>
                     )}
@@ -211,18 +253,36 @@ function HomePage() {
                   </div>
                 </div>
               ))}
-              <div className="flex items-center gap-3"><Mail className="size-4 shrink-0" /><span className="break-all">{CLINIC.email}</span></div>
+              <a
+                href={`mailto:${settings.globalEmail || CLINIC.email}`}
+                className="flex items-center gap-3 hover:underline underline-offset-2"
+              >
+                <Mail className="size-4 shrink-0" />
+                <span className="break-all">{settings.globalEmail || CLINIC.email}</span>
+              </a>
             </div>
           </div>
           <div className="flex flex-col gap-3 justify-center">
-            <Link to="/book"><Button size="lg" className="w-full bg-white text-brand hover:bg-white/90 border-0">Book Online</Button></Link>
+            <Link to="/book">
+              <Button size="lg" className="w-full bg-white text-brand hover:bg-white/90 border-0">
+                Book Online
+              </Button>
+            </Link>
             <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
-              <Button size="lg" variant="outline" className="w-full bg-transparent border-white text-white hover:bg-white/10">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full bg-transparent border-white text-white hover:bg-white/10"
+              >
                 <WhatsAppIcon size={16} /> Chat on WhatsApp
               </Button>
             </a>
             <a href={`tel:+${wa}`}>
-              <Button size="lg" variant="outline" className="w-full bg-transparent border-white text-white hover:bg-white/10">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full bg-transparent border-white text-white hover:bg-white/10"
+              >
                 <Phone className="size-4" /> Call
               </Button>
             </a>

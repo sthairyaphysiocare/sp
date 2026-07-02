@@ -24,7 +24,9 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     role          TEXT NOT NULL DEFAULT 'other',
     password_hash TEXT NOT NULL DEFAULT '',
     contact_email TEXT NOT NULL DEFAULT '',
-    created_at    INTEGER NOT NULL DEFAULT 0
+    created_at    INTEGER NOT NULL DEFAULT 0,
+    locked          INTEGER NOT NULL DEFAULT 0,
+    failed_attempts INTEGER NOT NULL DEFAULT 0
   )`,
 
   // Patient master record (maps 1:1 to the Patient interface).
@@ -147,6 +149,16 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status)`,
 ];
 
+/**
+ * Additive column migrations for databases created before a column existed.
+ * SQLite raises "duplicate column name" when the column is already present —
+ * that specific error is expected and tolerated; anything else is fatal.
+ */
+const ADDITIVE_MIGRATIONS: ReadonlyArray<string> = [
+  `ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`,
+];
+
 let initPromise: Promise<void> | null = null;
 
 /**
@@ -162,6 +174,16 @@ export async function ensureSchema(): Promise<void> {
         await db.execute(sql);
       } catch (err) {
         console.error("[schema] statement failed. Exact SQL:\n" + sql, err);
+        throw err;
+      }
+    }
+    for (const sql of ADDITIVE_MIGRATIONS) {
+      try {
+        await db.execute(sql);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/duplicate column name/i.test(msg)) continue; // already applied
+        console.error("[schema] additive migration failed. Exact SQL:\n" + sql, err);
         throw err;
       }
     }

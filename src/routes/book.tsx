@@ -17,7 +17,10 @@ export const Route = createFileRoute("/book")({
   head: () => ({
     meta: [
       { title: `Book a Visit — ${CLINIC.name}` },
-      { name: "description", content: "Book your physiotherapy appointment online — WhatsApp, email, or form." },
+      {
+        name: "description",
+        content: "Book your physiotherapy appointment online — WhatsApp, email, or form.",
+      },
     ],
     links: [{ rel: "canonical", href: "/book" }],
   }),
@@ -33,8 +36,12 @@ function BookPage() {
   const wa = whatsappDigits(settings);
   const [channel, setChannel] = useState<Channel>("form");
   const [form, setForm] = useState({
-    name: "", phone: "", email: "", concern: "",
-    prefDate: today, prefTime: "",
+    name: "",
+    phone: "",
+    email: "",
+    concern: "",
+    prefDate: today,
+    prefTime: "",
     br: branches[0]?.id || "",
   });
   const [done, setDone] = useState(false);
@@ -46,13 +53,26 @@ function BookPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.phone) { toast.error("Name and phone are required"); return; }
-    if (!form.prefDate || !form.prefTime) { toast.error("Please pick a date and a 30-minute time slot"); return; }
-    if (taken.includes(form.prefTime)) { toast.error("That slot was just booked. Please pick another."); return; }
+    if (!form.name || !form.phone) {
+      toast.error("Name and phone are required");
+      return;
+    }
+    if (!form.prefDate || !form.prefTime) {
+      toast.error("Please pick a date and time");
+      return;
+    }
+    if (taken.includes(form.prefTime)) {
+      toast.error("That slot was just booked. Please pick another.");
+      return;
+    }
     store.addBooking({
-      name: form.name, phone: form.phone, email: form.email, concern: form.concern,
+      name: form.name,
+      phone: form.phone,
+      email: form.email,
+      concern: form.concern,
       preferred: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
-      prefDate: form.prefDate, prefTime: form.prefTime,
+      prefDate: form.prefDate,
+      prefTime: form.prefTime,
       br: form.br || branches[0]?.id,
     });
     toast.success("Booking received — we'll contact you shortly.");
@@ -71,7 +91,9 @@ function BookPage() {
       <Toaster />
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
         <h1 className="text-4xl sm:text-5xl font-bold">Book Your Visit</h1>
-        <p className="mt-4 text-lg text-muted-foreground">Choose the channel that works best for you.</p>
+        <p className="mt-4 text-lg text-muted-foreground">
+          Choose the channel that works best for you.
+        </p>
 
         <div className="mt-8 grid grid-cols-3 gap-2 sm:gap-3 p-1 rounded-xl bg-surface border max-w-2xl">
           {channels.map((c) => {
@@ -82,11 +104,12 @@ function BookPage() {
                 onClick={() => setChannel(c.id)}
                 className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-sm font-semibold min-h-11 transition-all ${
                   active
-                    ? "bg-card text-brand soft-shadow ring-1 ring-brand/30"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-accent text-brand ring-1 ring-brand/40 soft-shadow"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40"
                 }`}
               >
-                {c.icon}<span className="hidden xs:inline sm:inline">{c.label}</span>
+                {c.icon}
+                <span className="hidden xs:inline sm:inline">{c.label}</span>
                 <span className="sm:hidden inline">{c.label}</span>
               </button>
             );
@@ -95,11 +118,19 @@ function BookPage() {
 
         {channel === "whatsapp" && (
           <div className="mt-8 p-8 rounded-2xl bg-card border">
-            <div className="size-14 rounded-2xl bg-emerald-500/10 text-emerald-600 grid place-items-center mb-4"><WhatsAppIcon size={24} /></div>
+            <div className="size-14 rounded-2xl bg-emerald-500/10 text-emerald-600 grid place-items-center mb-4">
+              <WhatsAppIcon size={24} />
+            </div>
             <h2 className="text-xl font-semibold">Chat on WhatsApp</h2>
-            <p className="text-sm text-muted-foreground mt-2">Tap below to start a conversation with our front desk.</p>
-            <a href={`https://wa.me/${wa}?text=${encodeURIComponent("Hi, I'd like to book a physiotherapy session.")}`}
-               target="_blank" rel="noreferrer" className="inline-block mt-5">
+            <p className="text-sm text-muted-foreground mt-2">
+              Tap below to start a conversation with our front desk.
+            </p>
+            <a
+              href={`https://wa.me/${wa}?text=${encodeURIComponent("Hi, I'd like to book a physiotherapy session.")}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block mt-5"
+            >
               <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
                 <WhatsAppIcon size={16} /> Open WhatsApp Chat
               </Button>
@@ -109,12 +140,20 @@ function BookPage() {
 
         {channel === "email" && (
           <div className="mt-8 p-8 rounded-2xl bg-card border">
-            <div className="size-14 rounded-2xl bg-blue-500/10 text-blue-600 grid place-items-center mb-4"><Mail className="size-6" /></div>
+            <div className="size-14 rounded-2xl bg-blue-500/10 text-blue-600 grid place-items-center mb-4">
+              <Mail className="size-6" />
+            </div>
             <h2 className="text-xl font-semibold">Email Us</h2>
-            <p className="text-sm text-muted-foreground mt-2">Send your details and we'll reply with available slots.</p>
-            <a href={`mailto:${settings.globalEmail || CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
-               className="inline-block mt-5">
-              <Button className="brand-gradient text-white border-0"><Mail className="size-4" /> Compose Email</Button>
+            <p className="text-sm text-muted-foreground mt-2">
+              Send your details and we'll reply with available slots.
+            </p>
+            <a
+              href={`mailto:${settings.globalEmail || CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
+              className="inline-block mt-5"
+            >
+              <Button className="brand-gradient text-white border-0">
+                <Mail className="size-4" /> Compose Email
+              </Button>
             </a>
           </div>
         )}
@@ -124,35 +163,81 @@ function BookPage() {
             <h2 className="text-xl font-semibold">Appointment Request</h2>
             {done && (
               <div className="p-4 rounded-lg bg-emerald-500/10 text-emerald-700 text-sm flex items-center gap-2">
-                <CheckCircle2 className="size-4" /> Your request was submitted. Our team will reach out soon.
+                <CheckCircle2 className="size-4" /> Your request was submitted. Our team will reach
+                out soon.
               </div>
             )}
             <div className="grid sm:grid-cols-2 gap-4">
-              <div><Label htmlFor="name">Full Name *</Label><Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
-              <div><Label htmlFor="phone">Phone *</Label><Input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required /></div>
-              <div><Label htmlFor="email">Email</Label><Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+              <div>
+                <Label htmlFor="name">Full Name *</Label>
+                <Input
+                  id="name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone">Phone *</Label>
+                <Input
+                  id="phone"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
               {showBranchPicker && (
                 <div>
                   <Label htmlFor="br">Preferred Location *</Label>
-                  <select id="br" className="w-full h-9 px-3 rounded-md border bg-background"
-                          value={form.br} onChange={(e) => setForm({ ...form, br: e.target.value })} required>
-                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  <select
+                    id="br"
+                    className="w-full h-9 px-3 rounded-md border bg-background"
+                    value={form.br}
+                    onChange={(e) => setForm({ ...form, br: e.target.value })}
+                    required
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
               <div>
                 <Label htmlFor="prefDate">Preferred Date *</Label>
-                <Input id="prefDate" type="date" min={today} value={form.prefDate}
-                       onChange={(e) => setForm({ ...form, prefDate: e.target.value, prefTime: "" })} required />
+                <Input
+                  id="prefDate"
+                  type="date"
+                  min={today}
+                  value={form.prefDate}
+                  onChange={(e) => setForm({ ...form, prefDate: e.target.value, prefTime: "" })}
+                  required
+                />
               </div>
               <div>
-                <Label htmlFor="prefTime">Preferred Time Slot *</Label>
-                <select id="prefTime" className="w-full h-9 px-3 rounded-md border bg-background"
-                        value={form.prefTime} onChange={(e) => setForm({ ...form, prefTime: e.target.value })} required>
-                  <option value="">{closed ? "Clinic closed" : "Select 30-min slot"}</option>
+                <Label htmlFor="prefTime">Preferred Time *</Label>
+                <select
+                  id="prefTime"
+                  className="w-full h-9 px-3 rounded-md border bg-background"
+                  value={form.prefTime}
+                  onChange={(e) => setForm({ ...form, prefTime: e.target.value })}
+                  required
+                >
+                  <option value="">{closed ? "Clinic closed" : "Select Time"}</option>
                   {slots.map((s) => (
                     <option key={s} value={s} disabled={taken.includes(s)}>
-                      {fmtTime12(s)}{taken.includes(s) ? " — Booked" : ""}
+                      {fmtTime12(s)}
+                      {taken.includes(s) ? " — Booked" : ""}
                     </option>
                   ))}
                 </select>
@@ -163,9 +248,19 @@ function BookPage() {
             </div>
             <div>
               <Label htmlFor="concern">Concern / Symptoms</Label>
-              <Textarea id="concern" rows={4} value={form.concern} onChange={(e) => setForm({ ...form, concern: e.target.value })} />
+              <Textarea
+                id="concern"
+                rows={4}
+                value={form.concern}
+                onChange={(e) => setForm({ ...form, concern: e.target.value })}
+              />
             </div>
-            <Button type="submit" size="lg" className="brand-gradient text-white border-0" disabled={closed || !form.prefTime}>
+            <Button
+              type="submit"
+              size="lg"
+              className="brand-gradient text-white border-0"
+              disabled={closed || !form.prefTime}
+            >
               Submit Request
             </Button>
           </form>

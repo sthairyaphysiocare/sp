@@ -179,7 +179,7 @@ export const verifyLogin = createServerFn({ method: "POST" })
     const db = turso();
 
     const res = await db.execute({
-      sql: "SELECT id, password_hash FROM users WHERE lower(email) = lower(?) LIMIT 1",
+      sql: "SELECT id, role, password_hash, locked, failed_attempts FROM users WHERE lower(email) = lower(?) LIMIT 1",
       args: [data.username],
     });
     const row = res.rows[0];
@@ -194,14 +194,84 @@ export const verifyLogin = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "not-found" as const };
     }
 
+    const userId = String(row.id);
+    const isAdmin = String(row.role) === "admin";
+    const fails = Number(row.failed_attempts ?? 0);
+
+    // Non-admin accounts stay locked (even with the right password) until an
+    // admin unlocks them. Admin accounts are NEVER locked.
+    if (!isAdmin && Number(row.locked ?? 0) === 1) {
+      await auditEvent("auth.fail", `locked:${userId}`);
+      return { ok: false as const, reason: "account-locked" as const };
+    }
+
     const stored = String(row.password_hash ?? "");
     const match = isHashed(stored)
       ? await verifyPassword(data.password, stored)
       : stored.length > 0 && stored === data.password; // legacy plaintext row (pre-hash migration)
+
     if (!match) {
-      await auditEvent("auth.fail", `bad-pw:${String(row.id)}`);
-      return { ok: false as const, reason: "bad-password" as const };
+      const newFails = fails + 1;
+      if (isAdmin) {
+        // Admin exemption: never lock. Instead, apply a progressive
+        // artificial delay (2s, 4s, 6s… capped at 10s) so brute-forcing the
+        // admin password is impractically slow.
+        const delayMs = Math.min(2000 * newFails, 10_000);
+        await db.execute({
+          sql: "UPDATE users SET failed_attempts = ? WHERE id = ?",
+          args: [newFails, userId],
+        });
+        await auditEvent("auth.fail", `bad-pw-admin:${userId}:delay${delayMs}ms`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        return { ok: false as const, reason: "bad-password" as const };
+      }
+      // Staff roles (therapist / reception / other): lock on the 4th
+      // consecutive invalid password.
+      if (newFails >= 4) {
+        await db.execute({
+          sql: "UPDATE users SET locked = 1, failed_attempts = ? WHERE id = ?",
+          args: [newFails, userId],
+        });
+        await auditEvent("auth.lock", userId);
+        return { ok: false as const, reason: "account-locked" as const };
+      }
+      await db.execute({
+        sql: "UPDATE users SET failed_attempts = ? WHERE id = ?",
+        args: [newFails, userId],
+      });
+      await auditEvent("auth.fail", `bad-pw:${userId}`);
+      return { ok: false as const, reason: "bad-password" as const, failsLeft: 4 - newFails };
     }
-    await auditEvent("auth.ok", String(row.id));
-    return { ok: true as const, userId: String(row.id) };
+
+    // Successful login resets the consecutive-failure counter.
+    if (fails > 0) {
+      await db.execute({
+        sql: "UPDATE users SET failed_attempts = 0 WHERE id = ?",
+        args: [userId],
+      });
+    }
+    await auditEvent("auth.ok", userId);
+    return { ok: true as const, userId };
+  });
+
+/**
+ * Clear an account lockout (admin action from Staff & Roles, or automatic
+ * after a successful OTP password reset, which proves account ownership).
+ */
+export const unlockUser = createServerFn({ method: "POST" })
+  .inputValidator((input: { userId: string }) => {
+    if (!input || typeof input.userId !== "string" || !input.userId)
+      throw new Error("Invalid payload");
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const { turso, ensureSchema, auditEvent } = await import("./turso.server");
+    await ensureSchema();
+    const db = turso();
+    await db.execute({
+      sql: "UPDATE users SET locked = 0, failed_attempts = 0 WHERE id = ?",
+      args: [data.userId],
+    });
+    await auditEvent("auth.unlock", data.userId);
+    return { ok: true as const };
   });

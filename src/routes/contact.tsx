@@ -69,27 +69,40 @@ function ContactPage() {
                   key={b.id}
                   onClick={() => setActiveId(b.id)}
                   className={`block w-full text-left p-6 rounded-2xl bg-card border space-y-4 transition-all ${
-                    isActive ? "ring-2 ring-brand soft-shadow" : "hover:soft-shadow"
+                    isActive
+                      ? "ring-2 ring-brand border-brand bg-accent/50 soft-shadow"
+                      : "hover:soft-shadow hover:border-brand/30"
                   }`}
                 >
                   <div className="flex items-start gap-4">
-                    <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0"><MapPin className="size-5" /></div>
+                    <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0">
+                      <MapPin className="size-5" />
+                    </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-lg">{b.name}</h3>
                       <p className="text-sm text-muted-foreground mt-1">{b.address}</p>
                       {b.mapUrl && (
-                        <a href={b.mapUrl} target="_blank" rel="noreferrer"
-                           onClick={(e) => e.stopPropagation()}
-                           className="inline-flex items-center gap-1 text-sm text-brand mt-1 hover:underline">
+                        <a
+                          href={b.mapUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-sm text-brand mt-1 hover:underline"
+                        >
                           View on Google Maps <ExternalLink className="size-3" />
                         </a>
                       )}
                       {b.phone && (
-                        <p className="text-sm mt-2"><Phone className="size-3.5 inline mr-1" />{b.phone}</p>
+                        <p className="text-sm mt-2">
+                          <Phone className="size-3.5 inline mr-1" />
+                          {b.phone}
+                        </p>
                       )}
                       {b.hours && (
                         <div className="mt-3 text-sm">
-                          <div className="font-medium flex items-center gap-1.5"><Clock className="size-3.5" /> Clinic Hours</div>
+                          <div className="font-medium flex items-center gap-1.5">
+                            <Clock className="size-3.5" /> Clinic Hours
+                          </div>
                           <div className="mt-1.5 grid grid-cols-[80px_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                             {hoursLines(b.hours).map((r) => (
                               <div className="contents" key={r.label}>
@@ -104,15 +117,24 @@ function ContactPage() {
                   </div>
                   <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <a href={`tel:${bTel}`}>
-                      <Button size="sm" variant="outline"><Phone className="size-4" /> Call</Button>
+                      <Button size="sm" variant="outline">
+                        <Phone className="size-4" /> Call
+                      </Button>
                     </a>
                     <a href={`https://wa.me/${bWa}`} target="_blank" rel="noreferrer">
-                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                      >
                         <WhatsAppIcon size={14} /> WhatsApp Now
                       </Button>
                     </a>
-                    <a href={`mailto:${bEmail}?subject=${encodeURIComponent(`Enquiry — ${b.name}`)}`}>
-                      <Button size="sm" variant="outline"><Mail className="size-4" /> Send Email</Button>
+                    <a
+                      href={`mailto:${bEmail}?subject=${encodeURIComponent(`Enquiry — ${b.name}`)}`}
+                    >
+                      <Button size="sm" variant="outline">
+                        <Mail className="size-4" /> Send Email
+                      </Button>
                     </a>
                   </div>
                 </button>

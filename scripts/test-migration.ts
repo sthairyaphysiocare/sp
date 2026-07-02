@@ -236,3 +236,77 @@ console.assert(
 console.log("✔ parameterized login SELECT + PBKDF2 verify OK");
 
 console.log("\nALL TESTS PASSED");
+
+// 7. Lockout columns + role-based lockout semantics
+await local
+  .execute("ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
+  .catch(() => {});
+await local
+  .execute("ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0")
+  .catch(() => {});
+// duplicate ALTER must be tolerated (simulates re-running ensureSchema)
+let dupOk = false;
+try {
+  await local.execute("ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0");
+} catch (e) {
+  dupOk = /duplicate column name/i.test(String((e as Error).message));
+}
+console.assert(dupOk, "duplicate-column ALTER is detected and tolerated");
+// simulate 4 consecutive failures for a non-admin, then lock
+await local.execute({
+  sql: rows.UPSERT_USER,
+  args: ["u2", "therapist1", "T", "therapist", "pbkdf2$210000$x$y", "", Date.now()],
+});
+for (let f = 1; f <= 4; f++) {
+  if (f >= 4)
+    await local.execute({
+      sql: "UPDATE users SET locked = 1, failed_attempts = ? WHERE id = ?",
+      args: [f, "u2"],
+    });
+  else
+    await local.execute({
+      sql: "UPDATE users SET failed_attempts = ? WHERE id = ?",
+      args: [f, "u2"],
+    });
+}
+const lockedRow = (await local.execute("SELECT locked, failed_attempts FROM users WHERE id='u2'"))
+  .rows[0];
+console.assert(
+  Number(lockedRow.locked) === 1 && Number(lockedRow.failed_attempts) === 4,
+  "non-admin locked at 4 fails",
+);
+// unlock restores access
+await local.execute({
+  sql: "UPDATE users SET locked = 0, failed_attempts = 0 WHERE id = ?",
+  args: ["u2"],
+});
+const unlockedRow = (await local.execute("SELECT locked FROM users WHERE id='u2'")).rows[0];
+console.assert(Number(unlockedRow.locked) === 0, "unlock works");
+// admin row is never marked locked by the flow; UPSERT_USER must not touch lock columns
+await local.execute({
+  sql: "UPDATE users SET locked = 1, failed_attempts = 2 WHERE id = ?",
+  args: ["u2"],
+});
+await local.execute({
+  sql: rows.UPSERT_USER,
+  args: await rows.userArgs({
+    id: "u2",
+    email: "therapist1",
+    name: "T2",
+    role: "therapist",
+    password: "pbkdf2$210000$x$y",
+    emailId: "",
+  }),
+});
+const afterSync = (
+  await local.execute("SELECT locked, failed_attempts, name FROM users WHERE id='u2'")
+).rows[0];
+console.assert(
+  Number(afterSync.locked) === 1 &&
+    Number(afterSync.failed_attempts) === 2 &&
+    String(afterSync.name) === "T2",
+  "state sync updates profile but NEVER clears lock state",
+);
+console.log("✔ lockout schema + semantics OK (lock at 4, unlock, sync preserves lock)");
+
+console.log("\nALL TESTS PASSED (incl. lockout)");

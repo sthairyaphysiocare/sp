@@ -7,6 +7,7 @@ export interface User {
   role: Role;
   password: string;
   emailId?: string; // contact email for OTP / notifications
+  locked?: boolean; // server-managed account lockout (admin can unlock)
 }
 
 export interface BranchHours {
