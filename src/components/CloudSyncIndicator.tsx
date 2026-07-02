@@ -4,7 +4,10 @@ import { Cloud, CloudOff, RefreshCw, TriangleAlert } from "lucide-react";
 
 export function CloudSyncIndicator() {
   const [status, setStatus] = useState<SyncStatus>("idle");
-  useEffect(() => subscribeSyncStatus(setStatus), []);
+  useEffect(() => {
+    const unsub = subscribeSyncStatus(setStatus);
+    return () => { unsub(); };
+  }, []);
   if (status === "idle") return null;
   const meta = {
     syncing: { icon: RefreshCw, label: "Syncing…", cls: "bg-brand/10 text-brand animate-pulse" },
