@@ -296,16 +296,56 @@ export function useStore<T>(selector: (s: DB) => T): T {
   return selector(snap);
 }
 
+export type LoginResult =
+  | { ok: true; user: User }
+  | { ok: false; reason: "locked" | "bad-credentials" | "network"; remainingMs?: number; failsLeft?: number };
+
 export const store = {
   get: () => state,
-  login(username: string, password: string): User | null {
-    const u = state.users.find((x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password);
-    if (!u) return null;
-    state = { ...state, session: { userId: u.id } };
+  async login(username: string, password: string): Promise<LoginResult> {
+    const rem = lockoutRemainingMs(username);
+    if (rem > 0) return { ok: false, reason: "locked", remainingMs: rem };
+
+    // Ensure current state is in cloud so verifyLogin can read it.
+    if (!hydrated) await ensureHydrated();
+
+    let serverOk: string | null = null;
+    let serverReachable = true;
+    try {
+      const { verifyLogin } = await import("./db.functions");
+      const res = await verifyLogin({ data: { username, password } });
+      if (res.ok) serverOk = res.userId;
+      else if (res.reason === "no-state") serverReachable = false; // fall through to local
+    } catch (err) {
+      console.warn("[store] verifyLogin unreachable, using local fallback", err);
+      serverReachable = false;
+    }
+
+    let matched: User | null = null;
+    if (serverOk) {
+      matched = state.users.find((u) => u.id === serverOk) ?? null;
+    } else if (!serverReachable) {
+      // Offline / no cloud state yet — allow legacy plaintext local match.
+      matched = state.users.find(
+        (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
+      ) ?? null;
+    }
+
+    if (!matched) {
+      const info = registerLoginFailure(username);
+      if (info.locked) return { ok: false, reason: "locked", remainingMs: info.remainingMs };
+      return { ok: false, reason: "bad-credentials", failsLeft: info.failsLeft };
+    }
+
+    clearLoginFailures(username);
+    sessSave(matched.id);
+    state = { ...state, session: { userId: matched.id } };
     persist();
-    return u;
+    return { ok: true, user: matched };
   },
+  touchSession() { sessTouch(); },
   logout() {
+    sessClear();
     state = { ...state, session: { userId: null } };
     persist();
   },
