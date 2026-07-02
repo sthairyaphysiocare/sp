@@ -160,28 +160,110 @@ function load(): DB {
 }
 
 // SSR-safe: always start from defaults so server + first client render agree.
-// Real localStorage state is swapped in after mount via ensureHydrated().
+// Real state (loaded from Turso, or migrated from legacy localStorage on first
+// visit) is swapped in after mount via ensureHydrated().
 const SERVER_SNAPSHOT: DB = defaultDb();
 let state: DB = SERVER_SNAPSHOT;
 let hydrated = false;
+let hydrating = false;
 const listeners = new Set<() => void>();
 
-function ensureHydrated() {
-  if (hydrated || typeof window === "undefined") return;
-  hydrated = true;
-  state = load();
-  listeners.forEach((l) => l());
+// Debounced persistence to Turso via server function. We keep the local
+// in-memory state authoritative for the UI and reconcile to the cloud in
+// the background. Failures surface as toasts via a subscribable status.
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSave = false;
+let saveInFlight = false;
+export type SyncStatus = "idle" | "syncing" | "error" | "offline";
+let syncStatus: SyncStatus = "idle";
+const statusListeners = new Set<(s: SyncStatus) => void>();
+function setSyncStatus(s: SyncStatus) {
+  if (syncStatus === s) return;
+  syncStatus = s;
+  statusListeners.forEach((l) => l(s));
+}
+export function subscribeSyncStatus(l: (s: SyncStatus) => void) {
+  statusListeners.add(l);
+  l(syncStatus);
+  return () => statusListeners.delete(l);
+}
+export function getSyncStatus() {
+  return syncStatus;
+}
+
+async function flushToCloud() {
+  if (saveInFlight) {
+    pendingSave = true;
+    return;
+  }
+  saveInFlight = true;
+  setSyncStatus("syncing");
+  try {
+    const { saveAppState } = await import("./db.functions");
+    await saveAppState({ data: { data: JSON.stringify(state) } });
+    setSyncStatus("idle");
+  } catch (err) {
+    console.error("[store] cloud save failed", err);
+    setSyncStatus("error");
+    // Fall back to localStorage so no data is lost if the cloud is down.
+    try {
+      if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
+    } catch {}
+  } finally {
+    saveInFlight = false;
+    if (pendingSave) {
+      pendingSave = false;
+      queueMicrotask(flushToCloud);
+    }
+  }
+}
+
+function schedulePersist() {
+  if (typeof window === "undefined") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(flushToCloud, 400);
+}
+
+async function ensureHydrated() {
+  if (hydrated || hydrating || typeof window === "undefined") return;
+  hydrating = true;
+  try {
+    const { loadAppState } = await import("./db.functions");
+    const res = await loadAppState();
+    if (res.data) {
+      try {
+        // Route through load() to run the same shape-migration/defaults logic.
+        localStorage.setItem(KEY, res.data);
+        state = load();
+      } catch {
+        state = defaultDb();
+      }
+    } else {
+      // Legacy path: use existing localStorage (if any) as the seed, then
+      // push it to the cloud so future loads are cloud-first.
+      state = load();
+      // Fire and forget — don't block hydration on the write.
+      queueMicrotask(flushToCloud);
+    }
+  } catch (err) {
+    console.error("[store] cloud hydrate failed, falling back to localStorage", err);
+    setSyncStatus("offline");
+    state = load();
+  } finally {
+    hydrated = true;
+    hydrating = false;
+    listeners.forEach((l) => l());
+  }
 }
 
 function persist() {
-  if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
   listeners.forEach((l) => l());
+  schedulePersist();
 }
 
 function subscribe(l: () => void) {
   listeners.add(l);
-  // Trigger one-time hydration on first subscription (post-mount on client).
-  if (typeof window !== "undefined" && !hydrated) {
+  if (typeof window !== "undefined" && !hydrated && !hydrating) {
     queueMicrotask(ensureHydrated);
   }
   return () => listeners.delete(l);

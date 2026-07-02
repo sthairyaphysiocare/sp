@@ -1,92 +1,88 @@
-# Sthairya Physiocare — Major Upgrade Plan
 
-This is a very large batch of changes. I'll execute it in ordered phases so nothing regresses. Please confirm before I start — especially the Turso migration, which has significant implications (see "Important decisions to confirm" at the end).
+## Scope
 
-## Phase 0 — Turso Cloud DB Migration (foundational)
-- Install `@libsql/client`.
-- Add `VITE_TURSO_DB_URL` and `VITE_TURSO_AUTH_TOKEN` as secrets (env vars). Never hardcoded.
-- New `src/lib/turso.ts` — creates client via `createClient` from `@libsql/client/web`, reads env only.
-- New `src/lib/db/schema.ts` — idempotent `CREATE TABLE IF NOT EXISTS` for: users, patients, visits, clinical_notes, bookings, branches, settings, specialities, clinicians, otp_attempts, locked_accounts. FK constraints on, unique keys on PID / username / email. Text/number/date/bool only — no blobs.
-- Passwords hashed with PBKDF2-SHA256 (Web Crypto, salted, 100k iters). Migration re-hashes existing plaintext once, then discards.
-- Rewrite `src/lib/store.ts` as an async data layer backed by Turso. Public API becomes async (`await store.addPatient(...)`). All consumers updated to `await` / React Query.
-- Add global `<QueryClientProvider>` and skeleton/spinner states on every list/detail page.
-- Wrap all DB calls in try/catch → toast on failure ("Unable to connect…").
-- **One-time migration**: on app boot, if `localStorage['stpc:v1']` exists and Turso has no rows for this workspace, read the legacy blob, insert everything preserving IDs, then set a `migrated=1` flag in Turso and clear the localStorage blob.
+The prior message packed ~10 phases across DB migration, auth hardening, scheduling engine, prescriptions, reports, and UI polish. To ship this reliably (and stay debuggable) I'll land it in sequenced PR-sized batches, not one mega-commit. Below is the sequence and the key architectural decisions I need your OK on before I start writing code.
 
-## Phase 1 — Auth / Session Security
-- Move session (`userId`, role) from localStorage → `sessionStorage`. Never write auth to localStorage.
-- Rewrite `AuthProvider` to hydrate from sessionStorage only; expose `isAuthenticated`.
-- `PublicLayout` nav: "Open Dashboard" renders **only** when both sessionStorage token AND context confirm auth; otherwise "Staff Login".
-- Global route guard on `/app/*`: verify session on mount, purge + redirect to `/auth` if missing/expired.
-- Session ends on tab close (sessionStorage native behavior).
+## Architectural decisions (need confirmation)
 
-## Phase 2 — OTP Hardening (Forgot Password)
-- 5-minute TTL with live countdown (`OTP expires in 4:32`).
-- OTP kept in component-local React state; cleaned on unmount / success.
-- Attempt counter: 3 wrong → disable Verify, show "Too many failed attempts…".
-- Numeric-only masked input, auto-focus.
-- Strict `===` compare, wipe on success before redirect.
-- Remove "Sent from: …" line under Registered Email ID.
+1. **Turso access path — server-proxied, not browser-direct.**
+   Lovable blocks user-created `VITE_*` secrets, and for good reason: a browser-embedded libSQL token = anyone viewing the site can read/write the entire DB. I've stored the credentials as server-only secrets (`TURSO_DB_URL`, `TURSO_AUTH_TOKEN`) and will:
+   - Create `src/lib/turso.server.ts` — libSQL client, server-only.
+   - Expose typed CRUD via `createServerFn` in `src/lib/db/*.functions.ts` (users, patients, visits, bookings, settings, clinicians, branches).
+   - Rewrite `src/lib/store.ts` to be an async cache layer backed by TanStack Query + server fns. Existing selectors keep working; components move from sync `useStore(...)` reads to `useSuspenseQuery` where SSR-critical, and lazy `useQuery` elsewhere.
+   - Passwords hashed with PBKDF2-SHA256 (Web Crypto, Worker-compatible — bcrypt/argon2 are native Node modules and don't run on Cloudflare Workers).
 
-## Phase 3 — Account Lockout
-- Track failed logins per user in DB. Roles `therapist`/`reception`/`other`: lock after 4 consecutive fails → "Account locked due to multiple failed attempts. Contact Admin."
-- Admin: never locked; add 2s artificial delay on wrong password.
-- Admin Settings → Staff & Roles: "Locked Accounts" panel with Unlock button.
+2. **Session storage.** Auth session moves to `sessionStorage` (as requested). Route guard added at `src/routes/_app.tsx` (pathless layout) — instant redirect to `/auth` if no live session. Nav "Open Dashboard" gated on the same check.
 
-## Phase 4 — Prescription / Receipt / Reports fixes
-- Fix PDF + WhatsApp export in `PrescriptionDialog` by mirroring the working `app.reports.tsx` jsPDF pattern (no `html2canvas` for the doc body — draw with jsPDF primitives, same header/watermark/footer chrome).
-- Footer note pinned to page bottom.
-- Fix desktop button overlap on both wizard pages.
-- Header shows branch Email ID + configurable clinic URL (`sthairyaphysiocare.pages.dev`) — new toggle + editable field in Admin Settings.
-- Receipt: "Qty" → "Sessions". Add "Total in words: Rupees … Only" (number-to-words util).
-- Reports: add **Find** button; render first 10 in UI with **Load More**; PDF/CSV buttons appear only after results load.
+3. **One-time migration.** On first successful DB connect after this deploy, if `localStorage['sthairya_db']` exists AND the Turso `users` table is empty, run a migration server fn that accepts the legacy JSON blob, inserts it preserving IDs, then sets a `localStorage['sthairya_migrated']=1` flag and wipes the legacy blob. Idempotent; safe to re-run.
 
-## Phase 5 — Clinical Scheduling Engine
-- New util `src/lib/scheduling.ts`: given a date, fetch all visits + scheduled bookings, compute `[start, start+duration)` blocked intervals; expose `getDisabledSlots(date)` and `checkOverlap(date, start, duration)`.
-- Log Visit: rename "Next Review Time Slot" → "Next Review Time"; "Slot Duration" → "Duration"; default "Select Time". "Next Review Date" min = tomorrow. Disable overlapping slots; block submit + toast on forward-overlap.
-- Bookings dashboard: propose-new-time date min = tomorrow. Remove "Submissions from the public website appear here."
-- Public Book Visit: "Preferred Time Slot" → "Preferred Time", placeholder "Select Time". Preferred Date min = today+1 (24h), auto-skip Sundays / non-working days per selected branch's clinic hours.
+## Rollout phases (in order)
 
-## Phase 6 — New "Upcoming Visits" Dashboard
-- New route `src/routes/app.upcoming.tsx` + sidebar entry.
-- Toggle: Tomorrow / Next 3 Days / Next 7 Days.
-- Unified query: visits (`Next Review Date`) + bookings (`status='scheduled'`), merged & sorted chronologically.
-- Columns: Name, Contact, Source ("Clinical Appointment" | "Public Web Booking"), Date/Time, Reason.
-- "Send Reminder" per row → WhatsApp with source-specific template (clinical vs public). Digits-only sanitization + `+91` fallback.
-- Also add "Send Reminder" to existing "Today's Visits" with the "…scheduled visit today…" template.
+**Phase A — DB foundation (largest, lands first)**
+- `turso.server.ts` client + schema init (users, patients, visits, bookings, branches, settings, clinicians, blocked, sessions-audit) with FKs and `PRAGMA foreign_keys=ON`.
+- PBKDF2 password hash + verify helpers.
+- Server fns for all CRUD.
+- Async store shim so existing components compile; migrate reads route-by-route.
+- Migration server fn + client-side one-shot trigger.
+- Loading skeletons + error toasts on failed DB calls.
 
-## Phase 7 — Convert Booking → Patient
-- On `scheduled` bookings, add "Convert to Patient" action.
-- Field mapping: Full Name→Name, Phone→Mobile, Email→Email, Concern→CC, Preferred Date&Time→Next Scheduled Visit, Preferred Location→Branch (fallback default).
-- Opens patient-new form pre-filled; on save marks booking as `closed` and links.
+**Phase B — Auth & session hardening**
+- sessionStorage-only session; route guard; nav conditional render.
+- Password lockout (4 fails → lock; admin exempt + 2s delay).
+- Admin "Unlock account" panel in Staff & Roles.
+- OTP TTL 5min + countdown + 3-attempt cap + numeric mask + autofocus + wipe-on-success.
 
-## Phase 8 — Global UI / Branding
-- Global watermark + hero background already exist — audit and ensure applied on public routes (home/about/specialities/contact/book).
-- Enlarge header/footer/staff-login/staff-shell logos; add "Resilience • Firmness • Balance" tagline under wordmark everywhere.
-- Staff login logo + wordmark clickable → `/`.
-- About page Vision → "Be the most trusted physiotherapy partner."
-- Home CTA email uses `settings.globalEmail`; default globalEmail = `SthairyaPhysiocare@gmail.com`.
-- Footer: Mail icon + Global Email; Phone icon + all clinic numbers.
-- Contact page: highlight selected branch card with brand tint.
-- Book Visit: highlight active channel (In-App / WhatsApp / Email) with brand tint.
-- Branch clinic-hours default when blank: Mon–Fri 9–1 & 4–8, Sat 9–1, Sun by appointment.
+**Phase C — Prescription & Receipt fixes**
+- Port the Reports PDF pipeline (which works) into `PrescriptionDialog` — same html2canvas+jsPDF flow, same await/rAF sequence.
+- Fix WhatsApp send (sanitize number, +91 default, proper `wa.me` URL, no popup blocker).
+- Footer note absolute-bottom (flex column, `mt-auto`).
+- Desktop button overlap fix (grid gap on preview toolbar).
+- Header: branch email + clinic URL (toggle in settings).
+- Receipt: "Total in Words" (number-to-words util), "Qty" → "Sessions".
 
-## Phase 9 — Mobile Patient Profile
-- Header: `flex-col` on mobile, name first (bold, full-width, `break-words`), demographics row second (`whitespace-nowrap`, comfortable line-height).
-- Actions: separate `flex-wrap` container, `mt-4`.
-- Parent card `p-4` / `sm:p-6`.
+**Phase D — Scheduling engine**
+- Duration-aware conflict util (`src/lib/schedule.ts`): given date, returns blocked intervals from visits + scheduled bookings; masks slot picker; forward-overlap check with toast.
+- Past date disabling (Log Visit → tomorrow+; Bookings propose → today+).
+- Public book form: today+24h minimum, skip non-working days from branch hours.
+- Text: "Next Review Time Slot" → "Next Review Time", "Slot Duration" → "Duration", "-No Slot-" → "Select Time".
 
-## Phase 10 — Runtime cleanup
-- Fix current hydration mismatch on home page (MapPin/Mail icon divergence causing SSR/CSR mismatch).
+**Phase E — Bookings → Patient conversion + Upcoming Visits dashboard**
+- "Convert to Patient" action on scheduled bookings with field mapping.
+- New route `src/routes/app.upcoming.tsx` — Tomorrow / Next 3 / Next 7 filters, merged clinical + public queries, per-source WhatsApp templates.
+- Today's Visits: "Send Reminder" WhatsApp button per row.
+- Scheduled bookings appear on Today's Visits when date == today.
 
----
+**Phase F — UI polish, branding, mobile**
+- Global watermark + hero background applied to all public routes.
+- Larger logos + "Resilience • Firmness • Balance" tagline everywhere.
+- Staff login logo enlarged & clickable → `/`.
+- About vision text update.
+- Footer: Mail/Phone icons linked to global email + all branch phones.
+- Contact page: selected-branch highlight ring.
+- Book Visit: active channel highlight in brand color.
+- "Preferred Time Slot" → "Preferred Time"; "Select 30-min slot" → "Select Time".
+- Patient profile mobile: forced vertical stack for name/age/gender/phone, buttons in `flex-wrap` with `mt-4`, `p-4` card padding, `truncate` on name.
 
-## Important decisions to confirm before I start
+**Phase G — Reports + Admin settings misc**
+- Reports: Find button → paginated 10-at-a-time UI list → then Export PDF/CSV buttons appear.
+- Admin: Global Email default `SthairyaPhysiocare@gmail.com`; editable clinic URL toggle; branch hours editable with default fallback.
+- Remove copy: "Sent from: Gana.Plinija@gmail.com" and "Submissions from the public website appear here."
 
-1. **Turso credentials in chat.** You pasted the auth token in plaintext. I will store it via the secret tool (not in code), but I strongly recommend you **rotate that token in the Turso dashboard now** since it's been exposed in this chat history. Confirm you understand.
-2. **Async store rewrite is large.** Every route that reads `useStore(...)` becomes a React Query hook + async mutation. Expect churn across ~15 files. Confirm you want the full migration now vs. incrementally per module.
-3. **Password re-hash.** Existing localStorage passwords are plaintext. On first migration I'll hash them in place. Users log in normally; no reset needed. OK?
-4. **libSQL from the browser.** Using `@libsql/client/web` means the auth token ships to the client (any `VITE_*` env is public). This is acceptable for a small internal clinic app but is **not** a hardened production posture — a real deployment should proxy through a server function. Confirm you accept the tradeoff for now, or want me to route DB calls through TanStack server functions (adds a phase but is materially more secure).
-5. **Scope size.** This plan is ~10–15 substantial file changes across auth, store, and 8+ routes plus a new route and new schema. I'll implement top-to-bottom but it will take several turns. OK to proceed?
+## Technical notes
 
-Reply "go" (and answer Q4: **client** or **server-proxy**) and I'll start with Phase 0.
+- Turso client: `@libsql/client/web` inside server fns only. All queries go through server fns; the browser never touches libSQL.
+- Password hashing: PBKDF2-SHA256, 210k iterations, 16-byte salt, stored as `pbkdf2$210000$<saltB64>$<hashB64>`.
+- Query keys: `['patients']`, `['patients', id]`, `['visits', patientId]`, `['bookings']`, `['users']`, `['settings']`. Mutations invalidate list + detail keys.
+- OTP state: local component state only, cleared on unmount via cleanup effect.
+- Schedule util is pure — testable in isolation, used by all three date pickers.
+- Number-to-words: small Indian-numbering-system util (lakh/crore aware) since libraries add bundle weight.
+
+## Risk & sequencing rationale
+
+Phase A is the biggest and must land alone so we can verify data integrity before layering behavior changes. Phases B–G each touch smaller surface areas and can ship independently. If any phase reveals a Turso schema gap, we fix forward with an additive migration — no destructive changes.
+
+## What I need from you
+
+1. **Confirm the server-proxy architecture** (option A) vs. any preference for browser-direct despite the risk (not recommended, and not possible with current secret policy anyway).
+2. **Confirm PBKDF2** for password hashing (Worker-compatible; bcrypt/argon2 aren't).
+3. **Go/no-go on Phase A first** — I'll start writing as soon as you say go.
