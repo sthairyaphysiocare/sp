@@ -209,14 +209,19 @@ async function flushToCloud() {
   setSyncStatus("syncing");
   try {
     const { saveAppState } = await import("./db.functions");
-    await saveAppState({ data: { data: JSON.stringify(state) } });
+    // Session state is per-browser (sessionStorage) — never persist to cloud.
+    const toSave = { ...state, session: { userId: null } };
+    await saveAppState({ data: { data: JSON.stringify(toSave) } });
     setSyncStatus("idle");
   } catch (err) {
     console.error("[store] cloud save failed", err);
     setSyncStatus("error");
     // Fall back to localStorage so no data is lost if the cloud is down.
     try {
-      if (typeof window !== "undefined") localStorage.setItem(KEY, JSON.stringify(state));
+      if (typeof window !== "undefined") {
+        const toSave = { ...state, session: { userId: null } };
+        localStorage.setItem(KEY, JSON.stringify(toSave));
+      }
     } catch {}
   } finally {
     saveInFlight = false;
