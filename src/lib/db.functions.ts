@@ -186,7 +186,13 @@ export const syncState = createServerFn({ method: "POST" })
       }
     }
 
-    await auditEvent("state.sync", failures.length ? `failures:${failures.join(",")}` : undefined);
+    // Audit policy: routine state syncs are NOT logged (they are the highest
+    // volume event); only sync failures are recorded. Security- and
+    // clinically-sensitive events (auth, lockouts, prescriptions, migration)
+    // keep their dedicated audit entries.
+    if (failures.length > 0) {
+      await auditEvent("state.sync.failures", failures.join(","));
+    }
     return { ok: true as const, failures };
   });
 

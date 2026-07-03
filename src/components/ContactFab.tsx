@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Phone, Mail, MessageCircle, Plus } from "lucide-react";
+import { Phone, Mail, Plus } from "lucide-react";
+import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useStore } from "@/lib/store";
 import { CLINIC, whatsappDigits } from "@/lib/logo";
 import { cn } from "@/lib/utils";
@@ -49,7 +50,7 @@ export function ContactFab() {
       key: "wa",
       label: "WhatsApp us",
       href: `https://wa.me/${wa}?text=${message}`,
-      icon: <MessageCircle className="size-5" />,
+      icon: <WhatsAppIcon size={20} />,
       bg: "bg-emerald-500 hover:bg-emerald-600",
       external: true,
     },
@@ -108,14 +109,7 @@ export function ContactFab() {
           open && "rotate-45",
         )}
       >
-        <Plus className="size-6" />
-        {/* idle attention pulse */}
-        {!open && (
-          <span
-            aria-hidden
-            className="absolute inset-0 rounded-full brand-gradient opacity-40 animate-ping [animation-duration:2.6s]"
-          />
-        )}
+        <Plus className={cn("size-6", !open && "fab-wiggle")} />
       </button>
     </div>
   );

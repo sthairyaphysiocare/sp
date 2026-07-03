@@ -159,7 +159,7 @@ function HomePage() {
                   key={c.id}
                   className="w-full sm:w-[300px] p-6 rounded-2xl bg-card border soft-shadow transition-transform duration-300 hover:scale-[1.03]"
                 >
-                  <div className="mx-auto size-24 rounded-full bg-brand/10 grid place-items-center overflow-hidden ring-2 ring-brand/20">
+                  <div className="mx-auto size-36 sm:size-40 rounded-full bg-brand/10 grid place-items-center overflow-hidden ring-4 ring-brand/20 soft-shadow">
                     {c.photo ? (
                       <img
                         src={c.photo}
@@ -167,7 +167,7 @@ function HomePage() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <User className="size-12 text-brand" />
+                      <User className="size-16 text-brand" />
                     )}
                   </div>
                   {c.name && <h3 className="mt-4 text-center font-semibold text-lg">{c.name}</h3>}

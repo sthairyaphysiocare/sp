@@ -148,13 +148,44 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
       await waitForImages(node);
       await new Promise((r) => setTimeout(r, 80));
 
-      const { toJpeg } = await import("html-to-image");
-      const dataUrl = await toJpeg(node, {
-        quality: 0.95,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      });
+      // Capture a CLONE inside an off-screen sandbox with a hard-coded A4
+      // pixel width, zero margins, and no inherited transforms — so screen
+      // centering (mx-auto), responsive scaling, or flex alignment from the
+      // dialog can never shift or crop the output.
+      const A4_PX = 794; // 210mm at 96dpi
+      const sandbox = document.createElement("div");
+      sandbox.style.cssText =
+        "position:fixed;left:-10000px;top:0;width:" +
+        A4_PX +
+        "px;margin:0;padding:0;transform:none;z-index:-1;background:#ffffff;";
+      const clone = node.cloneNode(true) as HTMLElement;
+      clone.style.cssText +=
+        ";width:" +
+        A4_PX +
+        "px !important;min-width:" +
+        A4_PX +
+        "px;max-width:" +
+        A4_PX +
+        "px;margin:0 !important;transform:none !important;box-shadow:none;left:0;right:auto;";
+      sandbox.appendChild(clone);
+      document.body.appendChild(sandbox);
+
+      let dataUrl: string;
+      try {
+        await waitForImages(clone);
+        const { toJpeg } = await import("html-to-image");
+        dataUrl = await toJpeg(clone, {
+          quality: 0.95,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+          cacheBust: true,
+          width: A4_PX,
+          height: clone.scrollHeight,
+          style: { margin: "0", transform: "none" },
+        });
+      } finally {
+        sandbox.remove();
+      }
 
       const probe = new Image();
       await new Promise<void>((res, rej) => {

@@ -406,6 +406,7 @@ const listeners = new Set<() => void>();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSave = false;
 let saveInFlight = false;
+let lastSyncedPayload: string | null = null;
 export type SyncStatus = "idle" | "syncing" | "error" | "offline";
 let syncStatus: SyncStatus = "idle";
 const statusListeners = new Set<(s: SyncStatus) => void>();
@@ -429,17 +430,25 @@ async function flushToCloud() {
     return;
   }
   saveInFlight = true;
-  setSyncStatus("syncing");
   try {
     const { syncState } = await import("./db.functions");
     // Session state is per-browser (sessionStorage) — never persist to cloud.
     const toSave = { ...state, session: { userId: null } };
-    const res = await syncState({ data: { data: JSON.stringify(toSave) } });
+    const payload = JSON.stringify(toSave);
+    // Dirty check: if the serialized state is byte-identical to the last
+    // successful sync, skip the network write entirely.
+    if (payload === lastSyncedPayload) {
+      setSyncStatus("idle");
+      return;
+    }
+    setSyncStatus("syncing");
+    const res = await syncState({ data: { data: payload } });
     const resFailures = Array.isArray(res?.failures) ? res.failures : ["sync:malformed-response"];
     if (resFailures.length > 0) {
       console.error("[store] some records failed to sync:", resFailures);
       setSyncStatus("error");
     } else {
+      lastSyncedPayload = payload;
       setSyncStatus("idle");
     }
   } catch (err) {

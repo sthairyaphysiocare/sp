@@ -19,6 +19,7 @@ import {
   Award,
   BarChart3,
   Users,
+  Camera,
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { ICON_OPTIONS } from "@/lib/icons";
@@ -754,8 +755,8 @@ function CliniciansManager() {
   const [adding, setAdding] = useState(false);
 
   return (
-    <div className="mt-6 p-6 rounded-2xl bg-card border">
-      <div className="flex items-start gap-3">
+    <div className="mt-6 p-4 sm:p-6 rounded-2xl bg-card border overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-start gap-3">
         <div className="size-10 rounded-lg brand-gradient grid place-items-center text-white shrink-0">
           <Users className="size-5" />
         </div>
@@ -895,39 +896,45 @@ function ClinicianEditor({
   }
 
   return (
-    <div className="p-4 rounded-xl bg-background border border-brand/30 space-y-3">
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div>
+    <div className="w-full min-w-0 p-3 sm:p-4 rounded-xl bg-background border border-brand/30 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+        <div className="min-w-0">
           <Label>Name</Label>
           <Input
             value={f.name}
             onChange={(e) => setF({ ...f, name: e.target.value })}
-            placeholder="Dr. Plinija"
+            placeholder="Name"
           />
         </div>
-        <div>
+        <div className="min-w-0">
           <Label>Photo (max 5 MB)</Label>
-          <div className="flex items-center gap-2 mt-1">
-            {f.photo && (
-              <img src={f.photo} alt="" className="size-12 rounded-full object-cover border" />
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={onPhoto}
-              className="text-sm flex-1 min-w-0"
-            />
-            {f.photo && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setF({ ...f, photo: "" })}
-                aria-label="Remove photo"
-              >
-                <X className="size-4" />
-              </Button>
-            )}
+          <div className="flex items-center gap-3 mt-1 min-w-0">
+            {f.photo ? (
+              <div className="relative shrink-0">
+                <img
+                  src={f.photo}
+                  alt="Clinician"
+                  className="size-14 rounded-full object-cover ring-2 ring-brand/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setF({ ...f, photo: "" })}
+                  aria-label="Remove photo"
+                  className="absolute -top-1 -right-1 grid place-items-center size-5 rounded-full bg-destructive text-white shadow"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ) : null}
+            <label
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 h-14 px-3 rounded-xl
+                border-2 border-dashed border-brand/40 bg-accent/30 text-brand text-sm font-medium
+                cursor-pointer select-none transition-colors hover:bg-accent/60 active:scale-[0.99]"
+            >
+              <Camera className="size-5 shrink-0" />
+              <span className="truncate">{f.photo ? "Change photo" : "Tap to upload photo"}</span>
+              <input type="file" accept="image/*" onChange={onPhoto} className="sr-only" />
+            </label>
           </div>
         </div>
         <div>
