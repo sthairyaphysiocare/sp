@@ -339,6 +339,16 @@ export interface MigrationReport {
  * with a per-record fallback when a chunk fails, preserving the guarantee
  * that a single bad record is logged (with its data) and skipped.
  */
+/** Mask password/hash fields before any record reaches a log line. */
+export function redactSensitive(rec: unknown): unknown {
+  if (!rec || typeof rec !== "object") return rec;
+  const clone: Record<string, unknown> = { ...(rec as Record<string, unknown>) };
+  for (const key of Object.keys(clone)) {
+    if (/password|hash|otp|token/i.test(key)) clone[key] = "[REDACTED]";
+  }
+  return clone;
+}
+
 export const BATCH_CHUNK = 35;
 
 export interface BatchItem {
@@ -371,7 +381,12 @@ export async function executeBatchWithFallback(
           await db.execute({ sql: c.sql, args: c.args });
           onResult(c, true);
         } catch (err) {
-          console.error(`[batch] failed to write ${c.label} record:`, err, "record:", c.record);
+          console.error(
+            `[batch] failed to write ${c.label} record:`,
+            err,
+            "record:",
+            redactSensitive(c.record),
+          );
           onResult(c, false);
         }
       }
@@ -396,7 +411,12 @@ async function insertLoop<T extends { id?: unknown }>(
       // Parameterized statements — special characters cannot break SQL.
       items.push({ label, sql, args: await toArgs(rec), record: rec });
     } catch (err) {
-      console.error(`[migration] failed to prepare ${label} record:`, err, "record:", rec);
+      console.error(
+        `[migration] failed to prepare ${label} record:`,
+        err,
+        "record:",
+        redactSensitive(rec),
+      );
       report.failed[label]++;
     }
   }

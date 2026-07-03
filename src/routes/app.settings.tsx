@@ -136,11 +136,21 @@ function Settings() {
         <h2 className="font-semibold">Change Password</h2>
         <div>
           <Label>New Password</Label>
-          <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+          />
         </div>
         <div>
           <Label>Confirm Password</Label>
-          <Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={pw2}
+            onChange={(e) => setPw2(e.target.value)}
+          />
         </div>
         <Button type="submit" className="brand-gradient text-white border-0">
           Update Password

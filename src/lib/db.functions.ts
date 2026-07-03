@@ -141,7 +141,12 @@ export const syncState = createServerFn({ method: "POST" })
           });
           itemMeta.push({ specIdx: si, id: rec.id });
         } catch (err) {
-          console.error(`[sync] failed to prepare ${sp.label}:`, err, "record:", rec);
+          console.error(
+            `[sync] failed to prepare ${sp.label}:`,
+            err,
+            "record:",
+            rows.redactSensitive(rec),
+          );
           failures.push(`${sp.label}:${rec.id}`);
         }
       }

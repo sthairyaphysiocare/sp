@@ -184,7 +184,8 @@ function Staff() {
         <div>
           <Label>Password</Label>
           <Input
-            type="text"
+            type="password"
+            autoComplete="new-password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />

@@ -325,6 +325,7 @@ function AuthPage() {
               <Input
                 id="otp"
                 ref={otpInputRef}
+                autoComplete="one-time-code"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}

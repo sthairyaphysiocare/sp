@@ -653,7 +653,10 @@ export const store = {
     sessTouch();
   },
   logout() {
+    // Actively clear all auth-related browser storage and in-memory session
+    // state (route guards then prevent any dashboard render).
     sessClear();
+    void import("./session").then(({ purgeSession }) => purgeSession()).catch(() => undefined);
     state = { ...state, session: { userId: null } };
     persist();
   },
