@@ -27,7 +27,7 @@ import {
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { addDaysISO, fmtDate, slotsForDate } from "@/lib/date";
+import { addDaysISO, fmtDate, slotsForDate, todayISO } from "@/lib/date";
 import { branchById, enabledBranches } from "@/lib/logo";
 import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
 import { IconButton } from "@/components/IconButton";
@@ -605,7 +605,7 @@ function VisitsTab({
   const [show, setShow] = useState(false);
   const [editVid, setEditVid] = useState<string | null>(null);
   const [v, setV] = useState({
-    dt: new Date().toISOString().slice(0, 10),
+    dt: todayISO(),
     pS: 5,
     sym: "",
     rom: "",
@@ -622,6 +622,10 @@ function VisitsTab({
 
   function save() {
     if (!canEdit) return;
+    if (v.nxt && v.nxt <= todayISO()) {
+      toast.error("Next review date must be from tomorrow onwards");
+      return;
+    }
     if (v.nxt && v.nxtTm) {
       const conflict = slotConflict(store.get(), v.nxt, v.nxtTm, v.dur || 30);
       if (conflict === "overlap") {
@@ -725,7 +729,7 @@ function VisitsTab({
               <Label>Next Review Date</Label>
               <Input
                 type="date"
-                min={addDaysISO(new Date().toISOString().slice(0, 10), 1)}
+                min={addDaysISO(todayISO(), 1)}
                 value={v.nxt}
                 onChange={(e) => setV({ ...v, nxt: e.target.value, nxtTm: "" })}
               />

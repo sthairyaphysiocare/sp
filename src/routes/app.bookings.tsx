@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { toast } from "sonner";
-import { fmtDate, fmtTime12, slotsForDate, fmtDateTime } from "@/lib/date";
+import { fmtDate, fmtTime12, slotsForDate, fmtDateTime, todayISO } from "@/lib/date";
 import { CLINIC } from "@/lib/logo";
 import type { Booking } from "@/lib/types";
 import { Check, Clock, MessageCircle, Mail, Archive, UserPlus } from "lucide-react";
@@ -70,7 +70,7 @@ function Bookings() {
     if (b.prefDate) {
       store.addVisit({
         patientId: patient.id,
-        dt: new Date().toISOString().slice(0, 10),
+        dt: todayISO(),
         tId: user?.id || "",
         tN: user?.name || "",
         pS: 0,
@@ -214,7 +214,7 @@ function Bookings() {
 
             {proposeFor === b.id && (
               <ProposeForm
-                initialDate={b.prefDate ?? new Date().toISOString().slice(0, 10)}
+                initialDate={b.prefDate ?? todayISO()}
                 onCancel={() => setProposeFor(null)}
                 onSubmit={(date, time) => {
                   store.updateBooking(b.id, {

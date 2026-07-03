@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { LOGO_URL, branchById, whatsappDigits } from "@/lib/logo";
 import type { Patient, Visit } from "@/lib/types";
-import { useStore } from "@/lib/store";
+import { slotConflict, store, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
@@ -22,7 +22,7 @@ import {
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
 import { amountInWordsINR } from "@/lib/utils";
-import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
+import { fmtDate, fmtTime12, slotsForDate, todayISO } from "@/lib/date";
 
 interface Props {
   patient: Patient;
@@ -55,7 +55,7 @@ const SERVICE_PRESETS = [
 export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const today = fmtDate(new Date());
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayIso = todayISO();
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : "—";
 
   const settings = useStore((s) => s.settings);
@@ -429,6 +429,35 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
         },
       });
       if (res.receiptNo) setSavedReceiptNo(res.receiptNo);
+      // If the next-review date/time was edited here, write it back to the
+      // latest visit so Today's/Upcoming dashboards reflect the change.
+      if (
+        lastVisit &&
+        (rx.reviewDate !== (lastVisit.nxt || "") ||
+          (rx.reviewTime || "") !== (lastVisit.nxtTm || ""))
+      ) {
+        if (rx.reviewDate && rx.reviewDate <= todayIso) {
+          toast.error("Next review date must be from tomorrow onwards — visit not updated");
+        } else {
+          const conflict =
+            rx.reviewDate && rx.reviewTime
+              ? slotConflict(store.get(), rx.reviewDate, rx.reviewTime, lastVisit.dur || 30)
+              : null;
+          if (conflict === "overlap") {
+            toast.error(
+              "Duration exceeds available time before next appointment — visit not updated",
+            );
+          } else if (conflict === "taken") {
+            toast.error("That review time is already booked — visit not updated");
+          } else {
+            store.updateVisit(lastVisit.id, {
+              nxt: rx.reviewDate,
+              nxtTm: rx.reviewTime || undefined,
+            });
+            toast.info("Next review updated on the visit record");
+          }
+        }
+      }
       toast.success(res.receiptNo ? `Saved — Receipt ${res.receiptNo}` : "Prescription saved", {
         id: t,
       });
@@ -667,7 +696,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   <Label>Next Review Date</Label>
                   <Input
                     type="date"
-                    min={todayISO}
+                    min={todayIso}
                     value={rx.reviewDate}
                     onChange={(e) => setRx({ ...rx, reviewDate: e.target.value, reviewTime: "" })}
                   />

@@ -1,3 +1,5 @@
+import { ContactFab } from "@/components/ContactFab";
+import { BackToTop } from "@/components/BackToTop";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
@@ -167,6 +169,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </footer>
+      <ContactFab />
+      <BackToTop />
     </div>
   );
 }

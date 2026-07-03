@@ -1,4 +1,14 @@
 // Global date utilities — display format is always DD-MM-YYYY
+
+/**
+ * Today's date in the USER'S LOCAL timezone as YYYY-MM-DD.
+ * (`new Date().toISOString()` is UTC — in India that reports *yesterday*
+ * between midnight and 05:30, which made "Tomorrow" filters include today.)
+ */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 export function fmtDate(input?: string | number | Date | null): string {
   if (!input && input !== 0) return "";
   const d = input instanceof Date ? input : new Date(input);
@@ -117,7 +127,7 @@ export function isWorkingDay(dateStr: string, branch?: Branch | null): boolean {
 export function addDaysISO(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Next working day for the branch strictly AFTER the given date. */
@@ -132,8 +142,7 @@ export function nextWorkingDay(fromDate: string, branch?: Branch | null): string
 
 /** Remove slots that are already in the past for today (with a small buffer). */
 export function filterPastSlots(dateStr: string, slots: string[], bufferMin = 15): string[] {
-  const todayISO = new Date().toISOString().slice(0, 10);
-  if (dateStr !== todayISO) return slots;
+  if (dateStr !== todayISO()) return slots;
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes() + bufferMin;
   return slots.filter((t) => {

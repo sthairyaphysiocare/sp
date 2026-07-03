@@ -114,3 +114,119 @@
 @utility soft-shadow {
   box-shadow: 0 10px 40px -12px oklch(0.42 0.13 235 / 0.25);
 }
+
+/* ---------------------------------------------------------------------------
+   Micro-interactions & polish (additive only — no functional changes).
+   Every motion effect is wrapped in prefers-reduced-motion: no-preference.
+---------------------------------------------------------------------------- */
+::selection {
+  background: color-mix(in oklab, var(--brand, #0284c7) 25%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Tactile press on every button-like control */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition:
+      transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 200ms ease,
+      background-color 200ms ease,
+      color 200ms ease,
+      border-color 200ms ease,
+      opacity 200ms ease;
+  }
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.96);
+  }
+
+  /* Links glide rather than snap */
+  a {
+    transition:
+      color 180ms ease,
+      background-color 180ms ease,
+      opacity 180ms ease,
+      transform 180ms ease;
+  }
+
+  /* Inputs breathe on focus */
+  input,
+  select,
+  textarea {
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease;
+  }
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--brand, #0284c7) 14%, transparent);
+  }
+
+  /* Interactive cards lift gently (anchor- or button-wrapped cards only) */
+  a > .bg-card,
+  a.bg-card,
+  button.bg-card {
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms ease;
+  }
+  a:hover > .bg-card,
+  a.bg-card:hover,
+  button.bg-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--brand, #0284c7) 30%, rgb(0 0 0 / 0.15));
+  }
+
+  /* Route content eases in */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  main > * {
+    animation: fade-up 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  main > *:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  main > *:nth-child(3) {
+    animation-delay: 120ms;
+  }
+}
+
+/* Slim, theme-aware scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--brand, #0284c7) 35%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--brand, #0284c7) 30%, transparent);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--brand, #0284c7) 50%, transparent);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media print {
+  main > * {
+    animation: none !important;
+  }
+}

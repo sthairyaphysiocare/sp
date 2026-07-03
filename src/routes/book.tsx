@@ -17,6 +17,7 @@ import {
   fmtTime12,
   nextWorkingDay,
   slotsForDateBranch,
+  todayISO,
 } from "@/lib/date";
 
 export const Route = createFileRoute("/book")({
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/book")({
 type Channel = "form" | "whatsapp" | "email";
 
 function BookPage() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const settings = useStore((s) => s.settings);
   const branches = enabledBranches(settings);
   const wa = whatsappDigits(settings);

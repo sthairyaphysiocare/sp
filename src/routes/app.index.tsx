@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Users, Activity, CalendarCheck2, Inbox } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
-import { fmtDate, fmtTime12 } from "@/lib/date";
+import { fmtDate, fmtTime12, todayISO } from "@/lib/date";
 import { openWhatsApp } from "@/lib/utils";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { toast } from "sonner";
@@ -87,7 +87,7 @@ function Dashboard() {
   const patients = useStore((s) => s.patients);
   const visits = useStore((s) => s.visits);
   const bookings = useStore((s) => s.bookings);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const todaysVisits = visits.filter((v) => v.nxt === today);
   const todaysBookings = bookings.filter((b) => b.status === "scheduled" && b.prefDate === today);
   const activePatients = patients.filter((p) => (p.status || "active") === "active");
@@ -175,7 +175,7 @@ function Dashboard() {
                   onClick={() => {
                     const ok = openWhatsApp(
                       r.phone,
-                      `Hello ${r.name}, this is a reminder for your scheduled visit today at Sthairya Physiocare. Thank you!`,
+                      `Hello ${r.name}, this is a reminder for your scheduled visit today${r.time !== "—" ? ` at ${fmtTime12(r.time)}` : ""} at Sthairya Physiocare. Thank you!`,
                     );
                     if (!ok) toast.error("No valid mobile number on record");
                   }}

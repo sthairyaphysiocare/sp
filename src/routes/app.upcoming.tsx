@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { addDaysISO, fmtDate, fmtTime12 } from "@/lib/date";
+import { addDaysISO, fmtDate, fmtTime12, todayISO } from "@/lib/date";
 import { cn, openWhatsApp } from "@/lib/utils";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { CalendarClock, Stethoscope, Globe } from "lucide-react";
@@ -37,7 +37,7 @@ function UpcomingVisits() {
   const bookings = useStore((s) => s.bookings);
   const [scope, setScope] = useState<Scope>(SCOPES[2]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   // "Tomorrow" is exactly tomorrow; other scopes span [tomorrow .. today+N].
   const from = addDaysISO(today, 1);
   const to = scope.days === 1 ? from : addDaysISO(today, scope.days);
