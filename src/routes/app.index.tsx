@@ -88,7 +88,13 @@ function Dashboard() {
   const visits = useStore((s) => s.visits);
   const bookings = useStore((s) => s.bookings);
   const today = todayISO();
-  const todaysVisits = visits.filter((v) => v.nxt === today);
+  // Only ACTIVE patients' reviews appear on the dashboards; inactive or
+  // completed patients are excluded even if a review date remains on record.
+  const isPatientActive = (patientId: string) => {
+    const p = patients.find((x) => x.id === patientId);
+    return (p?.status || "active") === "active";
+  };
+  const todaysVisits = visits.filter((v) => v.nxt === today && isPatientActive(v.patientId));
   const todaysBookings = bookings.filter((b) => b.status === "scheduled" && b.prefDate === today);
   const activePatients = patients.filter((p) => (p.status || "active") === "active");
   const pendingBookings = bookings.filter((b) => b.status === "pending");

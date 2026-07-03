@@ -47,7 +47,12 @@ function UpcomingVisits() {
   // public bookings in the 'scheduled' state, merged and sorted by date+time.
   const rows: Row[] = [
     ...visits
-      .filter((v) => inRange(v.nxt))
+      .filter((v) => {
+        if (!inRange(v.nxt)) return false;
+        // Exclude reviews for inactive/completed patients.
+        const p = patients.find((x) => x.id === v.patientId);
+        return (p?.status || "active") === "active";
+      })
       .map((v): Row => {
         const p = patients.find((x) => x.id === v.patientId);
         return {
