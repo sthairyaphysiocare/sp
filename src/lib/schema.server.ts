@@ -169,12 +169,21 @@ export async function ensureSchema(): Promise<void> {
   if (initPromise) return initPromise;
   initPromise = (async () => {
     const db: Client = turso();
-    for (const sql of SCHEMA_STATEMENTS) {
-      try {
-        await db.execute(sql);
-      } catch (err) {
-        console.error("[schema] statement failed. Exact SQL:\n" + sql, err);
-        throw err;
+    // One batch = one HTTP subrequest (Workers cap subrequests per request).
+    // Statements are idempotent, so all-or-nothing batch semantics are safe.
+    try {
+      await db.batch([...SCHEMA_STATEMENTS], "write");
+    } catch (batchErr) {
+      // Fall back to sequential execution to isolate the failing statement
+      // and log its exact SQL.
+      console.error("[schema] batch failed, retrying sequentially:", batchErr);
+      for (const sql of SCHEMA_STATEMENTS) {
+        try {
+          await db.execute(sql);
+        } catch (err) {
+          console.error("[schema] statement failed. Exact SQL:\n" + sql, err);
+          throw err;
+        }
       }
     }
     for (const sql of ADDITIVE_MIGRATIONS) {
@@ -198,9 +207,13 @@ export async function ensureSchema(): Promise<void> {
 export async function coreTablesEmpty(): Promise<boolean> {
   const db = turso();
   const tables = ["users", "patients", "visits", "clinical_notes", "bookings", "blocked_slots"];
-  for (const t of tables) {
-    // Table names are from the hardcoded list above — never user input.
-    const res = await db.execute(`SELECT COUNT(*) AS c FROM ${t}`);
+  // Table names come from the hardcoded list above — never user input.
+  // One batch = one subrequest.
+  const results = await db.batch(
+    tables.map((t) => `SELECT COUNT(*) AS c FROM ${t}`),
+    "read",
+  );
+  for (const res of results) {
     if (Number(res.rows[0]?.c ?? 0) > 0) return false;
   }
   return true;

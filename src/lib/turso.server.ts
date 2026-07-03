@@ -123,23 +123,31 @@ export async function readSnapshot(): Promise<DbSnapshot> {
   await migrateAppStateIfNeeded();
   const db = turso();
 
-  const run = async (sql: string) => (await db.execute(sql)).rows as Array<Record<string, unknown>>;
-
-  const users = (await run("SELECT * FROM users")).map(rowToUser);
-  const patients = (await run("SELECT * FROM patients ORDER BY created_at ASC")).map(rowToPatient);
-  const visits = (await run("SELECT * FROM visits ORDER BY visit_number ASC")).map(rowToVisit);
-  const notes = (await run("SELECT * FROM clinical_notes")).map(rowToNote);
-  const bookings = (await run("SELECT * FROM bookings ORDER BY created_at ASC")).map(rowToBooking);
-  const blocked = (await run("SELECT * FROM blocked_slots")).map(rowToBlocked);
+  // All reads in one batch = one HTTP subrequest (Workers cap subrequests).
+  const [uRes, pRes, vRes, nRes, bRes, blRes, stRes] = await db.batch(
+    [
+      "SELECT * FROM users",
+      "SELECT * FROM patients ORDER BY created_at ASC",
+      "SELECT * FROM visits ORDER BY visit_number ASC",
+      "SELECT * FROM clinical_notes",
+      "SELECT * FROM bookings ORDER BY created_at ASC",
+      "SELECT * FROM blocked_slots",
+      { sql: "SELECT data FROM app_settings WHERE id = ?", args: ["main"] },
+    ],
+    "read",
+  );
+  type R = Array<Record<string, unknown>>;
+  const users = (uRes.rows as unknown as R).map(rowToUser);
+  const patients = (pRes.rows as unknown as R).map(rowToPatient);
+  const visits = (vRes.rows as unknown as R).map(rowToVisit);
+  const notes = (nRes.rows as unknown as R).map(rowToNote);
+  const bookings = (bRes.rows as unknown as R).map(rowToBooking);
+  const blocked = (blRes.rows as unknown as R).map(rowToBlocked);
 
   let settings: AppSettings | null = null;
-  const st = await db.execute({
-    sql: "SELECT data FROM app_settings WHERE id = ?",
-    args: ["main"],
-  });
-  if (st.rows[0]) {
+  if (stRes.rows[0]) {
     try {
-      settings = JSON.parse(String(st.rows[0].data)) as AppSettings;
+      settings = JSON.parse(String(stRes.rows[0].data)) as AppSettings;
     } catch (err) {
       console.error("[turso] app_settings row is corrupt JSON:", err);
     }

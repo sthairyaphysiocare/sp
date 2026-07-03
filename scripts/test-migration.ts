@@ -310,3 +310,20 @@ console.assert(
 console.log("✔ lockout schema + semantics OK (lock at 4, unlock, sync preserves lock)");
 
 console.log("\nALL TESTS PASSED (incl. lockout)");
+
+// 8. Batched writes: chunking + per-record fallback isolation
+{
+  const { executeBatchWithFallback } = rows;
+  await local.execute("CREATE TABLE IF NOT EXISTS bt (id TEXT PRIMARY KEY, v INTEGER NOT NULL)");
+  const items = Array.from({ length: 80 }, (_, i) => ({
+    label: "bt", sql: "INSERT OR REPLACE INTO bt (id, v) VALUES (?, ?)",
+    args: [`r${i}`, i === 41 ? null : i] as never, // r41 violates NOT NULL -> chunk 2 falls back
+    record: { id: `r${i}` },
+  }));
+  let ok = 0, bad = 0;
+  await executeBatchWithFallback(local as never, items as never, (_i: never, good: boolean) => (good ? ok++ : bad++));
+  const cnt = Number((await local.execute("SELECT COUNT(*) c FROM bt")).rows[0].c);
+  console.assert(ok === 79 && bad === 1 && cnt === 79, "batch fallback isolates exactly the bad record", { ok, bad, cnt });
+  console.log("✔ batched writes OK: 79/80 landed, 1 bad record isolated & logged, rest of chunk preserved");
+}
+console.log("ALL TESTS PASSED (incl. batching)");

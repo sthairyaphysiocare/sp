@@ -422,8 +422,9 @@ async function flushToCloud() {
     // Session state is per-browser (sessionStorage) — never persist to cloud.
     const toSave = { ...state, session: { userId: null } };
     const res = await syncState({ data: { data: JSON.stringify(toSave) } });
-    if (res.failures.length > 0) {
-      console.error("[store] some records failed to sync:", res.failures);
+    const resFailures = Array.isArray(res?.failures) ? res.failures : ["sync:malformed-response"];
+    if (resFailures.length > 0) {
+      console.error("[store] some records failed to sync:", resFailures);
       setSyncStatus("error");
     } else {
       setSyncStatus("idle");

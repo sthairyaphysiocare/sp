@@ -53,73 +53,126 @@ export const syncState = createServerFn({ method: "POST" })
 
     const failures: string[] = [];
 
-    async function reconcile<T extends { id: string }>(
-      label: string,
-      table: string,
-      idColumn: string,
-      records: T[] | undefined,
-      sql: string,
+    // ------------------------------------------------------------------
+    // Batched reconcile. Every client.execute() is one Workers subrequest
+    // (capped at 50/request on the free plan), so with real data volumes a
+    // per-record loop dies mid-sync. Instead:
+    //   1 batch  -> read existing ids of all six tables
+    //   N/35     -> chunked upsert batches across ALL tables combined
+    //   1 batch  -> all deletes for client-removed rows
+    // A failing chunk falls back to per-record execution so one bad record
+    // is logged with its data and skipped without aborting the sync.
+    // ------------------------------------------------------------------
+    type Entity = { id: string };
+    interface Spec {
+      label: string;
+      table: string;
+      records: Entity[];
+      sql: string;
       toArgs: (
-        rec: T,
-      ) => import("@libsql/client/web").InArgs | Promise<import("@libsql/client/web").InArgs>,
-    ) {
-      const list = Array.isArray(records) ? records : [];
-      const keep = new Set<string>();
-      for (const rec of list) {
+        rec: never,
+      ) => import("@libsql/client/web").InArgs | Promise<import("@libsql/client/web").InArgs>;
+    }
+    const specs: Spec[] = [
+      {
+        label: "user",
+        table: "users",
+        records: parsed.users ?? [],
+        sql: rows.UPSERT_USER,
+        toArgs: rows.userArgs as never,
+      },
+      {
+        label: "patient",
+        table: "patients",
+        records: parsed.patients ?? [],
+        sql: rows.UPSERT_PATIENT,
+        toArgs: rows.patientArgs as never,
+      },
+      {
+        label: "visit",
+        table: "visits",
+        records: parsed.visits ?? [],
+        sql: rows.UPSERT_VISIT,
+        toArgs: rows.visitArgs as never,
+      },
+      {
+        label: "note",
+        table: "clinical_notes",
+        records: parsed.notes ?? [],
+        sql: rows.UPSERT_NOTE,
+        toArgs: rows.noteArgs as never,
+      },
+      {
+        label: "booking",
+        table: "bookings",
+        records: parsed.bookings ?? [],
+        sql: rows.UPSERT_BOOKING,
+        toArgs: rows.bookingArgs as never,
+      },
+      {
+        label: "blocked",
+        table: "blocked_slots",
+        records: parsed.blocked ?? [],
+        sql: rows.UPSERT_BLOCKED,
+        toArgs: rows.blockedArgs as never,
+      },
+    ];
+
+    // 1. Existing ids (single batch).
+    const idResults = await db.batch(
+      specs.map((sp) => `SELECT id FROM ${sp.table}`),
+      "read",
+    );
+    const existingIds = idResults.map((r) => new Set(r.rows.map((row) => String(row.id))));
+
+    // 2. Prepare and run all upserts in shared chunks.
+    const items: import("./db.rows.server").BatchItem[] = [];
+    const okIds = specs.map(() => new Set<string>());
+    const itemMeta: Array<{ specIdx: number; id: string }> = [];
+    for (let si = 0; si < specs.length; si++) {
+      const sp = specs[si];
+      for (const rec of Array.isArray(sp.records) ? sp.records : []) {
         try {
-          const args = await toArgs(rec);
-          await db.execute({ sql, args });
-          keep.add(rec.id);
+          items.push({
+            label: sp.label,
+            sql: sp.sql,
+            args: await sp.toArgs(rec as never),
+            record: rec,
+          });
+          itemMeta.push({ specIdx: si, id: rec.id });
         } catch (err) {
-          console.error(`[sync] failed to upsert ${label}:`, err, "record:", rec);
-          failures.push(`${label}:${rec.id}`);
+          console.error(`[sync] failed to prepare ${sp.label}:`, err, "record:", rec);
+          failures.push(`${sp.label}:${rec.id}`);
         }
-      }
-      // Remove rows deleted on the client. Do NOT wipe the table when the
-      // incoming list is empty AND every upsert failed — that combination
-      // means the payload was bad, not that the user deleted everything.
-      try {
-        const existing = await db.execute(`SELECT ${idColumn} AS id FROM ${table}`);
-        for (const row of existing.rows) {
-          const id = String(row.id);
-          if (!keep.has(id)) {
-            if (list.some((r) => r.id === id)) continue; // upsert failed — keep the old row
-            await db.execute({ sql: `DELETE FROM ${table} WHERE ${idColumn} = ?`, args: [id] });
-          }
-        }
-      } catch (err) {
-        console.error(`[sync] failed to prune ${label}:`, err);
-        failures.push(`${label}:prune`);
       }
     }
+    let itemIdx = 0;
+    await rows.executeBatchWithFallback(db, items, (item, ok) => {
+      const meta = itemMeta[itemIdx++];
+      if (ok) okIds[meta.specIdx].add(meta.id);
+      else failures.push(`${item.label}:${meta.id}`);
+    });
 
-    await reconcile("user", "users", "id", parsed.users, rows.UPSERT_USER, rows.userArgs);
-    await reconcile(
-      "patient",
-      "patients",
-      "id",
-      parsed.patients,
-      rows.UPSERT_PATIENT,
-      rows.patientArgs,
-    );
-    await reconcile("visit", "visits", "id", parsed.visits, rows.UPSERT_VISIT, rows.visitArgs);
-    await reconcile("note", "clinical_notes", "id", parsed.notes, rows.UPSERT_NOTE, rows.noteArgs);
-    await reconcile(
-      "booking",
-      "bookings",
-      "id",
-      parsed.bookings,
-      rows.UPSERT_BOOKING,
-      rows.bookingArgs,
-    );
-    await reconcile(
-      "blocked",
-      "blocked_slots",
-      "id",
-      parsed.blocked,
-      rows.UPSERT_BLOCKED,
-      rows.blockedArgs,
-    );
+    // 3. Deletes for rows the client removed (single batch). A row whose
+    //    upsert failed stays untouched — a bad payload must never wipe data.
+    const deletes: Array<{ sql: string; args: import("@libsql/client/web").InArgs }> = [];
+    for (let si = 0; si < specs.length; si++) {
+      const sp = specs[si];
+      const sent = new Set((sp.records ?? []).map((r) => r.id));
+      for (const id of existingIds[si]) {
+        if (!okIds[si].has(id) && !sent.has(id)) {
+          deletes.push({ sql: `DELETE FROM ${sp.table} WHERE id = ?`, args: [id] });
+        }
+      }
+    }
+    if (deletes.length > 0) {
+      try {
+        await db.batch(deletes, "write");
+      } catch (err) {
+        console.error("[sync] delete batch failed:", err);
+        failures.push("prune:batch");
+      }
+    }
 
     if (parsed.settings) {
       try {

@@ -4,7 +4,17 @@
  *
  * Format: pbkdf2$<iterations>$<saltB64>$<hashB64>
  */
-const ITERATIONS = 210_000;
+/**
+ * CPU BUDGET WARNING: Cloudflare Workers' free plan enforces ~10 ms of CPU
+ * per request, and PBKDF2 cost is linear in iterations (measured: 210k
+ * iterations = ~33 ms CPU, which killed every request that hashed or
+ * verified a password). 10k iterations ≈ 1.8 ms, leaving headroom for the
+ * rest of the request. Brute force is primarily mitigated by the account
+ * lockout (4 attempts) and the admin progressive delay, not hash cost.
+ * The hash format is self-describing, so hashes created with any iteration
+ * count keep verifying if this constant changes.
+ */
+const ITERATIONS = 10_000;
 const SALT_LEN = 16;
 const HASH_LEN = 32;
 const PREFIX = "pbkdf2";
@@ -24,20 +34,20 @@ function b64decode(s: string): Uint8Array {
   return out;
 }
 
-async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<ArrayBuffer> {
+async function pbkdf2(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<ArrayBuffer> {
   const enc = new TextEncoder();
   const pwBytes = enc.encode(password);
   const pwBuf = new ArrayBuffer(pwBytes.byteLength);
   new Uint8Array(pwBuf).set(pwBytes);
   const saltBuf = new ArrayBuffer(salt.byteLength);
   new Uint8Array(saltBuf).set(salt);
-  const key = await crypto.subtle.importKey(
-    "raw",
-    pwBuf,
-    { name: "PBKDF2" },
-    false,
-    ["deriveBits"],
-  );
+  const key = await crypto.subtle.importKey("raw", pwBuf, { name: "PBKDF2" }, false, [
+    "deriveBits",
+  ]);
   return crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: saltBuf, iterations },
     key,

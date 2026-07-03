@@ -332,6 +332,53 @@ export interface MigrationReport {
   failed: Record<string, number>;
 }
 
+/**
+ * Cloudflare Workers cap outbound subrequests per request (50 on the free
+ * plan), and every client.execute() is one HTTP subrequest. All bulk writes
+ * therefore go through db.batch() in chunks — one subrequest per chunk —
+ * with a per-record fallback when a chunk fails, preserving the guarantee
+ * that a single bad record is logged (with its data) and skipped.
+ */
+export const BATCH_CHUNK = 35;
+
+export interface BatchItem {
+  label: string;
+  sql: string;
+  args: InArgs;
+  record: unknown;
+}
+
+export async function executeBatchWithFallback(
+  db: Client,
+  items: BatchItem[],
+  onResult: (item: BatchItem, ok: boolean) => void,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += BATCH_CHUNK) {
+    const chunk = items.slice(i, i + BATCH_CHUNK);
+    try {
+      await db.batch(
+        chunk.map((c) => ({ sql: c.sql, args: c.args })),
+        "write",
+      );
+      for (const c of chunk) onResult(c, true);
+    } catch (chunkErr) {
+      // Batch is transactional: one bad record aborts the chunk. Retry the
+      // chunk record-by-record so good records land and the bad one is
+      // logged with its exact error and data, then skipped.
+      console.error("[batch] chunk failed, isolating record-by-record:", chunkErr);
+      for (const c of chunk) {
+        try {
+          await db.execute({ sql: c.sql, args: c.args });
+          onResult(c, true);
+        } catch (err) {
+          console.error(`[batch] failed to write ${c.label} record:`, err, "record:", c.record);
+          onResult(c, false);
+        }
+      }
+    }
+  }
+}
+
 async function insertLoop<T extends { id?: unknown }>(
   db: Client,
   label: string,
@@ -343,18 +390,20 @@ async function insertLoop<T extends { id?: unknown }>(
   const list = Array.isArray(records) ? records : [];
   report.inserted[label] = 0;
   report.failed[label] = 0;
+  const items: BatchItem[] = [];
   for (const rec of list) {
     try {
-      const args = await toArgs(rec);
-      // Parameterized insert — special characters in data cannot break SQL.
-      await db.execute({ sql, args });
-      report.inserted[label]++;
+      // Parameterized statements — special characters cannot break SQL.
+      items.push({ label, sql, args: await toArgs(rec), record: rec });
     } catch (err) {
-      // Log the exact error AND the specific record, then CONTINUE the loop.
-      console.error(`[migration] failed to insert ${label} record:`, err, "record:", rec);
+      console.error(`[migration] failed to prepare ${label} record:`, err, "record:", rec);
       report.failed[label]++;
     }
   }
+  await executeBatchWithFallback(db, items, (_item, ok) => {
+    if (ok) report.inserted[label]++;
+    else report.failed[label]++;
+  });
 }
 
 /**
