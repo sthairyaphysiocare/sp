@@ -1,8 +1,20 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { store, useStore, takenSlotsForDate, slotConflict } from "@/lib/store";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useState } from "react";
-import { ArrowLeft, FileText, Plus, Activity, Trash2, Pencil, Check, X, Lock } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Plus,
+  Activity,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  Lock,
+  CalendarClock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +39,7 @@ import {
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { addDaysISO, fmtDate, slotsForDate, todayISO } from "@/lib/date";
+import { addDaysISO, fmtDate, fmtTime12, slotsForDateBranch, todayISO } from "@/lib/date";
 import { branchById, enabledBranches } from "@/lib/logo";
 import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
 import { IconButton } from "@/components/IconButton";
@@ -86,6 +98,9 @@ function PatientDetail() {
   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : "—";
   const lastVisit = visits[visits.length - 1];
   const canClinical = hasRole("admin", "therapist");
+  // Reception is explicitly granted: demographic + clinical editing and
+  // patient status changes (prescriptions and visit logging stay clinical).
+  const canManage = hasRole("admin", "therapist", "reception");
   const canEdit = canClinical && isActive;
 
   // Plain expression (a hook here would run conditionally after the early return above).
@@ -138,7 +153,7 @@ function PatientDetail() {
             >
               {status}
             </span>
-            {canClinical && (
+            {canManage && (
               <select
                 value={status}
                 onChange={(e) => changeStatus(e.target.value as PatientStatus)}
@@ -163,7 +178,7 @@ function PatientDetail() {
               <FileText className="size-4" /> Prescription
             </Button>
           )}
-          {canClinical && (
+          {canManage && (
             <Button variant="outline" onClick={() => setEditing(true)} disabled={!isActive}>
               {isActive ? (
                 <>
@@ -188,7 +203,9 @@ function PatientDetail() {
         </div>
       </div>
 
-      {!isActive && canClinical && (
+      <NextReviewSection patient={patient} />
+
+      {!isActive && canManage && (
         <div className="mt-4 p-3 rounded-lg bg-muted/60 border text-sm flex items-center gap-2">
           <Lock className="size-4 text-muted-foreground" />
           <span>
@@ -231,7 +248,7 @@ function PatientDetail() {
               <Row k="Height / Weight" v={`${patient.h || "—"} cm / ${patient.w || "—"} kg`} />
               <Row k="Therapist" v={therapists.find((t) => t.id === patient.tId)?.name || "—"} />
             </Card>
-            {canClinical && (
+            {canManage && (
               <Card title="Clinical">
                 <Row k="Chief Complaint" v={patient.cc || "—"} />
                 <Row k="HPI" v={patient.pi || "—"} />
@@ -350,6 +367,163 @@ function Row({ k, v }: { k: string; v: string }) {
     <div className="grid grid-cols-[120px_1fr] gap-3">
       <div className="text-muted-foreground text-xs uppercase tracking-wider font-medium">{k}</div>
       <div className="break-words">{v}</div>
+    </div>
+  );
+}
+
+/**
+ * Next Review — visible to Admin, Therapist and Reception. Highlights an
+ * upcoming scheduled review; when blank, offers standalone scheduling that
+ * enforces the same guardrails as Log Visit: dates from tomorrow only,
+ * branch working hours, and duration-aware no-double-booking masking.
+ */
+function NextReviewSection({ patient }: { patient: Patient }) {
+  const visits = useStore((s) => s.visits.filter((v) => v.patientId === patient.id));
+  const branch = useStore((s) => s.settings.branches.find((b) => b.id === patient.br));
+  const { user, hasRole } = useAuth();
+  const canSchedule = hasRole("admin", "therapist", "reception");
+  const lastVisit = visits[visits.length - 1];
+  const scheduled = lastVisit?.nxt ? { date: lastVisit.nxt, time: lastVisit.nxtTm } : null;
+
+  const [open, setOpen] = useState(false);
+  const [d, setD] = useState("");
+  const [t, setT] = useState("");
+  const [dur, setDur] = useState(lastVisit?.dur ?? 30);
+  const taken = useStore((s) => takenSlotsForDate(s, d, lastVisit?.id));
+  const slots = slotsForDateBranch(d, branch);
+  const minDate = addDaysISO(todayISO(), 1);
+
+  if (!canSchedule) return null;
+
+  function save() {
+    if (!d || !t) {
+      toast.error("Pick a date and time");
+      return;
+    }
+    if (d <= todayISO()) {
+      toast.error("Next review date must be from tomorrow onwards");
+      return;
+    }
+    const conflict = slotConflict(store.get(), d, t, dur || 30, lastVisit?.id);
+    if (conflict === "overlap") {
+      toast.error("Duration exceeds available time before next appointment");
+      return;
+    }
+    if (conflict === "taken") {
+      toast.error("That time is already booked. Please pick another.");
+      return;
+    }
+    if (lastVisit) {
+      store.updateVisit(lastVisit.id, { nxt: d, nxtTm: t, dur });
+    } else {
+      store.addVisit({
+        patientId: patient.id,
+        dt: todayISO(),
+        tId: user?.id || "",
+        tN: user?.name || "",
+        pS: 0,
+        sym: "",
+        rom: "",
+        str: "",
+        tx: "Review scheduled directly (no visit logged).",
+        adv: "",
+        fi: 0,
+        nxt: d,
+        nxtTm: t,
+        dur,
+      });
+    }
+    toast.success(`Next review set for ${fmtDate(d)} at ${fmtTime12(t)}`);
+    setOpen(false);
+    setD("");
+    setT("");
+  }
+
+  return (
+    <div
+      className={cn(
+        "mt-4 p-4 rounded-2xl border flex flex-wrap items-center gap-3",
+        scheduled ? "bg-accent/60 border-brand/40 soft-shadow" : "bg-card",
+      )}
+    >
+      <CalendarClock
+        className={cn("size-5 shrink-0", scheduled ? "text-brand" : "text-muted-foreground")}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Next Review</div>
+        {scheduled ? (
+          <div className="text-sm font-bold text-brand">
+            {fmtDate(scheduled.date)}
+            {scheduled.time ? ` · ${fmtTime12(scheduled.time)}` : ""}
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">—</div>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant={scheduled ? "outline" : "default"}
+        className={scheduled ? "" : "brand-gradient text-white border-0"}
+        onClick={() => {
+          setD(scheduled?.date && scheduled.date >= minDate ? scheduled.date : "");
+          setT(scheduled?.time || "");
+          setOpen((o) => !o);
+        }}
+      >
+        <CalendarClock className="size-4" /> {scheduled ? "Reschedule" : "Schedule Review"}
+      </Button>
+
+      {open && (
+        <div className="w-full grid sm:grid-cols-[1fr_1fr_auto_auto] gap-2 pt-2 border-t border-brand/10">
+          <div>
+            <Label className="text-xs">Date (from tomorrow)</Label>
+            <Input
+              type="date"
+              min={minDate}
+              value={d}
+              onChange={(e) => {
+                setD(e.target.value);
+                setT("");
+              }}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Time (branch hours)</Label>
+            <select
+              value={t}
+              onChange={(e) => setT(e.target.value)}
+              className="w-full h-9 px-2 rounded-md border bg-background text-sm"
+            >
+              <option value="">Select Time</option>
+              {slots.map((sl) => (
+                <option key={sl} value={sl} disabled={taken.includes(sl)}>
+                  {fmtTime12(sl)}
+                  {taken.includes(sl) ? " — booked" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Duration</Label>
+            <select
+              value={dur}
+              onChange={(e) => setDur(Number(e.target.value))}
+              className="h-9 px-2 rounded-md border bg-background text-sm"
+            >
+              {[30, 60, 90].map((x) => (
+                <option key={x} value={x}>
+                  {x} min
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="self-end">
+            <Button size="sm" onClick={save} className="brand-gradient text-white border-0">
+              <Check className="size-4" /> Save
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -618,7 +792,8 @@ function VisitsTab({
     dur: 30,
   });
   const taken = useStore((s) => takenSlotsForDate(s, v.nxt));
-  const slots = slotsForDate(v.nxt);
+  const branch = useStore((s) => s.settings.branches.find((b) => b.id === patient.br));
+  const slots = slotsForDateBranch(v.nxt, branch);
 
   function save() {
     if (!canEdit) return;

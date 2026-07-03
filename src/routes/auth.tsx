@@ -208,11 +208,11 @@ function AuthPage() {
             aria-label="Go to Home page"
             className="transition-transform hover:scale-[1.02]"
           >
-            <Logo size={96} />
+            <Logo size={110} showText={false} />
           </Link>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold">
-          {mode === "signin" ? "Staff Sign In" : "Reset Password"}
+          {mode === "signin" ? "Staff Login" : "Reset Password"}
         </h2>
         <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
           {mode === "signin" ? (

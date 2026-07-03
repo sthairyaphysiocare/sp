@@ -139,6 +139,18 @@ export interface Clinician {
   speciality: string;
 }
 
+export interface SocialLink {
+  url: string;
+  enabled: boolean;
+}
+
+export interface SocialLinks {
+  youtube: SocialLink;
+  instagram: SocialLink;
+  facebook: SocialLink;
+  blog: SocialLink;
+}
+
 export interface AppSettings {
   publicStatsEnabled: boolean;
   branches: Branch[];
@@ -149,6 +161,7 @@ export interface AppSettings {
   redirectUrl2?: string; // optional
   prescriptionUrl?: string; // clinic URL shown in prescription header
   prescriptionUrlEnabled?: boolean;
+  socials?: SocialLinks;
   stats: PublicStats;
   specialities: SpecialityItem[];
   cliniciansEnabled: boolean;

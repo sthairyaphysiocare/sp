@@ -59,6 +59,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https://api.emailjs.com",
+    "frame-src https://www.google.com https://maps.google.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

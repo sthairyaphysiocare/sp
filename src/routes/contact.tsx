@@ -46,6 +46,15 @@ function ContactPage() {
   const globalEmail = settings.globalEmail || CLINIC.email;
   const [activeId, setActiveId] = useState<string>(branches[0]?.id || "");
   const active = branches.find((b) => b.id === activeId) || branches[0];
+  // Valid Google Maps EMBED url per branch: if the admin pasted an official
+  // embed link (google.com/maps/embed...), use it verbatim; otherwise build
+  // the keyless embed format from the branch's address.
+  const mapEmbedSrc =
+    active?.mapUrl && /google\.[a-z.]+\/maps\/embed/i.test(active.mapUrl)
+      ? active.mapUrl
+      : `https://www.google.com/maps?q=${encodeURIComponent(
+          `${active?.name ?? "Sthairya Physiocare"} ${active?.address ?? "Puttur Karnataka"}`,
+        )}&output=embed`;
   const mapQuery = encodeURIComponent(active?.address || CLINIC.mapRef);
 
   return (
@@ -146,9 +155,11 @@ function ContactPage() {
             <iframe
               key={active?.id}
               title={`Map — ${active?.name || "Clinic"}`}
-              src={`https://maps.google.com/maps?q=${mapQuery}&output=embed`}
+              src={mapEmbedSrc}
               className="w-full h-full min-h-[400px] border-0"
               loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
             />
           </div>
         </div>

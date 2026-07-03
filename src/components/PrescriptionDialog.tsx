@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { LOGO_URL, branchById, whatsappDigits } from "@/lib/logo";
 import type { Patient, Visit } from "@/lib/types";
-import { slotConflict, store, useStore } from "@/lib/store";
+import { slotConflict, store, takenSlotsForDate, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
@@ -22,7 +22,7 @@ import {
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
 import { amountInWordsINR } from "@/lib/utils";
-import { fmtDate, fmtTime12, slotsForDate, todayISO } from "@/lib/date";
+import { fmtDate, fmtTime12, slotsForDateBranch, todayISO } from "@/lib/date";
 
 interface Props {
   patient: Patient;
@@ -86,7 +86,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const [waPrompt, setWaPrompt] = useState(false);
   const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
-  const reviewSlots = slotsForDate(rx.reviewDate);
+  const reviewSlots = slotsForDateBranch(rx.reviewDate, branch);
+  const reviewTaken = useStore((s) => takenSlotsForDate(s, rx.reviewDate, lastVisit?.id));
   const has = (s: string) => !!(s && s.trim());
 
   const receiptTotal = receipt.items.reduce(
@@ -742,8 +743,9 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   >
                     <option value="">— None —</option>
                     {reviewSlots.map((s) => (
-                      <option key={s} value={s}>
+                      <option key={s} value={s} disabled={reviewTaken.includes(s)}>
                         {fmtTime12(s)}
+                        {reviewTaken.includes(s) ? " — booked" : ""}
                       </option>
                     ))}
                   </select>
@@ -953,8 +955,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                             {settings.prescriptionUrlEnabled !== false &&
                               settings.prescriptionUrl && (
                                 <>
-                                  {(branch.emailId || settings.globalEmail) && " · "}
-                                  {settings.prescriptionUrl}
+                                  {(branch.emailId || settings.globalEmail) && (
+                                    <span className="mx-2 text-gray-400">|</span>
+                                  )}
+                                  Web: {settings.prescriptionUrl}
                                 </>
                               )}
                           </div>

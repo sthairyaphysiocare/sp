@@ -20,6 +20,7 @@ import {
   BarChart3,
   Users,
   Camera,
+  Share2,
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { ICON_OPTIONS } from "@/lib/icons";
@@ -99,6 +100,20 @@ function Settings() {
     }
     store.setSettings({ whatsappNumber: digits });
     toast.success("WhatsApp Business number updated");
+  }
+
+  const [socials, setSocials] = useState(
+    settings.socials ?? {
+      youtube: { url: "", enabled: false },
+      instagram: { url: "", enabled: false },
+      facebook: { url: "", enabled: false },
+      blog: { url: "", enabled: false },
+    },
+  );
+
+  function saveSocials() {
+    store.setSettings({ socials });
+    toast.success("Social media links updated");
   }
 
   function saveLinks() {
@@ -289,6 +304,63 @@ function Settings() {
                 </div>
                 <Button onClick={saveLinks} className="brand-gradient text-white border-0">
                   Save Links
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 p-6 rounded-2xl bg-card border max-w-xl">
+            <div className="flex items-start gap-3">
+              <div className="size-10 rounded-lg bg-rose-500 grid place-items-center text-white shrink-0">
+                <Share2 className="size-5" />
+              </div>
+              <div className="flex-1 space-y-3 min-w-0">
+                <div>
+                  <h2 className="font-semibold">Social Media &amp; Links</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Icons appear in the public footer only when a URL is provided AND the platform
+                    is enabled. All platforms are disabled by default.
+                  </p>
+                </div>
+                {(
+                  [
+                    ["youtube", "YouTube"],
+                    ["instagram", "Instagram"],
+                    ["facebook", "Facebook"],
+                    ["blog", "Blog"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="flex items-end gap-2 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <Label>{label} URL</Label>
+                      <Input
+                        value={socials[key].url}
+                        onChange={(e) =>
+                          setSocials({
+                            ...socials,
+                            [key]: { ...socials[key], url: e.target.value },
+                          })
+                        }
+                        placeholder="https://…"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm pb-2 select-none shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={socials[key].enabled}
+                        onChange={(e) =>
+                          setSocials({
+                            ...socials,
+                            [key]: { ...socials[key], enabled: e.target.checked },
+                          })
+                        }
+                      />
+                      Enable
+                    </label>
+                  </div>
+                ))}
+                <Button onClick={saveSocials} className="brand-gradient text-white border-0">
+                  Save Social Links
                 </Button>
               </div>
             </div>

@@ -6,7 +6,17 @@ import { Logo } from "@/components/Logo";
 import { CLINIC, enabledBranches } from "@/lib/logo";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { ExternalLink, Mail as MailIcon, Menu, Phone as PhoneIcon, X } from "lucide-react";
+import {
+  BookOpen,
+  ExternalLink,
+  Facebook,
+  Instagram,
+  Mail as MailIcon,
+  Menu,
+  Phone as PhoneIcon,
+  X,
+  Youtube,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +33,41 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const settings = useStore((s) => s.settings);
   const branches = enabledBranches(settings);
   const globalEmail = settings.globalEmail || CLINIC.email;
+  // Social icons render ONLY when a URL exists AND the platform is enabled.
+  const normalizeUrl = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
+  const soc = settings.socials;
+  const socialLinks = soc
+    ? (
+        [
+          {
+            key: "youtube",
+            label: "YouTube",
+            link: soc.youtube,
+            icon: <Youtube className="size-4" />,
+          },
+          {
+            key: "instagram",
+            label: "Instagram",
+            link: soc.instagram,
+            icon: <Instagram className="size-4" />,
+          },
+          {
+            key: "facebook",
+            label: "Facebook",
+            link: soc.facebook,
+            icon: <Facebook className="size-4" />,
+          },
+          { key: "blog", label: "Blog", link: soc.blog, icon: <BookOpen className="size-4" /> },
+        ] as const
+      )
+        .filter((x) => x.link.enabled && x.link.url.trim() !== "")
+        .map((x) => ({
+          key: x.key,
+          label: x.label,
+          url: normalizeUrl(x.link.url.trim()),
+          icon: x.icon,
+        }))
+    : [];
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -160,6 +205,23 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 <MailIcon className="size-3.5 shrink-0 text-background/90" />
                 <span className="break-all">{globalEmail}</span>
               </a>
+              {socialLinks.length > 0 && (
+                <div className="flex items-center gap-3 pt-3">
+                  {socialLinks.map((sc) => (
+                    <a
+                      key={sc.key}
+                      href={sc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={sc.label}
+                      title={sc.label}
+                      className="grid place-items-center size-9 rounded-full bg-background/10 text-background/80 hover:bg-background/20 hover:text-background transition-colors"
+                    >
+                      {sc.icon}
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

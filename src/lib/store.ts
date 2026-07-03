@@ -13,6 +13,7 @@ import type {
   Visit,
   Role,
   BranchHours,
+  SocialLinks,
 } from "./types";
 import { DEFAULT_BRANCH, CLINIC } from "./logo";
 import {
@@ -57,6 +58,16 @@ const DEFAULT_USERS: User[] = [
     emailId: "",
   },
 ];
+
+export function DEFAULT_SOCIALS(): SocialLinks {
+  // All platforms start disabled with empty URLs (admin opts in explicitly).
+  return {
+    youtube: { url: "", enabled: false },
+    instagram: { url: "", enabled: false },
+    facebook: { url: "", enabled: false },
+    blog: { url: "", enabled: false },
+  };
+}
 
 export const DEFAULT_HOURS: BranchHours = {
   mon: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
@@ -307,6 +318,7 @@ function defaultSettings(): AppSettings {
     redirectUrl2: "",
     prescriptionUrl: "sthairyaphysiocare.pages.dev",
     prescriptionUrlEnabled: true,
+    socials: DEFAULT_SOCIALS(),
     stats: { ...DEFAULT_STATS },
     specialities: DEFAULT_SPECIALITIES.map((s) => ({ ...s })),
     cliniciansEnabled: false,
@@ -361,6 +373,13 @@ function normalizeDb(parsed: Partial<DB>): DB {
   if (typeof db.settings.globalUrl !== "string") db.settings.globalUrl = "";
   if (typeof db.settings.redirectUrl1 !== "string") db.settings.redirectUrl1 = "";
   if (typeof db.settings.redirectUrl2 !== "string") db.settings.redirectUrl2 = "";
+  if (!db.settings.socials) db.settings.socials = DEFAULT_SOCIALS();
+  for (const k of ["youtube", "instagram", "facebook", "blog"] as const) {
+    const v = db.settings.socials[k];
+    if (!v || typeof v.url !== "string" || typeof v.enabled !== "boolean") {
+      db.settings.socials[k] = { url: v?.url ?? "", enabled: v?.enabled === true };
+    }
+  }
   if (!db.settings.stats) db.settings.stats = { ...DEFAULT_STATS };
   if (!db.settings.specialities)
     db.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
@@ -874,9 +893,10 @@ export function slotConflict(
   date: string,
   time: string,
   dur: number,
+  excludeVisitId?: string,
 ): "taken" | "overlap" | null {
   if (!date || !time) return null;
-  const taken = new Set(takenSlotsForDate(s, date));
+  const taken = new Set(takenSlotsForDate(s, date, excludeVisitId));
   const [h, m] = time.split(":").map(Number);
   const start = h * 60 + m;
   for (let t = start; t < start + dur; t += 30) {
@@ -886,9 +906,10 @@ export function slotConflict(
   return null;
 }
 
-export function takenSlotsForDate(s: DB, date: string): string[] {
+export function takenSlotsForDate(s: DB, date: string, excludeVisitId?: string): string[] {
   const out = new Set<string>();
   for (const v of s.visits) {
+    if (v.id === excludeVisitId) continue; // rescheduling: ignore own slot
     if (v.nxt === date && v.nxtTm) {
       const dur = v.dur ?? 30;
       addRange(out, v.nxtTm, dur);
