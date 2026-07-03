@@ -127,6 +127,22 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     updated_at INTEGER NOT NULL DEFAULT 0
   )`,
 
+  // Saved prescriptions/receipts (assigned sequential receipt numbers).
+  `CREATE TABLE IF NOT EXISTS prescriptions (
+    id         TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    receipt_no TEXT,
+    data       TEXT NOT NULL,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT 0
+  )`,
+
+  // Named atomic counters (e.g. the sequential receipt number).
+  `CREATE TABLE IF NOT EXISTS counters (
+    name  TEXT PRIMARY KEY,
+    value INTEGER NOT NULL DEFAULT 0
+  )`,
+
   // Append-only audit trail.
   `CREATE TABLE IF NOT EXISTS audit_log (
     id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,6 +163,7 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits (patient_id)`,
   `CREATE INDEX IF NOT EXISTS idx_notes_patient ON clinical_notes (patient_id)`,
   `CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status)`,
+  `CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions (patient_id)`,
 ];
 
 /**

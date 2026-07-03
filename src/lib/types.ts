@@ -144,6 +144,11 @@ export interface AppSettings {
   branches: Branch[];
   whatsappNumber: string;
   globalEmail?: string;
+  globalUrl?: string; // optional link shown in prescription header after address
+  redirectUrl1?: string; // optional
+  redirectUrl2?: string; // optional
+  prescriptionUrl?: string; // clinic URL shown in prescription header
+  prescriptionUrlEnabled?: boolean;
   stats: PublicStats;
   specialities: SpecialityItem[];
   cliniciansEnabled: boolean;

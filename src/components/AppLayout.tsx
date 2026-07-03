@@ -30,6 +30,12 @@ const NAV: NavItem[] = [
     roles: ["admin", "therapist", "reception", "other"],
   },
   {
+    to: "/app/upcoming",
+    label: "Upcoming Visits",
+    icon: <CalendarClock className="size-4" />,
+    roles: ["admin", "therapist", "reception"],
+  },
+  {
     to: "/app/patients",
     label: "Patients",
     icon: <Users className="size-4" />,

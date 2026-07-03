@@ -347,3 +347,46 @@ export const unlockUser = createServerFn({ method: "POST" })
     await auditEvent("auth.unlock", data.userId);
     return { ok: true as const };
   });
+
+/**
+ * Persist a prescription (and its receipt) to the database. When the
+ * prescription includes a receipt, a sequential receipt number is allocated
+ * atomically: SP-000001, SP-000002, ... The number survives retries because
+ * the counter row is bumped in a single UPSERT...RETURNING statement.
+ */
+export const savePrescription = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { patientId: string; hasReceipt: boolean; data: string; createdBy?: string }) => {
+      if (!input || typeof input.patientId !== "string" || typeof input.data !== "string") {
+        throw new Error("Invalid payload");
+      }
+      if (input.data.length > 512 * 1024) throw new Error("Prescription payload too large");
+      return input;
+    },
+  )
+  .handler(async ({ data }) => {
+    const { turso, ensureSchema, auditEvent } = await import("./turso.server");
+    await ensureSchema();
+    const db = turso();
+
+    let receiptNo: string | null = null;
+    if (data.hasReceipt) {
+      const res = await db.execute({
+        sql: `INSERT INTO counters (name, value) VALUES ('receipt', 1)
+              ON CONFLICT(name) DO UPDATE SET value = value + 1
+              RETURNING value`,
+        args: [],
+      });
+      const n = Number(res.rows[0]?.value ?? 0);
+      receiptNo = `SP-${String(n).padStart(6, "0")}`;
+    }
+
+    const id = `rx${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    await db.execute({
+      sql: `INSERT INTO prescriptions (id, patient_id, receipt_no, data, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [id, data.patientId, receiptNo, data.data, data.createdBy ?? "", Date.now()],
+    });
+    await auditEvent("prescription.save", `${id}${receiptNo ? `:${receiptNo}` : ""}`);
+    return { ok: true as const, id, receiptNo };
+  });

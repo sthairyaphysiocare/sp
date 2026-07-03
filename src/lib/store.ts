@@ -58,7 +58,7 @@ const DEFAULT_USERS: User[] = [
   },
 ];
 
-const DEFAULT_HOURS: BranchHours = {
+export const DEFAULT_HOURS: BranchHours = {
   mon: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
   tue: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
   wed: "9:00 AM – 1:00 PM & 4:00 PM – 8:00 PM",
@@ -301,7 +301,12 @@ function defaultSettings(): AppSettings {
     publicStatsEnabled: false,
     branches: [{ ...DEFAULT_BRANCH, hours: { ...DEFAULT_HOURS }, emailId: "" }],
     whatsappNumber: CLINIC.whatsapp,
-    globalEmail: CLINIC.email,
+    globalEmail: "SthairyaPhysiocare@gmail.com",
+    globalUrl: "",
+    redirectUrl1: "",
+    redirectUrl2: "",
+    prescriptionUrl: "sthairyaphysiocare.pages.dev",
+    prescriptionUrlEnabled: true,
     stats: { ...DEFAULT_STATS },
     specialities: DEFAULT_SPECIALITIES.map((s) => ({ ...s })),
     cliniciansEnabled: false,
@@ -347,7 +352,15 @@ function normalizeDb(parsed: Partial<DB>): DB {
     emailId: b.emailId ?? "",
   }));
   if (!db.settings.whatsappNumber) db.settings.whatsappNumber = CLINIC.whatsapp;
-  if (typeof db.settings.globalEmail !== "string") db.settings.globalEmail = CLINIC.email;
+  if (typeof db.settings.globalEmail !== "string" || db.settings.globalEmail === "")
+    db.settings.globalEmail = "SthairyaPhysiocare@gmail.com";
+  if (typeof db.settings.prescriptionUrl !== "string")
+    db.settings.prescriptionUrl = "sthairyaphysiocare.pages.dev";
+  if (typeof db.settings.prescriptionUrlEnabled !== "boolean")
+    db.settings.prescriptionUrlEnabled = true;
+  if (typeof db.settings.globalUrl !== "string") db.settings.globalUrl = "";
+  if (typeof db.settings.redirectUrl1 !== "string") db.settings.redirectUrl1 = "";
+  if (typeof db.settings.redirectUrl2 !== "string") db.settings.redirectUrl2 = "";
   if (!db.settings.stats) db.settings.stats = { ...DEFAULT_STATS };
   if (!db.settings.specialities)
     db.settings.specialities = DEFAULT_SPECIALITIES.map((s) => ({ ...s }));
@@ -837,6 +850,29 @@ export const store = {
     persist();
   },
 };
+
+/**
+ * Duration-aware conflict check for a candidate appointment.
+ * Returns "taken" when the start time itself sits inside an existing blocked
+ * interval, "overlap" when the start is free but the chosen duration runs
+ * into a later blocked interval, or null when the whole window is free.
+ */
+export function slotConflict(
+  s: DB,
+  date: string,
+  time: string,
+  dur: number,
+): "taken" | "overlap" | null {
+  if (!date || !time) return null;
+  const taken = new Set(takenSlotsForDate(s, date));
+  const [h, m] = time.split(":").map(Number);
+  const start = h * 60 + m;
+  for (let t = start; t < start + dur; t += 30) {
+    const key = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+    if (taken.has(key)) return t === start ? "taken" : "overlap";
+  }
+  return null;
+}
 
 export function takenSlotsForDate(s: DB, date: string): string[] {
   const out = new Set<string>();

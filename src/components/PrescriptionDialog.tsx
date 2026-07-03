@@ -17,9 +17,11 @@ import {
   Receipt,
   Plus,
   Trash2,
+  Save,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
+import { amountInWordsINR } from "@/lib/utils";
 import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
 
 interface Props {
@@ -71,8 +73,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     reviewTime: lastVisit?.nxtTm || "",
   });
   const [receiptOn, setReceiptOn] = useState(false);
+  const [savedReceiptNo, setSavedReceiptNo] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [receipt, setReceipt] = useState({
-    no: `RX-${Date.now().toString().slice(-6)}`,
+    no: "",
     mode: "Cash",
     items: [] as ReceiptItem[],
     paid: 0,
@@ -321,7 +325,11 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10);
       pdf.setTextColor(2, 132, 199);
-      pdf.text(`RECEIPT  \u2022  ${receipt.no}  \u2022  ${receipt.mode}`, margin, y);
+      pdf.text(
+        `RECEIPT  \u2022  ${savedReceiptNo ?? "Unsaved"}  \u2022  ${receipt.mode}`,
+        margin,
+        y,
+      );
       pdf.setTextColor(0);
       y += 6;
       const cols = [margin, margin + 100, margin + 122, pw - margin];
@@ -392,6 +400,44 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
       return null;
     } finally {
       setBusy(null);
+    }
+  }
+
+  /**
+   * "Save, Preview & Print": persists the prescription (+ receipt) to the
+   * database, allocating the sequential SP-XXXXXX receipt number, then moves
+   * to the preview. Plain "Preview" skips saving.
+   */
+  async function saveAndPreview() {
+    if (saving) return;
+    setSaving(true);
+    const t = toast.loading("Saving prescription...");
+    try {
+      const { savePrescription } = await import("@/lib/db.functions");
+      const res = await savePrescription({
+        data: {
+          patientId: patient.id,
+          hasReceipt: receiptHasContent && !savedReceiptNo,
+          createdBy: lastVisit?.tN || "",
+          data: JSON.stringify({
+            rx,
+            receipt: { ...receipt, no: savedReceiptNo ?? "" },
+            receiptOn,
+            patient: { id: patient.id, pid: patient.pid, n: patient.n },
+            savedAt: Date.now(),
+          }),
+        },
+      });
+      if (res.receiptNo) setSavedReceiptNo(res.receiptNo);
+      toast.success(res.receiptNo ? `Saved — Receipt ${res.receiptNo}` : "Prescription saved", {
+        id: t,
+      });
+      setStep("preview");
+    } catch (err) {
+      console.error("save prescription failed", err);
+      toast.error("Couldn't save. Check connection and retry.", { id: t });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -497,7 +543,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
           </button>
 
           {/* Header / stepper — hidden in print */}
-          <div className="p-3 sm:p-4 border-b flex items-center justify-between gap-3 flex-wrap print:hidden pr-12">
+          <div className="p-3 sm:p-4 border-b flex items-center justify-between gap-3 flex-wrap print:hidden pr-12 sm:pr-16">
             <div className="flex items-center gap-2 min-w-0">
               <h2 className="font-semibold text-base sm:text-lg truncate">
                 Prescription · {patient.pid}
@@ -518,13 +564,20 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
             </div>
             <div className="flex gap-2 flex-wrap">
               {step === "edit" ? (
-                <Button
-                  size="sm"
-                  className="brand-gradient text-white border-0"
-                  onClick={() => setStep("preview")}
-                >
-                  <Eye className="size-4" /> Preview & Print <ArrowRight className="size-4" />
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setStep("preview")}>
+                    <Eye className="size-4" /> Preview
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="brand-gradient text-white border-0"
+                    disabled={saving}
+                    onClick={saveAndPreview}
+                  >
+                    <Save className="size-4" /> {saving ? "Saving..." : "Save, Preview & Print"}{" "}
+                    <ArrowRight className="size-4" />
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setStep("edit")}>
@@ -653,11 +706,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   <div className="mt-4 space-y-3">
                     <div className="grid sm:grid-cols-3 gap-3">
                       <div>
-                        <Label>Receipt No.</Label>
-                        <Input
-                          value={receipt.no}
-                          onChange={(e) => setReceipt({ ...receipt, no: e.target.value })}
-                        />
+                        <Label>Receipt No. (assigned on save)</Label>
+                        <Input value={savedReceiptNo ?? "SP-______"} readOnly disabled />
                       </div>
                       <div>
                         <Label>Payment Mode</Label>
@@ -776,7 +826,15 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   className="brand-gradient text-white border-0"
                   onClick={() => setStep("preview")}
                 >
-                  <Eye className="size-4" /> Preview & Print <ArrowRight className="size-4" />
+                  <Eye className="size-4" /> Preview
+                </Button>
+                <Button
+                  className="brand-gradient text-white border-0"
+                  disabled={saving}
+                  onClick={saveAndPreview}
+                >
+                  <Save className="size-4" /> {saving ? "Saving..." : "Save, Preview & Print"}{" "}
+                  <ArrowRight className="size-4" />
                 </Button>
               </div>
             </div>
@@ -787,7 +845,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
             <div className="p-2 sm:p-4 bg-muted print:p-0 print:bg-white overflow-x-auto">
               <div
                 ref={ref}
-                className="relative bg-white text-black p-8 mx-auto shadow-sm print:shadow-none"
+                className="relative bg-white text-black p-8 pb-24 mx-auto shadow-sm print:shadow-none"
                 style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}
               >
                 <div
@@ -808,7 +866,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                     <img
                       src={LOGO_URL}
                       alt="Logo"
-                      className="w-20 h-20 object-contain shrink-0"
+                      className="w-20 h-20 rounded-full object-cover ring-2 ring-[#0284c7]/20 shrink-0"
                       crossOrigin="anonymous"
                     />
                     <div>
@@ -828,6 +886,32 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                             Phone: {branch.phone}
                             {branch.license && <> · Reg. No: {branch.license}</>}
                           </div>
+                          <div className="text-xs text-gray-600">
+                            {(branch.emailId || settings.globalEmail) && (
+                              <>Email: {branch.emailId || settings.globalEmail}</>
+                            )}
+                            {settings.prescriptionUrlEnabled !== false &&
+                              settings.prescriptionUrl && (
+                                <>
+                                  {(branch.emailId || settings.globalEmail) && " · "}
+                                  {settings.prescriptionUrl}
+                                </>
+                              )}
+                          </div>
+                          {settings.globalUrl && (
+                            <a
+                              href={
+                                /^https?:\/\//i.test(settings.globalUrl)
+                                  ? settings.globalUrl
+                                  : `https://${settings.globalUrl}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[#0284c7] underline underline-offset-2 break-all"
+                            >
+                              {settings.globalUrl}
+                            </a>
+                          )}
                         </>
                       )}
                     </div>
@@ -892,8 +976,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                           Payment Receipt
                         </div>
                         <div className="text-[11px] text-gray-700">
-                          <span className="font-semibold">Receipt #</span> {receipt.no}{" "}
-                          &nbsp;·&nbsp;
+                          <span className="font-semibold">Receipt #</span>{" "}
+                          {savedReceiptNo ?? "— assigned on save —"} &nbsp;·&nbsp;
                           <span className="font-semibold">Mode:</span> {receipt.mode}
                         </div>
                       </div>
@@ -901,7 +985,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="text-left px-3 py-1.5">Service</th>
-                            <th className="text-right px-3 py-1.5 w-16">Qty</th>
+                            <th className="text-right px-3 py-1.5 w-20">Sessions</th>
                             <th className="text-right px-3 py-1.5 w-24">Rate (₹)</th>
                             <th className="text-right px-3 py-1.5 w-28">Amount (₹)</th>
                           </tr>
@@ -927,6 +1011,14 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                             </td>
                             <td className="px-3 py-1.5 text-right">
                               ₹ {receiptTotal.toLocaleString("en-IN")}
+                            </td>
+                          </tr>
+                          <tr className="border-t">
+                            <td
+                              className="px-3 py-1.5 text-[11px] italic text-gray-600"
+                              colSpan={4}
+                            >
+                              Total in words: {amountInWordsINR(receiptTotal)}
                             </td>
                           </tr>
                           {receipt.paid > 0 && (
@@ -960,8 +1052,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                   )}
                 </div>
 
-                {/* Footer note instead of signature */}
-                <div className="relative mt-16 pt-4 border-t border-dashed border-gray-300 text-center text-[11px] text-gray-600 italic">
+                {/* Footer note — locked to the absolute bottom of the A4 page */}
+                <div className="absolute inset-x-8 bottom-6 pt-4 border-t border-dashed border-gray-300 text-center text-[11px] text-gray-600 italic">
                   Note: This is a system generated document. A physical signature or stamp is not
                   required.
                 </div>

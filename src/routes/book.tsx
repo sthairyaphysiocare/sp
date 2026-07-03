@@ -5,13 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
-import { fmtDate, fmtTime12, slotsForDate } from "@/lib/date";
+import {
+  filterPastSlots,
+  fmtDate,
+  fmtTime12,
+  nextWorkingDay,
+  slotsForDateBranch,
+} from "@/lib/date";
 
 export const Route = createFileRoute("/book")({
   head: () => ({
@@ -47,8 +53,33 @@ function BookPage() {
   const [done, setDone] = useState(false);
 
   const taken = useStore((s) => takenSlotsForDate(s, form.prefDate));
-  const slots = useMemo(() => slotsForDate(form.prefDate), [form.prefDate]);
+  const branch = branches.find((b) => b.id === form.br) || branches[0];
+  // Branch working hours drive the slot grid; past hours are hidden for
+  // today (a morning visitor only sees the remaining afternoon times).
+  const slots = useMemo(
+    () => filterPastSlots(form.prefDate, slotsForDateBranch(form.prefDate, branch)),
+    [form.prefDate, branch],
+  );
   const closed = slots.length === 0;
+
+  // If the selected date has no bookable time left (closed day, or today
+  // after the last slot has passed), automatically move to the branch's
+  // next working day.
+  useEffect(() => {
+    if (!form.prefDate) return;
+    if (form.prefDate < today) {
+      setForm((f) => ({ ...f, prefDate: today, prefTime: "" }));
+      return;
+    }
+    const usable = filterPastSlots(form.prefDate, slotsForDateBranch(form.prefDate, branch));
+    if (usable.length === 0) {
+      // Closed day, or today with all remaining slots in the past — jump to
+      // the branch's next working day.
+      const target = nextWorkingDay(form.prefDate, branch);
+      setForm((f) => ({ ...f, prefDate: target, prefTime: "" }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.prefDate, form.br]);
   const showBranchPicker = branches.length > 1;
 
   function submit(e: React.FormEvent) {
@@ -75,6 +106,21 @@ function BookPage() {
       prefTime: form.prefTime,
       br: form.br || branches[0]?.id,
     });
+    // Silent internal notification to the clinic (fire-and-forget; the
+    // visitor sees nothing). Sent to the Global Email via EmailJS — browsers
+    // cannot send WhatsApp messages invisibly without the WhatsApp Business
+    // API, so email is the reliable silent channel.
+    void import("@/lib/emailOtp").then(({ sendBookingAlert }) =>
+      sendBookingAlert({
+        toEmail: settings.globalEmail || CLINIC.email,
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        concern: form.concern,
+        when: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
+        branch: branch?.name || "",
+      }).catch((err) => console.error("[book] silent alert failed", err)),
+    );
     toast.success("Booking received — we'll contact you shortly.");
     setDone(true);
     setForm({ ...form, name: "", phone: "", email: "", concern: "", prefTime: "" });
@@ -241,9 +287,6 @@ function BookPage() {
                     </option>
                   ))}
                 </select>
-                <div className="text-[11px] text-muted-foreground mt-1">
-                  Mon–Fri 9 AM–1 PM &amp; 4 PM–8 PM · Sat 9 AM–1 PM · Sun by appointment
-                </div>
               </div>
             </div>
             <div>

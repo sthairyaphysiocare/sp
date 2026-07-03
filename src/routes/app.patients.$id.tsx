@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
-import { store, useStore, takenSlotsForDate } from "@/lib/store";
+import { store, useStore, takenSlotsForDate, slotConflict } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { ArrowLeft, FileText, Plus, Activity, Trash2, Pencil, Check, X, Lock } from "lucide-react";
@@ -27,7 +27,7 @@ import {
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { fmtDate, slotsForDate } from "@/lib/date";
+import { addDaysISO, fmtDate, slotsForDate } from "@/lib/date";
 import { branchById, enabledBranches } from "@/lib/logo";
 import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
 import { IconButton } from "@/components/IconButton";
@@ -622,6 +622,17 @@ function VisitsTab({
 
   function save() {
     if (!canEdit) return;
+    if (v.nxt && v.nxtTm) {
+      const conflict = slotConflict(store.get(), v.nxt, v.nxtTm, v.dur || 30);
+      if (conflict === "overlap") {
+        toast.error("Duration exceeds available time before next appointment");
+        return;
+      }
+      if (conflict === "taken") {
+        toast.error("That time is already booked. Please pick another.");
+        return;
+      }
+    }
     store.addVisit({ patientId: patient.id, ...v, tId: therapistId, tN: therapistName });
     toast.success("Visit logged");
     setShow(false);
@@ -714,18 +725,19 @@ function VisitsTab({
               <Label>Next Review Date</Label>
               <Input
                 type="date"
+                min={addDaysISO(new Date().toISOString().slice(0, 10), 1)}
                 value={v.nxt}
                 onChange={(e) => setV({ ...v, nxt: e.target.value, nxtTm: "" })}
               />
             </div>
             <div>
-              <Label>Next Review Time Slot</Label>
+              <Label>Next Review Time</Label>
               <select
                 className="w-full h-9 px-3 rounded-md border bg-background"
                 value={v.nxtTm}
                 onChange={(e) => setV({ ...v, nxtTm: e.target.value })}
               >
-                <option value="">— No slot —</option>
+                <option value="">Select Time</option>
                 {slots.map((s) => (
                   <option key={s} value={s} disabled={taken.includes(s)}>
                     {s}
@@ -735,7 +747,7 @@ function VisitsTab({
               </select>
             </div>
             <div>
-              <Label>Slot Duration (min)</Label>
+              <Label>Duration (min)</Label>
               <select
                 className="w-full h-9 px-3 rounded-md border bg-background"
                 value={v.dur}

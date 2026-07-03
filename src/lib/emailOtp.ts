@@ -53,3 +53,38 @@ export async function sendOtpEmail({ toEmail, toName, otp, fromEmail }: SendOtpA
   };
   await emailjs.send(d(_enc.s), d(_enc.t), params, { publicKey: d(_enc.k) });
 }
+
+export interface BookingAlertArgs {
+  toEmail: string;
+  name: string;
+  phone: string;
+  email: string;
+  concern: string;
+  when: string;
+  branch: string;
+}
+
+/** Silent internal notification to the clinic when a public booking arrives. */
+export async function sendBookingAlert(a: BookingAlertArgs) {
+  if (!a.toEmail || !/.+@.+\..+/.test(a.toEmail)) throw new Error("Invalid email");
+  const message =
+    `New appointment request:\n` +
+    `Name: ${a.name}\nPhone: ${a.phone}\nEmail: ${a.email || "—"}\n` +
+    `Concern: ${a.concern || "—"}\nPreferred: ${a.when}\nBranch: ${a.branch || "—"}`;
+  const params: Record<string, string> = {
+    otp: "",
+    otp_code: "",
+    passcode: "",
+    code: "",
+    time: "",
+    to_email: a.toEmail,
+    email: a.toEmail,
+    user_email: a.toEmail,
+    to_name: "Sthairya Physiocare",
+    from_email: "noreply@sthairya.local",
+    reply_to: a.email || a.toEmail,
+    subject: `New appointment request — ${a.name} (${a.when})`,
+    message,
+  };
+  await emailjs.send(d(_enc.s), d(_enc.t), params, { publicKey: d(_enc.k) });
+}
