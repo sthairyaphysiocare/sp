@@ -102,6 +102,9 @@ function PatientDetail() {
   // patient status changes (prescriptions and visit logging stay clinical).
   const canManage = hasRole("admin", "therapist", "reception");
   const canEdit = canClinical && isActive;
+  // Editing the patient record (demographic + clinical) is allowed for all
+  // managing roles — including reception — while the patient is active.
+  const canEditPatient = canManage && isActive;
 
   // Plain expression (a hook here would run conditionally after the early return above).
   const chartData = visits.map((v) => ({ visit: `V${v.vN}`, pain: v.pS, recovery: v.fi }));
@@ -203,7 +206,7 @@ function PatientDetail() {
         </div>
       </div>
 
-      <NextReviewSection patient={patient} />
+      <NextReviewSection patient={patient} isActive={isActive} />
 
       {!isActive && canManage && (
         <div className="mt-4 p-3 rounded-lg bg-muted/60 border text-sm flex items-center gap-2">
@@ -334,7 +337,7 @@ function PatientDetail() {
         )}
       </div>
 
-      {editing && canEdit && (
+      {editing && canEditPatient && (
         <EditPatientDialog
           patient={patient}
           branches={branches}
@@ -377,11 +380,13 @@ function Row({ k, v }: { k: string; v: string }) {
  * enforces the same guardrails as Log Visit: dates from tomorrow only,
  * branch working hours, and duration-aware no-double-booking masking.
  */
-function NextReviewSection({ patient }: { patient: Patient }) {
+function NextReviewSection({ patient, isActive }: { patient: Patient; isActive: boolean }) {
   const visits = useStore((s) => s.visits.filter((v) => v.patientId === patient.id));
   const branch = useStore((s) => s.settings.branches.find((b) => b.id === patient.br));
   const { user, hasRole } = useAuth();
-  const canSchedule = hasRole("admin", "therapist", "reception");
+  // Scheduling is available to managing roles ONLY while the patient is
+  // active. Inactive/completed patients show the review read-only (locked).
+  const canSchedule = hasRole("admin", "therapist", "reception") && isActive;
   const lastVisit = visits[visits.length - 1];
   const scheduled = lastVisit?.nxt ? { date: lastVisit.nxt, time: lastVisit.nxtTm } : null;
 
@@ -393,7 +398,31 @@ function NextReviewSection({ patient }: { patient: Patient }) {
   const slots = slotsForDateBranch(d, branch);
   const minDate = addDaysISO(todayISO(), 1);
 
-  if (!canSchedule) return null;
+  // When scheduling isn't available (patient inactive/completed, or a
+  // non-managing role) still SHOW the review if one exists — read-only and
+  // clearly locked — rather than hiding it entirely.
+  if (!canSchedule) {
+    if (!hasRole("admin", "therapist", "reception")) return null;
+    return (
+      <div className="mt-4 p-4 rounded-2xl border bg-muted/50 flex flex-wrap items-center gap-3">
+        <Lock className="size-5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">Next Review</div>
+          {scheduled ? (
+            <div className="text-sm font-semibold">
+              {fmtDate(scheduled.date)}
+              {scheduled.time ? ` · ${fmtTime12(scheduled.time)}` : ""}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">—</div>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          Scheduling locked — patient is not active
+        </span>
+      </div>
+    );
+  }
 
   function save() {
     if (!d || !t) {
