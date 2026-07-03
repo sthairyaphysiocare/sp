@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useStore, store } from "@/lib/store";
 import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
-import { saveOtp, loadOtp, clearOtp, OTP_TTL_MINUTES } from "@/lib/session";
+import { clearOtp, OTP_TTL_MINUTES } from "@/lib/session";
 import { CLINIC } from "@/lib/logo";
 
 export const Route = createFileRoute("/auth")({
@@ -33,8 +33,38 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
   const [otpInput, setOtpInput] = useState("");
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp] = useState<string | null>(null);
   const [otpUserId, setOtpUserId] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [otpNow, setOtpNow] = useState(() => Date.now());
+  const [otpAttempts, setOtpAttempts] = useState(0);
+  const otpInputRef = useRef<HTMLInputElement>(null);
+
+  // Live 1-second tick for the countdown while an OTP is pending.
+  useEffect(() => {
+    if (!otpExpiresAt) return;
+    const t = setInterval(() => setOtpNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [otpExpiresAt]);
+
+  // Auto-focus the OTP field when the verify step mounts.
+  useEffect(() => {
+    if (mode === "forgot-otp") otpInputRef.current?.focus();
+  }, [mode]);
+
+  // Security: wipe all OTP state if the user navigates away / unmounts.
+  useEffect(() => {
+    return () => {
+      setOtp(null);
+      setOtpExpiresAt(null);
+      setOtpAttempts(0);
+      clearOtp();
+    };
+  }, []);
+
+  const otpRemainingMs = otpExpiresAt ? Math.max(0, otpExpiresAt - otpNow) : 0;
+  const otpCountdown = `${Math.floor(otpRemainingMs / 60000)}:${String(Math.floor((otpRemainingMs % 60000) / 1000)).padStart(2, "0")}`;
+  const otpBlocked = otpAttempts >= 3;
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
   const [busy, setBusy] = useState(false);
@@ -99,9 +129,13 @@ function AuthPage() {
         otp: code,
         fromEmail: settings.globalEmail || CLINIC.email,
       });
-      saveOtp(found.id, code, target);
+      // OTP lives strictly in component state (never localStorage/URL).
       setOtp(code);
       setOtpUserId(found.id);
+      setOtpExpiresAt(Date.now() + 5 * 60 * 1000);
+      setOtpNow(Date.now());
+      setOtpAttempts(0);
+      setOtpInput("");
       setMode("forgot-otp");
       toast.success(`OTP sent to ${target}. Expires in ${OTP_TTL_MINUTES} minutes.`, { id: t });
     } catch (err) {
@@ -114,16 +148,28 @@ function AuthPage() {
 
   function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
-    const stored = loadOtp();
-    if (!stored || stored.userId !== otpUserId) {
-      toast.error("OTP expired. Please request a new one.");
+    if (otpBlocked) return;
+    if (!otp || !otpExpiresAt || Date.now() > otpExpiresAt) {
+      setOtp(null);
+      setOtpExpiresAt(null);
+      toast.error("OTP Expired. Please request a new code.");
       setMode("forgot-email");
       return;
     }
-    if (otpInput.trim() !== stored.code) {
-      toast.error("Incorrect OTP");
+    if (otpInput.trim() !== otp) {
+      const attempts = otpAttempts + 1;
+      setOtpAttempts(attempts);
+      if (attempts >= 3) {
+        toast.error("Too many failed attempts. Please request a new OTP.");
+      } else {
+        toast.error(`Incorrect OTP (${3 - attempts} attempt${3 - attempts === 1 ? "" : "s"} left)`);
+      }
       return;
     }
+    // Success: wipe the code immediately so it can never be replayed.
+    setOtp(null);
+    setOtpExpiresAt(null);
+    setOtpAttempts(0);
     setMode("forgot-reset");
   }
 
@@ -143,7 +189,9 @@ function AuthPage() {
     setLockError("");
     toast.success("Password updated. Please sign in.");
     setMode("signin");
-    setOtp("");
+    setOtp(null);
+    setOtpExpiresAt(null);
+    setOtpAttempts(0);
     setOtpInput("");
     setNewPwd("");
     setConfirmPwd("");
@@ -248,9 +296,6 @@ function AuthPage() {
                 onChange={(e) => setForgotEmail(e.target.value)}
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Sent from: {settings.globalEmail || CLINIC.email}
-              </p>
             </div>
             <Button
               type="submit"
@@ -279,10 +324,12 @@ function AuthPage() {
               <Label htmlFor="otp">6-Digit OTP</Label>
               <Input
                 id="otp"
+                ref={otpInputRef}
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}
                 autoFocus
+                disabled={otpBlocked}
                 value={otpInput}
                 onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))}
                 required
@@ -290,8 +337,26 @@ function AuthPage() {
               <p className="text-xs text-muted-foreground mt-1">
                 Check your inbox at {forgotEmail}
               </p>
+              <p
+                className={`text-xs mt-1 font-medium ${otpRemainingMs > 0 ? "text-muted-foreground" : "text-destructive"}`}
+                aria-live="polite"
+              >
+                {otpRemainingMs > 0
+                  ? `OTP expires in ${otpCountdown}`
+                  : "OTP Expired. Please request a new code."}
+              </p>
             </div>
-            <Button type="submit" size="lg" className="w-full brand-gradient text-white border-0">
+            {otpBlocked && (
+              <p role="alert" className="text-sm font-medium text-destructive">
+                Too many failed attempts. Please request a new OTP.
+              </p>
+            )}
+            <Button
+              type="submit"
+              size="lg"
+              disabled={otpBlocked || otpRemainingMs <= 0}
+              className="w-full brand-gradient text-white border-0"
+            >
               Verify
             </Button>
             <button

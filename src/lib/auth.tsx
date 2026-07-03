@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode }
 import { store, useStore } from "./store";
 import type { Role, User } from "./types";
 import type { LoginResult } from "./store";
-import { touchSession } from "./session";
+import { scrubLegacyAuthStorage, touchSession } from "./session";
 
 interface AuthCtx {
   user: User | null;
@@ -23,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (bound.current || typeof window === "undefined") return;
     bound.current = true;
+    scrubLegacyAuthStorage(); // auth state must never persist in localStorage
     const handler = () => touchSession();
     window.addEventListener("click", handler, { passive: true });
     window.addEventListener("keydown", handler, { passive: true });

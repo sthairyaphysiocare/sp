@@ -278,9 +278,9 @@ export const verifyLogin = createServerFn({ method: "POST" })
         await new Promise((r) => setTimeout(r, delayMs));
         return { ok: false as const, reason: "bad-password" as const };
       }
-      // Staff roles (therapist / reception / other): lock on the 4th
+      // Staff roles (therapist / reception / other): lock on the 3rd
       // consecutive invalid password.
-      if (newFails >= 4) {
+      if (newFails >= 3) {
         await db.execute({
           sql: "UPDATE users SET locked = 1, failed_attempts = ? WHERE id = ?",
           args: [newFails, userId],
@@ -293,7 +293,7 @@ export const verifyLogin = createServerFn({ method: "POST" })
         args: [newFails, userId],
       });
       await auditEvent("auth.fail", `bad-pw:${userId}`);
-      return { ok: false as const, reason: "bad-password" as const, failsLeft: 4 - newFails };
+      return { ok: false as const, reason: "bad-password" as const, failsLeft: 3 - newFails };
     }
 
     // Successful login resets the consecutive-failure counter.

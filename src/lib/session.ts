@@ -11,8 +11,11 @@ const SESSION_KEY = "sthairya.session";
 const LOCK_KEY = "sthairya.lockouts";
 const OTP_KEY = "sthairya.otp";
 
-const IDLE_MS = 8 * 60 * 60 * 1000; // 8 hours
-const LOCK_MAX_FAILS = 4;
+// Sessions live ONLY in sessionStorage: destroyed automatically when the
+// browser window/tab closes, and after 5 minutes of inactivity below.
+const IDLE_MS = 5 * 60 * 1000; // 5 minutes of inactivity
+
+const LOCK_MAX_FAILS = 3;
 const LOCK_MS = 15 * 60 * 1000; // 15 minutes
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -38,17 +41,53 @@ function safeGet<T>(key: string): T | null {
 }
 function safeSet(key: string, val: unknown) {
   if (typeof window === "undefined") return;
-  try { sessionStorage.setItem(key, JSON.stringify(val)); } catch {}
+  try {
+    sessionStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    /* storage unavailable */
+  }
 }
 function safeDel(key: string) {
   if (typeof window === "undefined") return;
-  try { sessionStorage.removeItem(key); } catch {}
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/**
+ * One-time scrub: remove any legacy auth/session/token keys that older
+ * builds may have written to localStorage. Authentication state lives in
+ * sessionStorage ONLY and must never be written to localStorage again.
+ */
+export function scrubLegacyAuthStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && /sthairya\.(session|auth|token|otp|lockouts)/i.test(key)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Hard purge of every auth-related key (route-guard failure path). */
+export function purgeSession() {
+  safeDel(SESSION_KEY);
+  safeDel(OTP_KEY);
 }
 
 export function loadSession(): StoredSession | null {
   const s = safeGet<StoredSession>(SESSION_KEY);
   if (!s) return null;
-  if (Date.now() > s.expiresAt) { safeDel(SESSION_KEY); return null; }
+  if (Date.now() > s.expiresAt) {
+    safeDel(SESSION_KEY);
+    return null;
+  }
   return s;
 }
 export function saveSession(userId: string): StoredSession {
@@ -60,12 +99,18 @@ export function touchSession() {
   const s = loadSession();
   if (s) safeSet(SESSION_KEY, { ...s, expiresAt: Date.now() + IDLE_MS });
 }
-export function clearSession() { safeDel(SESSION_KEY); }
+export function clearSession() {
+  safeDel(SESSION_KEY);
+}
 
 // ---- lockouts ----
 type LockMap = Record<string, { fails: number; until: number }>;
-function readLocks(): LockMap { return safeGet<LockMap>(LOCK_KEY) ?? {}; }
-function writeLocks(m: LockMap) { safeSet(LOCK_KEY, m); }
+function readLocks(): LockMap {
+  return safeGet<LockMap>(LOCK_KEY) ?? {};
+}
+function writeLocks(m: LockMap) {
+  safeSet(LOCK_KEY, m);
+}
 
 export function lockoutRemainingMs(username: string): number {
   const key = username.trim().toLowerCase();
@@ -75,7 +120,11 @@ export function lockoutRemainingMs(username: string): number {
   const rem = entry.until - Date.now();
   return rem > 0 ? rem : 0;
 }
-export function registerLoginFailure(username: string): { locked: boolean; remainingMs: number; failsLeft: number } {
+export function registerLoginFailure(username: string): {
+  locked: boolean;
+  remainingMs: number;
+  failsLeft: number;
+} {
   const key = username.trim().toLowerCase();
   const m = readLocks();
   const entry = m[key] ?? { fails: 0, until: 0 };
@@ -94,7 +143,10 @@ export function registerLoginFailure(username: string): { locked: boolean; remai
 export function clearLoginFailures(username: string) {
   const key = username.trim().toLowerCase();
   const m = readLocks();
-  if (m[key]) { delete m[key]; writeLocks(m); }
+  if (m[key]) {
+    delete m[key];
+    writeLocks(m);
+  }
 }
 
 // ---- OTP ----
@@ -106,9 +158,14 @@ export function saveOtp(userId: string, code: string, sentTo: string): StoredOtp
 export function loadOtp(): StoredOtp | null {
   const o = safeGet<StoredOtp>(OTP_KEY);
   if (!o) return null;
-  if (Date.now() > o.expiresAt) { safeDel(OTP_KEY); return null; }
+  if (Date.now() > o.expiresAt) {
+    safeDel(OTP_KEY);
+    return null;
+  }
   return o;
 }
-export function clearOtp() { safeDel(OTP_KEY); }
+export function clearOtp() {
+  safeDel(OTP_KEY);
+}
 export const OTP_TTL_MINUTES = OTP_TTL_MS / 60000;
 export const LOCK_MINUTES = LOCK_MS / 60000;

@@ -257,8 +257,8 @@ await local.execute({
   sql: rows.UPSERT_USER,
   args: ["u2", "therapist1", "T", "therapist", "pbkdf2$210000$x$y", "", Date.now()],
 });
-for (let f = 1; f <= 4; f++) {
-  if (f >= 4)
+for (let f = 1; f <= 3; f++) {
+  if (f >= 3)
     await local.execute({
       sql: "UPDATE users SET locked = 1, failed_attempts = ? WHERE id = ?",
       args: [f, "u2"],
@@ -272,8 +272,8 @@ for (let f = 1; f <= 4; f++) {
 const lockedRow = (await local.execute("SELECT locked, failed_attempts FROM users WHERE id='u2'"))
   .rows[0];
 console.assert(
-  Number(lockedRow.locked) === 1 && Number(lockedRow.failed_attempts) === 4,
-  "non-admin locked at 4 fails",
+  Number(lockedRow.locked) === 1 && Number(lockedRow.failed_attempts) === 3,
+  "non-admin locked at 3 fails",
 );
 // unlock restores access
 await local.execute({
@@ -307,7 +307,7 @@ console.assert(
     String(afterSync.name) === "T2",
   "state sync updates profile but NEVER clears lock state",
 );
-console.log("✔ lockout schema + semantics OK (lock at 4, unlock, sync preserves lock)");
+console.log("✔ lockout schema + semantics OK (lock at 3, unlock, sync preserves lock)");
 
 console.log("\nALL TESTS PASSED (incl. lockout)");
 

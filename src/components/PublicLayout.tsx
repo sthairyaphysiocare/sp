@@ -24,7 +24,29 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const signedIn = mounted && !!user;
+  // "Open Dashboard" renders ONLY when BOTH hold: the Auth Context has a
+  // verified user AND a live (unexpired) session token exists in
+  // sessionStorage for that same user. Anything else renders "Staff Login".
+  const [liveSession, setLiveSession] = useState(false);
+  useEffect(() => {
+    if (!mounted || !user) {
+      setLiveSession(false);
+      return;
+    }
+    let cancelled = false;
+    const check = () =>
+      import("@/lib/session").then(({ loadSession }) => {
+        const sess = loadSession();
+        if (!cancelled) setLiveSession(!!sess && sess.userId === user.id);
+      });
+    void check();
+    const t = setInterval(() => void check(), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [mounted, user]);
+  const signedIn = mounted && !!user && liveSession;
 
   return (
     <div className="min-h-screen flex flex-col">

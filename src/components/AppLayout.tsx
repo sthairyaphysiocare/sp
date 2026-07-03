@@ -62,25 +62,41 @@ export function AppLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
 
-  // Re-check session expiry once a minute; auto-logout on idle timeout.
+  // Global route guard for all /app routes:
+  // - On mount, verify the sessionStorage token exists, is unexpired, and
+  //   matches the authenticated user. On any failure: purge sessionStorage
+  //   and redirect to the login page before rendering any dashboard UI.
+  // - Re-verify every 15 seconds so the 5-minute inactivity TTL is enforced
+  //   promptly (sessionStorage itself guarantees destruction on window close).
+  const [guardOk, setGuardOk] = useState(false);
   useEffect(() => {
-    if (!user) return;
-    const t = setInterval(() => {
-      // loadSession returns null when expired, and store.session is per-tab.
-      import("@/lib/session").then(({ loadSession }) => {
-        if (!loadSession()) {
-          logout();
-          navigate({ to: "/auth", replace: true });
-        }
-      });
-    }, 60_000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    const check = async () => {
+      const { loadSession, purgeSession } = await import("@/lib/session");
+      const sess = loadSession();
+      if (!sess || !user || sess.userId !== user.id) {
+        purgeSession();
+        if (user) logout();
+        if (!cancelled) navigate({ to: "/auth", replace: true });
+        return false;
+      }
+      return true;
+    };
+    void check().then((ok) => {
+      if (!cancelled) setGuardOk(ok);
+    });
+    const t = setInterval(() => void check().then((ok) => !cancelled && setGuardOk(ok)), 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, [user, logout, navigate]);
 
   if (!user) {
     if (typeof window !== "undefined") navigate({ to: "/auth", replace: true });
     return null;
   }
+  if (!guardOk) return null; // never render dashboard UI before verification
 
   const visible = NAV.filter((n) => n.roles.includes(user.role));
 

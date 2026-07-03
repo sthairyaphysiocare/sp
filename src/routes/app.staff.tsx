@@ -175,7 +175,7 @@ function Staff() {
             <Lock className="size-4" /> Locked Accounts
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            These staff accounts were locked after 4 consecutive failed sign-in attempts. Unlock to
+            These staff accounts were locked after 3 consecutive failed sign-in attempts. Unlock to
             restore their access.
           </p>
           <div className="mt-4 space-y-2">
