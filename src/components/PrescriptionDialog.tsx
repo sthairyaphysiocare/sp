@@ -111,11 +111,83 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
     setReceipt((r) => ({ ...r, items: r.items.filter((it) => it.id !== id) }));
   }
 
+  async function waitForImages(root: HTMLElement) {
+    const imgs = Array.from(root.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map((img) =>
+        img.complete && img.naturalWidth > 0
+          ? Promise.resolve()
+          : new Promise<void>((res) => {
+              img.onload = () => res();
+              img.onerror = () => res();
+            }),
+      ),
+    );
+  }
+
+  /**
+   * Primary renderer: rasterizes the actual on-screen preview so the PDF is
+   * pixel-identical to what the preview page shows (same background,
+   * watermark, layout). Uses html-to-image, which renders via the browser
+   * itself (SVG foreignObject) and therefore supports the modern CSS colors
+   * that broke the old html2canvas capture. Falls back to the drawn
+   * renderer on any failure.
+   */
   async function buildPdf(): Promise<{ blob: Blob; filename: string } | null> {
-    // Drawn directly with jsPDF primitives (same approach as the Reports
-    // module, which works reliably). The previous html2canvas DOM capture
-    // failed on modern CSS color functions (oklch) used by the design
-    // system, which is why prescription exports were erroring.
+    try {
+      if (step !== "preview") {
+        setStep("preview");
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+      }
+      const node = ref.current;
+      if (!node) throw new Error("Preview not mounted");
+      await waitForImages(node);
+      await new Promise((r) => setTimeout(r, 80));
+
+      const { toJpeg } = await import("html-to-image");
+      const dataUrl = await toJpeg(node, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+
+      const probe = new Image();
+      await new Promise<void>((res, rej) => {
+        probe.onload = () => res();
+        probe.onerror = () => rej(new Error("capture decode failed"));
+        probe.src = dataUrl;
+      });
+
+      const { default: jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const imgH = (probe.height * pw) / probe.width;
+      if (imgH <= ph + 1) {
+        pdf.addImage(dataUrl, "JPEG", 0, 0, pw, imgH);
+      } else {
+        let y = 0;
+        let remaining = imgH;
+        while (remaining > 0) {
+          pdf.addImage(dataUrl, "JPEG", 0, y, pw, imgH);
+          remaining -= ph;
+          y -= ph;
+          if (remaining > 0) pdf.addPage();
+        }
+      }
+      const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
+      return { blob: pdf.output("blob"), filename };
+    } catch (err) {
+      console.error("Preview capture failed, using drawn fallback:", err);
+      return buildPdfDrawn();
+    }
+  }
+
+  async function buildPdfDrawn(): Promise<{ blob: Blob; filename: string } | null> {
+    // Fallback renderer: drawn directly with jsPDF primitives (the same
+    // approach as the Reports module). Used only if capturing the on-screen
+    // preview fails, so exports can never be fully broken.
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
     const pw = pdf.internal.pageSize.getWidth();
@@ -736,7 +808,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
                     <img
                       src={LOGO_URL}
                       alt="Logo"
-                      className="w-20 h-20 object-contain rounded-full"
+                      className="w-20 h-20 object-contain shrink-0"
                       crossOrigin="anonymous"
                     />
                     <div>

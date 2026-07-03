@@ -308,6 +308,25 @@ export const verifyLogin = createServerFn({ method: "POST" })
   });
 
 /**
+ * Fresh-from-database list of locked staff accounts, so the admin's
+ * Staff & Roles page reflects locks that happened after it was hydrated.
+ */
+export const listLockedUsers = createServerFn({ method: "GET" }).handler(async () => {
+  const { turso, ensureSchema } = await import("./turso.server");
+  await ensureSchema();
+  const db = turso();
+  const res = await db.execute(
+    "SELECT id, email, name, role FROM users WHERE locked = 1 AND role != 'admin'",
+  );
+  return res.rows.map((r) => ({
+    id: String(r.id),
+    email: String(r.email ?? ""),
+    name: String(r.name ?? ""),
+    role: String(r.role ?? "other"),
+  }));
+});
+
+/**
  * Clear an account lockout (admin action from Staff & Roles, or automatic
  * after a successful OTP password reset, which proves account ownership).
  */

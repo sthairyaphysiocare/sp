@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Trash2, Key, Pencil, X, Check, Lock, Unlock } from "lucide-react";
@@ -31,7 +31,33 @@ function Staff() {
     emailId: "",
   });
 
-  const lockedUsers = users.filter((u) => u.locked && u.role !== "admin");
+  // Locked accounts are fetched fresh from the database on mount (and after
+  // every unlock), so locks that happened after this page hydrated still
+  // appear. Store state is merged in as a fallback.
+  const [serverLocked, setServerLocked] = useState<
+    Array<{ id: string; email: string; name: string; role: string }>
+  >([]);
+  const refreshLocked = useCallback(async () => {
+    try {
+      const { listLockedUsers } = await import("@/lib/db.functions");
+      setServerLocked(await listLockedUsers());
+    } catch (err) {
+      console.error("Couldn't refresh locked accounts:", err);
+    }
+  }, []);
+  useEffect(() => {
+    void refreshLocked();
+  }, [refreshLocked]);
+
+  const lockedUsers = (() => {
+    const byId = new Map<string, { id: string; email: string; name: string; role: string }>();
+    for (const u of users) {
+      if (u.locked && u.role !== "admin")
+        byId.set(u.id, { id: u.id, email: u.email, name: u.name, role: u.role });
+    }
+    for (const u of serverLocked) byId.set(u.id, u);
+    return [...byId.values()];
+  })();
 
   if (!hasRole("admin")) {
     return <div className="text-center py-20 text-muted-foreground">Admins only.</div>;
@@ -77,10 +103,11 @@ function Staff() {
     }
   }
 
-  async function unlock(u: User) {
+  async function unlock(u: { id: string; name: string }) {
     const ok = await store.unlockUser(u.id);
     if (ok) toast.success(`${u.name}'s account unlocked`);
     else toast.error("Couldn't unlock — check connection and try again");
+    void refreshLocked();
   }
 
   function startEdit(u: User) {
@@ -169,7 +196,7 @@ function Staff() {
         </div>
       </form>
 
-      {lockedUsers.length > 0 && (
+      {
         <div className="mt-6 p-6 rounded-2xl bg-destructive/5 border border-destructive/20">
           <h2 className="text-sm font-semibold flex items-center gap-2 text-destructive">
             <Lock className="size-4" /> Locked Accounts
@@ -199,9 +226,14 @@ function Staff() {
                 </Button>
               </div>
             ))}
+            {lockedUsers.length === 0 && (
+              <p className="text-sm text-muted-foreground p-3 rounded-lg bg-card border">
+                No accounts are currently locked.
+              </p>
+            )}
           </div>
         </div>
-      )}
+      }
 
       <div className="mt-6 rounded-2xl bg-card border overflow-x-auto">
         <table className="w-full text-sm">
