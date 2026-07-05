@@ -30,9 +30,11 @@ function AuthPage() {
 
   const [mode, setMode] = useState<Mode>("signin");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [otpInput, setOtpInput] = useState("");
+  // OTP digits live only in the DOM node (via ref) — never in React
+  // state — so the value is never re-serialized into the input as a
+  // controlled `value` prop.
   const [otp, setOtp] = useState<string | null>(null);
   const [otpUserId, setOtpUserId] = useState("");
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
@@ -65,8 +67,8 @@ function AuthPage() {
   const otpRemainingMs = otpExpiresAt ? Math.max(0, otpExpiresAt - otpNow) : 0;
   const otpCountdown = `${Math.floor(otpRemainingMs / 60000)}:${String(Math.floor((otpRemainingMs % 60000) / 1000)).padStart(2, "0")}`;
   const otpBlocked = otpAttempts >= 3;
-  const [newPwd, setNewPwd] = useState("");
-  const [confirmPwd, setConfirmPwd] = useState("");
+  const newPwdRef = useRef<HTMLInputElement>(null);
+  const confirmPwdRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [lockError, setLockError] = useState("");
   const usernameRef = useRef<HTMLInputElement>(null);
@@ -84,10 +86,11 @@ function AuthPage() {
     setBusy(true);
     try {
       setLockError("");
+      const password = passwordRef.current?.value ?? "";
       const res = await login(username, password);
       if (res.ok) {
         toast.success(`Welcome, ${res.user.name}`);
-        navigate({ to: "/app" });
+        navigate({ to: "/app", replace: true });
         return;
       }
       if (res.reason === "account-locked") {
@@ -135,7 +138,7 @@ function AuthPage() {
       setOtpExpiresAt(Date.now() + 5 * 60 * 1000);
       setOtpNow(Date.now());
       setOtpAttempts(0);
-      setOtpInput("");
+      if (otpInputRef.current) otpInputRef.current.value = "";
       setMode("forgot-otp");
       toast.success(`OTP sent to ${target}. Expires in ${OTP_TTL_MINUTES} minutes.`, { id: t });
     } catch (err) {
@@ -149,6 +152,7 @@ function AuthPage() {
   function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
     if (otpBlocked) return;
+    const otpInput = otpInputRef.current?.value ?? "";
     if (!otp || !otpExpiresAt || Date.now() > otpExpiresAt) {
       setOtp(null);
       setOtpExpiresAt(null);
@@ -175,6 +179,8 @@ function AuthPage() {
 
   function resetPwd(e: React.FormEvent) {
     e.preventDefault();
+    const newPwd = newPwdRef.current?.value ?? "";
+    const confirmPwd = confirmPwdRef.current?.value ?? "";
     if (newPwd.length < 6) {
       toast.error("Password must be at least 6 characters");
       return;
@@ -192,9 +198,9 @@ function AuthPage() {
     setOtp(null);
     setOtpExpiresAt(null);
     setOtpAttempts(0);
-    setOtpInput("");
-    setNewPwd("");
-    setConfirmPwd("");
+    if (otpInputRef.current) otpInputRef.current.value = "";
+    if (newPwdRef.current) newPwdRef.current.value = "";
+    if (confirmPwdRef.current) confirmPwdRef.current.value = "";
     setForgotEmail("");
   }
 
@@ -248,8 +254,8 @@ function AuthPage() {
                 id="p"
                 type="password"
                 autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                ref={passwordRef}
+                defaultValue=""
                 required
               />
             </div>
@@ -331,8 +337,11 @@ function AuthPage() {
                 maxLength={6}
                 autoFocus
                 disabled={otpBlocked}
-                value={otpInput}
-                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                defaultValue=""
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.value = el.value.replace(/\D/g, "").slice(0, 6);
+                }}
                 required
               />
               <p className="text-xs text-muted-foreground mt-1">
@@ -380,9 +389,10 @@ function AuthPage() {
               <Input
                 id="np"
                 type="password"
+                autoComplete="new-password"
                 autoFocus
-                value={newPwd}
-                onChange={(e) => setNewPwd(e.target.value)}
+                ref={newPwdRef}
+                defaultValue=""
                 required
               />
             </div>
@@ -391,8 +401,9 @@ function AuthPage() {
               <Input
                 id="cp"
                 type="password"
-                value={confirmPwd}
-                onChange={(e) => setConfirmPwd(e.target.value)}
+                autoComplete="new-password"
+                ref={confirmPwdRef}
+                defaultValue=""
                 required
               />
             </div>

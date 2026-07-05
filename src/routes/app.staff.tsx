@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Trash2, Key, Pencil, X, Check, Lock, Unlock } from "lucide-react";
@@ -21,9 +21,9 @@ function Staff() {
     name: "",
     username: "",
     role: "therapist" as Role,
-    password: "",
     emailId: "",
   });
+  const newUserPwRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ name: string; username: string; emailId: string }>({
     name: "",
@@ -65,7 +65,8 @@ function Staff() {
 
   function add(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.username || !form.password) {
+    const password = newUserPwRef.current?.value ?? "";
+    if (!form.name || !form.username || !password) {
       toast.error("All fields required");
       return;
     }
@@ -77,10 +78,11 @@ function Staff() {
       name: form.name,
       email: form.username,
       role: form.role,
-      password: form.password,
+      password,
       emailId: form.emailId.trim(),
     });
-    setForm({ name: "", username: "", role: "therapist", password: "", emailId: "" });
+    setForm({ name: "", username: "", role: "therapist", emailId: "" });
+    if (newUserPwRef.current) newUserPwRef.current.value = "";
     toast.success("Staff member added");
   }
 
@@ -183,12 +185,7 @@ function Staff() {
         </div>
         <div>
           <Label>Password</Label>
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+          <Input type="password" autoComplete="new-password" ref={newUserPwRef} defaultValue="" />
         </div>
         <div className="flex items-end">
           <Button type="submit" className="w-full brand-gradient text-white border-0">

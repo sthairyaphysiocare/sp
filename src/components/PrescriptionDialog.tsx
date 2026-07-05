@@ -18,16 +18,35 @@ import {
   Plus,
   Trash2,
   Save,
+  History,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
 import { amountInWordsINR } from "@/lib/utils";
 import { fmtDate, fmtTime12, slotsForDateBranch, todayISO } from "@/lib/date";
 
+interface HistoricalRecord {
+  rx: {
+    concern: string;
+    diagnosis: string;
+    manualTherapy: string;
+    modalities: string;
+    exercises: string;
+    advice: string;
+    reviewDate: string;
+    reviewTime: string;
+  };
+  receipt: { no: string; mode: string; items: ReceiptItem[]; paid: number; notes: string };
+  receiptOn: boolean;
+  savedAt: number;
+}
+
 interface Props {
   patient: Patient;
   lastVisit?: Visit;
   onClose: () => void;
+  /** When provided, opens directly in preview mode showing this saved record. */
+  historical?: HistoricalRecord;
 }
 
 type Step = "edit" | "preview";
@@ -52,7 +71,7 @@ const SERVICE_PRESETS = [
   "Home Visit Charges",
 ];
 
-export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
+export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const today = fmtDate(new Date());
   const todayIso = todayISO();
@@ -61,27 +80,35 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
   const settings = useStore((s) => s.settings);
   const branch = branchById(settings, patient.br) ?? settings.branches[0];
 
-  const [step, setStep] = useState<Step>("edit");
-  const [rx, setRx] = useState({
-    concern: "",
-    diagnosis: patient.cc || "",
-    manualTherapy: lastVisit?.tx || "",
-    modalities: "",
-    exercises: lastVisit?.adv || "",
-    advice: "",
-    reviewDate: lastVisit?.nxt || "",
-    reviewTime: lastVisit?.nxtTm || "",
-  });
-  const [receiptOn, setReceiptOn] = useState(false);
-  const [savedReceiptNo, setSavedReceiptNo] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>(historical ? "preview" : "edit");
+  const [rx, setRx] = useState(
+    historical
+      ? historical.rx
+      : {
+          concern: "",
+          diagnosis: patient.cc || "",
+          manualTherapy: lastVisit?.tx || "",
+          modalities: "",
+          exercises: lastVisit?.adv || "",
+          advice: "",
+          reviewDate: lastVisit?.nxt || "",
+          reviewTime: lastVisit?.nxtTm || "",
+        },
+  );
+  const [receiptOn, setReceiptOn] = useState(historical?.receiptOn ?? false);
+  const [savedReceiptNo, setSavedReceiptNo] = useState<string | null>(
+    historical?.receipt.no ? historical.receipt.no : null,
+  );
   const [saving, setSaving] = useState(false);
-  const [receipt, setReceipt] = useState({
-    no: "",
-    mode: "Cash",
-    items: [] as ReceiptItem[],
-    paid: 0,
-    notes: "",
-  });
+  const [receipt, setReceipt] = useState(
+    historical?.receipt ?? {
+      no: "",
+      mode: "Cash",
+      items: [] as ReceiptItem[],
+      paid: 0,
+      notes: "",
+    },
+  );
   const [busy, setBusy] = useState<null | "pdf" | "wa">(null);
   const [waPrompt, setWaPrompt] = useState(false);
   const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
@@ -602,6 +629,14 @@ export function PrescriptionDialog({ patient, lastVisit, onClose }: Props) {
           >
             <X className="size-5" />
           </button>
+
+          {historical && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs sm:text-sm flex items-center gap-2 print:hidden">
+              <History className="size-4 shrink-0" />
+              Viewing a saved record from {fmtDate(new Date(historical.savedAt))} — downloading or
+              sending WhatsApp uses this saved version; saving again creates a new history entry.
+            </div>
+          )}
 
           {/* Header / stepper — hidden in print */}
           <div className="p-3 sm:p-4 border-b flex items-center justify-between gap-3 flex-wrap print:hidden pr-12 sm:pr-16">

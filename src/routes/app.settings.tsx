@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { ImageCropModal } from "@/components/ImageCropModal";
 import { Toaster } from "@/components/ui/sonner";
 import {
   Globe,
@@ -45,8 +46,8 @@ const EMPTY_HOURS: BranchHours = { mon: "", tue: "", wed: "", thu: "", fri: "", 
 function Settings() {
   const { user, hasRole } = useAuth();
   const settings = useStore((s) => s.settings);
-  const [pw, setPw] = useState("");
-  const [pw2, setPw2] = useState("");
+  const pwRef = useRef<HTMLInputElement>(null);
+  const pw2Ref = useRef<HTMLInputElement>(null);
   const [wa, setWa] = useState(settings.whatsappNumber || "");
   const [gEmail, setGEmail] = useState(settings.globalEmail || "");
   const [links, setLinks] = useState({
@@ -62,6 +63,8 @@ function Settings() {
   function save(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
+    const pw = pwRef.current?.value ?? "";
+    const pw2 = pw2Ref.current?.value ?? "";
     if (pw.length < 4) {
       toast.error("Password too short");
       return;
@@ -71,8 +74,8 @@ function Settings() {
       return;
     }
     store.changePassword(user.id, pw);
-    setPw("");
-    setPw2("");
+    if (pwRef.current) pwRef.current.value = "";
+    if (pw2Ref.current) pw2Ref.current.value = "";
     toast.success("Password updated");
   }
 
@@ -151,21 +154,11 @@ function Settings() {
         <h2 className="font-semibold">Change Password</h2>
         <div>
           <Label>New Password</Label>
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-          />
+          <Input type="password" autoComplete="new-password" ref={pwRef} defaultValue="" />
         </div>
         <div>
           <Label>Confirm Password</Label>
-          <Input
-            type="password"
-            autoComplete="new-password"
-            value={pw2}
-            onChange={(e) => setPw2(e.target.value)}
-          />
+          <Input type="password" autoComplete="new-password" ref={pw2Ref} defaultValue="" />
         </div>
         <Button type="submit" className="brand-gradient text-white border-0">
           Update Password
@@ -959,6 +952,11 @@ function ClinicianEditor({
   onCancel: () => void;
 }) {
   const [f, setF] = useState(initial);
+  // A freshly-selected file is NOT applied immediately — it's loaded into
+  // temporary state and the crop modal opens first (per-spec: intercept
+  // selection, force a 1:1 crop, only THEN hand the cropped image to save).
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+
   function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -972,13 +970,24 @@ function ClinicianEditor({
       return;
     }
     const r = new FileReader();
-    r.onload = () => setF({ ...f, photo: String(r.result || "") });
+    r.onload = () => setCropSrc(String(r.result || ""));
     r.onerror = () => toast.error("Failed to read image");
     r.readAsDataURL(file);
   }
 
   return (
     <div className="w-full min-w-0 p-3 sm:p-4 rounded-xl bg-background border border-brand/30 space-y-3">
+      {cropSrc && (
+        <ImageCropModal
+          imageSrc={cropSrc}
+          onCancel={() => setCropSrc(null)}
+          onCropped={(dataUrl) => {
+            setF((prev) => ({ ...prev, photo: dataUrl }));
+            setCropSrc(null);
+            toast.success("Photo cropped");
+          }}
+        />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
         <div className="min-w-0">
           <Label>Name</Label>

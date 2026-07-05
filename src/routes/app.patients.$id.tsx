@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-r
 import { store, useStore, takenSlotsForDate, slotConflict } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   FileText,
@@ -14,6 +14,7 @@ import {
   X,
   Lock,
   CalendarClock,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,9 @@ function PatientDetail() {
   const therapists = useStore((s) =>
     s.users.filter((u) => u.role === "therapist" || u.role === "admin"),
   );
-  const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes">("overview");
+  const [tab, setTab] = useState<"overview" | "visits" | "progress" | "notes" | "history">(
+    "overview",
+  );
   const [showRx, setShowRx] = useState(false);
   const [editing, setEditing] = useState(false);
   const isAdmin = hasRole("admin");
@@ -219,7 +222,7 @@ function PatientDetail() {
       )}
 
       <div className="mt-6 flex flex-wrap gap-1 border-b">
-        {(["overview", "visits", "progress", "notes"] as const).map((t) => {
+        {(["overview", "visits", "progress", "notes", "history"] as const).map((t) => {
           if (!canClinical && (t === "progress" || t === "notes")) return null;
           return (
             <button
@@ -335,6 +338,9 @@ function PatientDetail() {
             canEdit={isActive}
           />
         )}
+        {tab === "history" && canClinical && (
+          <PrescriptionHistoryTab patient={patient} lastVisit={lastVisit} />
+        )}
       </div>
 
       {editing && canEditPatient && (
@@ -422,6 +428,15 @@ function NextReviewSection({ patient, isActive }: { patient: Patient; isActive: 
         </span>
       </div>
     );
+  }
+
+  function cancelEdit() {
+    // Reset to the previously saved values (or blank if none existed) and
+    // collapse back to the clean, read-only display — no data is written.
+    setD(scheduled?.date ?? "");
+    setT(scheduled?.time ?? "");
+    setDur(lastVisit?.dur ?? 30);
+    setOpen(false);
   }
 
   function save() {
@@ -546,7 +561,10 @@ function NextReviewSection({ patient, isActive }: { patient: Patient; isActive: 
               ))}
             </select>
           </div>
-          <div className="self-end">
+          <div className="self-end flex gap-2">
+            <Button size="sm" variant="outline" onClick={cancelEdit}>
+              <X className="size-4" /> Cancel
+            </Button>
             <Button size="sm" onClick={save} className="brand-gradient text-white border-0">
               <Check className="size-4" /> Save
             </Button>
@@ -1119,6 +1137,128 @@ function VisitEdit({ visit, onClose }: { visit: Visit; onClose: () => void }) {
           <Check className="size-4" /> Save
         </Button>
       </div>
+    </div>
+  );
+}
+
+interface HistoryRow {
+  id: string;
+  receiptNo: string | null;
+  data: string;
+  createdAt: number;
+}
+
+interface ParsedHistory {
+  rx: {
+    concern: string;
+    diagnosis: string;
+    manualTherapy: string;
+    modalities: string;
+    exercises: string;
+    advice: string;
+    reviewDate: string;
+    reviewTime: string;
+  };
+  receipt: {
+    no: string;
+    mode: string;
+    items: Array<{ id: string; desc: string; qty: number; rate: number }>;
+    paid: number;
+    notes: string;
+  };
+  receiptOn: boolean;
+  savedAt: number;
+}
+
+function PrescriptionHistoryTab({ patient, lastVisit }: { patient: Patient; lastVisit?: Visit }) {
+  const [rows, setRows] = useState<HistoryRow[] | null>(null);
+  const [viewing, setViewing] = useState<ParsedHistory | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("@/lib/db.functions")
+      .then(({ listPrescriptions }) => listPrescriptions({ data: { patientId: patient.id } }))
+      .then((r) => !cancelled && setRows(r))
+      .catch((err) => {
+        console.error("Couldn't load prescription history:", err);
+        if (!cancelled) setRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.id]);
+
+  function open(row: HistoryRow) {
+    try {
+      const parsed = JSON.parse(row.data) as ParsedHistory;
+      setViewing({
+        ...parsed,
+        receipt: { ...parsed.receipt, no: row.receiptNo || parsed.receipt.no },
+      });
+    } catch (err) {
+      console.error("Corrupt prescription history record:", err);
+      toast.error("Couldn't open this record");
+    }
+  }
+
+  if (rows === null) {
+    return <p className="text-sm text-muted-foreground py-8 text-center">Loading history…</p>;
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-8 text-center">
+        No saved prescriptions yet. Use "Save, Preview &amp; Print" inside a prescription to record
+        one here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => {
+        let diagnosis = "—";
+        let total = 0;
+        let hasReceipt = false;
+        try {
+          const parsed = JSON.parse(row.data) as ParsedHistory;
+          diagnosis = parsed.rx.diagnosis || parsed.rx.concern || "—";
+          hasReceipt = !!parsed.receiptOn && parsed.receipt.items.length > 0;
+          total = parsed.receipt.items.reduce(
+            (sum, it) => sum + (Number(it.qty) || 0) * (Number(it.rate) || 0),
+            0,
+          );
+        } catch {
+          /* fall back to defaults above */
+        }
+        return (
+          <div
+            key={row.id}
+            className="p-4 rounded-2xl bg-card border flex flex-wrap items-center gap-3"
+          >
+            <FileText className="size-5 shrink-0 text-brand" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium truncate">{diagnosis}</div>
+              <div className="text-xs text-muted-foreground">
+                {fmtDate(new Date(row.createdAt))}
+                {row.receiptNo && <> · Receipt {row.receiptNo}</>}
+                {hasReceipt && <> · ₹ {total.toLocaleString("en-IN")}</>}
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => open(row)}>
+              <Eye className="size-4" /> View Document
+            </Button>
+          </div>
+        );
+      })}
+
+      {viewing && (
+        <PrescriptionDialog
+          patient={patient}
+          lastVisit={lastVisit}
+          historical={viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </div>
   );
 }

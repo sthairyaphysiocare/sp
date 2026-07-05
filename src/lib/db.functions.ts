@@ -360,6 +360,34 @@ export const unlockUser = createServerFn({ method: "POST" })
   });
 
 /**
+ * Chronological (newest-first) list of saved prescriptions for one patient,
+ * used by the Prescription History tab on the patient profile.
+ */
+export const listPrescriptions = createServerFn({ method: "POST" })
+  .inputValidator((input: { patientId: string }) => {
+    if (!input || typeof input.patientId !== "string" || !input.patientId) {
+      throw new Error("Invalid payload");
+    }
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const { turso, ensureSchema } = await import("./turso.server");
+    await ensureSchema();
+    const db = turso();
+    const res = await db.execute({
+      sql: `SELECT id, receipt_no, data, created_at FROM prescriptions
+            WHERE patient_id = ? ORDER BY created_at DESC`,
+      args: [data.patientId],
+    });
+    return res.rows.map((r) => ({
+      id: String(r.id),
+      receiptNo: r.receipt_no == null ? null : String(r.receipt_no),
+      data: String(r.data),
+      createdAt: Number(r.created_at ?? 0),
+    }));
+  });
+
+/**
  * Persist a prescription (and its receipt) to the database. When the
  * prescription includes a receipt, a sequential receipt number is allocated
  * atomically: SP-000001, SP-000002, ... The number survives retries because

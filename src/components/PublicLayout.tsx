@@ -1,6 +1,6 @@
 import { ContactFab } from "@/components/ContactFab";
 import { BackToTop } from "@/components/BackToTop";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import { CLINIC, enabledBranches } from "@/lib/logo";
@@ -17,7 +17,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -29,7 +29,31 @@ const NAV = [
 ];
 
 export function PublicLayout({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  // ---------------------------------------------------------------------
+  // STRICT ROUTING SECURITY: the public site and the staff dashboard are
+  // isolated zones. If this layout ever mounts while a staff session token
+  // is present in sessionStorage — which normally only happens via the
+  // browser's Back button after being in /app — treat it as an escape from
+  // the secure zone: purge the token, reset auth state, and force the user
+  // to the login screen with `replace: true` so Forward can't re-enter.
+  // useLayoutEffect runs before paint to minimize any stale-UI flash.
+  useLayoutEffect(() => {
+    let cancelled = false;
+    import("@/lib/session").then(({ loadSession }) => {
+      if (cancelled) return;
+      if (loadSession()) {
+        logout();
+        navigate({ to: "/auth", replace: true });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const settings = useStore((s) => s.settings);
   const branches = enabledBranches(settings);
   const globalEmail = settings.globalEmail || CLINIC.email;
