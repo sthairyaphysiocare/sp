@@ -41,7 +41,7 @@
   --background: oklch(1 0 0);
   --foreground: oklch(0.18 0.04 240);
   --surface: oklch(0.985 0.005 240);
-  --card: oklch(1 0 0);
+  --card: #f4f7fc; /* Ice Blue / Slate Blue tint — replaces solid white cards */
   --card-foreground: oklch(0.18 0.04 240);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.04 240);
@@ -58,7 +58,7 @@
   --accent-foreground: oklch(0.22 0.05 240);
   --destructive: oklch(0.6 0.22 27);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.92 0.01 240);
+  --border: #e1ecf5; /* Complementary shade of --card so edges read as intentional */
   --input: oklch(0.92 0.01 240);
   --ring: oklch(0.55 0.14 235);
 }
@@ -88,6 +88,16 @@
 
 @layer base {
   * { border-color: var(--color-border); }
+  /* Card theme refactor: smooth, GPU-friendly transition for the new tint
+     so any existing hover/interaction states (already declared per
+     component) blend in color as well as motion. Colors only — no layout
+     properties — applied sitewide since dashboard + public cards share
+     the same --card/--border tokens. */
+  .bg-card {
+    transition-property: background-color, border-color, box-shadow;
+    transition-duration: 300ms;
+    transition-timing-function: ease-in-out;
+  }
   html, body { background-color: transparent; }
   body {
     color: var(--color-foreground);
