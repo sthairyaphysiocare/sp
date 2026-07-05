@@ -28,6 +28,43 @@ const NAV = [
   { to: "/book", label: "Book Visit" },
 ];
 
+/**
+ * Loads the standalone visual-enhancement layer (public/ui-enhancements.css
+ * + .js) exactly once per browser session, regardless of how many times
+ * PublicLayout mounts across client-side navigations. The script exposes
+ * window.UIEnhance.init(), which IS safe (and expected) to call again on
+ * every mount — it re-scans the freshly rendered page without leaking
+ * duplicate global listeners (see the script's own guards).
+ */
+let uiEnhanceReady: Promise<void> | null = null;
+function ensureUiEnhanceAssets(): Promise<void> {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (!document.getElementById("ui-enhancements-css")) {
+    const link = document.createElement("link");
+    link.id = "ui-enhancements-css";
+    link.rel = "stylesheet";
+    link.href = "/ui-enhancements.css";
+    document.head.appendChild(link);
+  }
+  if (!uiEnhanceReady) {
+    uiEnhanceReady = new Promise((resolve) => {
+      const existing = document.getElementById("ui-enhancements-js");
+      if (existing) {
+        if ((window as unknown as { UIEnhance?: unknown }).UIEnhance) resolve();
+        else existing.addEventListener("load", () => resolve());
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "ui-enhancements-js";
+      script.src = "/ui-enhancements.js";
+      script.defer = true;
+      script.onload = () => resolve();
+      document.body.appendChild(script);
+    });
+  }
+  return uiEnhanceReady;
+}
+
 export function PublicLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -52,6 +89,18 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Standalone visual-enhancement layer (additive CSS + vanilla JS,
+  // public pages only — see public/ui-enhancements.{css,js}).
+  useEffect(() => {
+    let cancelled = false;
+    ensureUiEnhanceAssets().then(() => {
+      if (!cancelled) (window as unknown as { UIEnhance?: { init: () => void } }).UIEnhance?.init();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const settings = useStore((s) => s.settings);
@@ -120,7 +169,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   const signedIn = mounted && !!user && liveSession;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div data-ui-enhance className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center">

@@ -1,0 +1,166 @@
+/* =============================================================================
+   ui-enhancements.css
+   Non-destructive visual/interaction upgrade layer — PUBLIC PAGES ONLY.
+
+   Scope: every rule is nested under [data-ui-enhance] so it can never affect
+   the staff dashboard or login screen even if this file stays cached.
+   Guarantees:
+     - No layout properties are touched: no display, flex-direction, grid-*,
+       width, height, padding, margin, or font-size declarations anywhere
+       in this file.
+     - Only transform, opacity, box-shadow, background (gradient overlays),
+       backdrop-filter, filter, and transition/animation properties are used
+       — all compositor/GPU-friendly, so layout never re-flows on hover.
+     - Everything is wrapped in @media (prefers-reduced-motion: no-preference)
+       except the glassmorphism/shadow static touches, which are motion-free.
+============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   1. Global interactive easing — buttons, links, cards get a premium,
+      consistent transition curve. transition-property is restricted to
+      transform/opacity/box-shadow/background/filter so layout can't shift.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] a,
+[data-ui-enhance] button,
+[data-ui-enhance] [role="button"] {
+  transition-property: transform, opacity, box-shadow, background-color, background-image, filter, border-color;
+  transition-duration: 0.35s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* ---------------------------------------------------------------------------
+   2. Card elevation — existing cards (bg-card, rounded-2xl/3xl surfaces) get
+      a softer, richer shadow and a very subtle glass edge. No size change.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] .bg-card {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -16px rgba(2, 132, 199, 0.16);
+  transition-property: transform, box-shadow;
+  transition-duration: 0.4s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Cards that are already interactive (wrapped in a link/button, or that use
+   the site's own hover-lift utility) get a slightly richer glow + a 1.02x
+   scale on hover — additive to whatever transform they already declare. */
+[data-ui-enhance] a > .bg-card,
+[data-ui-enhance] a.bg-card,
+[data-ui-enhance] button.bg-card,
+[data-ui-enhance] .bg-card.hover\:soft-shadow {
+  transform: translateZ(0) scale(1);
+}
+[data-ui-enhance] a:hover > .bg-card,
+[data-ui-enhance] a.bg-card:hover,
+[data-ui-enhance] button.bg-card:hover,
+[data-ui-enhance] .bg-card.hover\:soft-shadow:hover {
+  transform: translateZ(0) scale(1.015);
+  box-shadow:
+    0 2px 4px rgba(15, 23, 42, 0.06),
+    0 22px 48px -18px rgba(2, 132, 199, 0.28);
+}
+
+/* Glassmorphism accent for translucent surfaces (e.g. sticky header,
+   badge pills) — backdrop-filter only, no size/position change. */
+[data-ui-enhance] .backdrop-blur,
+[data-ui-enhance] header.sticky {
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+}
+
+/* ---------------------------------------------------------------------------
+   3. Buttons — gentle lift + glow on hover, press feedback on click.
+      Uses transform/box-shadow/filter only.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] button,
+[data-ui-enhance] a > button {
+  transform: translateY(0) scale(1);
+}
+[data-ui-enhance] button:hover {
+  transform: translateY(-2px) scale(1.02);
+  filter: brightness(1.04);
+}
+[data-ui-enhance] button:active {
+  transform: translateY(0) scale(0.97);
+  filter: brightness(0.98);
+}
+[data-ui-enhance] .brand-gradient {
+  background-size: 160% 160%;
+  transition: background-position 0.6s ease, filter 0.35s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-ui-enhance] button.brand-gradient:hover,
+[data-ui-enhance] a:hover > .brand-gradient {
+  background-position: 100% 50%;
+  box-shadow: 0 10px 30px -8px rgba(2, 132, 199, 0.45);
+}
+
+/* Icon nudge on hover for buttons/links that carry a trailing icon
+   (e.g. "Book a Visit →"). Purely transform-based — icon size untouched. */
+[data-ui-enhance] button:hover svg:last-child,
+[data-ui-enhance] a:hover svg:last-child {
+  transform: translateX(3px);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+[data-ui-enhance] button svg:last-child,
+[data-ui-enhance] a svg:last-child {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   4. Links — soft underline glide instead of an abrupt color snap.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] a {
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------------------
+   5. Hero visual polish — ambient gradient glow drifts slowly behind the
+      hero art; pure background-position animation, no layout impact.
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui-enhance] [data-ui-hero-glow] {
+    background-size: 200% 200%;
+    animation: ui-hero-drift 14s ease-in-out infinite;
+  }
+  @keyframes ui-hero-drift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   6. Scroll-reveal — elements the JS layer marks as entering the viewport.
+      Default state is always visible (safe if JS fails to load); the
+      hidden/animate-in state only exists when motion is allowed AND the
+      JS layer has explicitly opted an element in via [data-ui-reveal].
+      Initial hide uses opacity/transform only (never `display:none`), so
+      layout, scroll height, and reading order are never affected.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] [data-ui-reveal] {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui-enhance] [data-ui-reveal] {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  [data-ui-enhance] [data-ui-reveal].ui-in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   7. Magnetic CTA — the JS layer applies an inline transform (translate) on
+      the hero/CTA buttons; this just adds the spring-back easing so the
+      element glides to rest instead of snapping.
+--------------------------------------------------------------------------- */
+[data-ui-enhance] [data-ui-magnetic] {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-ui-enhance] [data-ui-magnetic]:hover {
+  transition: transform 0.08s linear;
+}
