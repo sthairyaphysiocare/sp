@@ -4,6 +4,7 @@ import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { HeroKinematics3D } from "@/components/HeroKinematics3D";
 import { getIcon } from "@/lib/icons";
 import {
   Activity,
@@ -72,7 +73,10 @@ function HomePage() {
                 </Button>
               </Link>
               <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
-                <Button size="lg" variant="outline">
+                <Button
+                  size="lg"
+                  className="border-0 bg-[#25D366] text-white shadow-none hover:bg-[#128C7E] hover:text-white"
+                >
                   <WhatsAppIcon size={16} /> WhatsApp
                 </Button>
               </a>
@@ -90,6 +94,7 @@ function HomePage() {
           </div>
           <div className="relative">
             <div className="absolute -inset-8 brand-gradient opacity-10 blur-3xl rounded-full hidden lg:block" />
+            <HeroKinematics3D />
             <ul className="relative space-y-5 sm:space-y-6">
               {taglines.map((t, i) => (
                 <li
