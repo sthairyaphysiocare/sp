@@ -4,7 +4,6 @@ import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
-import { HeroKinematics3D } from "@/components/HeroKinematics3D";
 import { getIcon } from "@/lib/icons";
 import {
   Activity,
@@ -94,7 +93,6 @@ function HomePage() {
           </div>
           <div className="relative">
             <div className="absolute -inset-8 brand-gradient opacity-10 blur-3xl rounded-full hidden lg:block" />
-            <HeroKinematics3D />
             <ul className="relative space-y-5 sm:space-y-6">
               {taglines.map((t, i) => (
                 <li
