@@ -4,16 +4,28 @@ import { WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { useStore } from "@/lib/store";
 import { CLINIC, whatsappDigits } from "@/lib/logo";
 import { cn } from "@/lib/utils";
+import { useContentBehind } from "@/lib/useContentBehind";
 
 /**
  * Floating contact button (public site only). Expands into three actions:
  * Call and WhatsApp target the Global WhatsApp number from Admin settings;
  * Email targets the Global Email ID.
+ *
+ * When text passes underneath it the button softens to a translucent disc that
+ * words read through, and snaps back to full strength on hover, focus, or the
+ * moment it is opened. All three actions, the number sources and the open /
+ * close behaviour are untouched — only its visual weight over content changes.
  */
 export function ContactFab() {
   const settings = useStore((s) => s.settings);
   const [open, setOpen] = useState(false);
+  const [engaged, setEngaged] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // Measured against the toggle itself; never dim while the menu is open.
+  const textBehind = useContentBehind(toggleRef, !open);
+  const quiet = textBehind && !open && !engaged;
 
   const wa = whatsappDigits(settings);
   const email = settings.globalEmail || CLINIC.email;
@@ -66,6 +78,11 @@ export function ContactFab() {
   return (
     <div
       ref={rootRef}
+      data-floating-ui
+      onPointerEnter={() => setEngaged(true)}
+      onPointerLeave={() => setEngaged(false)}
+      onFocus={() => setEngaged(true)}
+      onBlur={() => setEngaged(false)}
       className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 print:hidden"
     >
       {/* Action icons — staggered spring reveal */}
@@ -99,17 +116,20 @@ export function ContactFab() {
 
       {/* Main toggle */}
       <button
+        ref={toggleRef}
         type="button"
         aria-expanded={open}
         aria-label={open ? "Close contact options" : "Contact us"}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "grid place-items-center size-14 rounded-full text-white brand-gradient shadow-xl",
-          "transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-105 active:scale-95",
+          "grid place-items-center size-14 rounded-full text-white brand-gradient",
+          "transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:scale-105 active:scale-95",
+          // Softened over words, full strength over empty space or on approach.
+          quiet ? "opacity-40 shadow-none scale-90" : "opacity-100 shadow-xl scale-100",
           open && "rotate-45",
         )}
       >
-        <Plus className={cn("size-6", !open && "fab-wiggle")} />
+        <Plus className={cn("size-6", !open && !quiet && "fab-wiggle")} />
       </button>
     </div>
   );
