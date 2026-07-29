@@ -193,7 +193,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
    * that broke the old html2canvas capture. Falls back to the drawn
    * renderer on any failure.
    */
-  async function buildPdf(): Promise<{ blob: Blob; filename: string } | null> {
+  async function buildPdf(): Promise<{ blob: Blob; filename: string; image?: string } | null> {
     try {
       if (step !== "preview") {
         setStep("preview");
@@ -265,10 +265,15 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
         }
         const canvas = await toCanvas(clone, opts);
         if (isBlankCapture(canvas)) throw new Error("rasteriser returned a blank sheet");
+        // Derive the scale from the canvas actually produced rather than
+        // assuming it equals pixelRatio: html-to-image silently shrinks the
+        // canvas when it would exceed the browser's maximum dimensions, which
+        // would otherwise put the composited logos in the wrong place.
+        const scale = canvas.width / Math.max(1, clone.getBoundingClientRect().width);
         // The logo placeholders left by sanitizeCloneForCapture are filled in
         // here, on the finished bitmap, where the crop maths is ours and not
         // the rasteriser's.
-        drawLogosOnto(canvas, clone, RATIO, logoImg);
+        drawLogosOnto(canvas, clone, scale, logoImg);
         dataUrl = canvas.toDataURL("image/jpeg", 0.95);
       } finally {
         sandbox.remove();
@@ -302,7 +307,9 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
         }
       }
       const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
-      return { blob: pdf.output("blob"), filename };
+      // The bitmap is handed back too: printing reuses it rather than asking
+      // the browser to print a PDF, which is what broke printing everywhere.
+      return { blob: pdf.output("blob"), filename, image: dataUrl };
     } catch (err) {
       console.error("Preview capture failed, using drawn fallback:", err);
       return buildPdfDrawn();
@@ -424,7 +431,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     }
   }
 
-  async function buildPdfDrawn(): Promise<{ blob: Blob; filename: string } | null> {
+  async function buildPdfDrawn(): Promise<{ blob: Blob; filename: string; image?: string } | null> {
     // Fallback renderer: drawn directly with jsPDF primitives (the same
     // approach as the Reports module). Used only if capturing the on-screen
     // preview fails, so exports can never be fully broken.
@@ -789,141 +796,138 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   }
 
   /**
-   * Prints the generated PDF rather than the live DOM.
+   * Builds a complete, standalone document containing nothing but the captured
+   * prescription bitmap, sized to fill exactly one page.
    *
-   * Printing the DOM meant fighting every browser's page box at once: paper
-   * size (a 296mm sheet spills onto a second page whenever the print dialog is
-   * set to Letter rather than A4, which is what kept producing two pages on
-   * Windows and Android), dialog margin overrides, and iOS Safari's inability
-   * to paginate a fixed-position ancestor at all — which is why it printed the
-   * whole web page. The PDF is one exact A4 page by construction, so printing
-   * it removes every one of those variables. printFromDom() below is kept as a
-   * fallback for the case where PDF generation itself fails.
+   * Everything else has been tried and failed. Printing the live DOM leaked the
+   * app (the toast spinner showed up in the print preview) and could not be
+   * pinned to one page across paper sizes. Printing the PDF from an iframe does
+   * not work either: Chrome's PDF viewer is a plugin document, so calling
+   * print() on it falls through and prints the *parent* page instead — which is
+   * exactly the two-pages-plus-toast output that was reported.
+   *
+   * A plain same-origin HTML document sidesteps both. `height: 100%` with
+   * `overflow: hidden` means the image is scaled to fit whatever paper is
+   * selected — A4 or Letter — and physically cannot spill onto a second page.
    */
+  function buildPrintDocument(image: string): string {
+    return [
+      "<!doctype html><html><head><meta charset='utf-8'>",
+      "<title>Prescription</title><style>",
+      "@page{size:A4 portrait;margin:0}",
+      "*{margin:0;padding:0;box-sizing:border-box}",
+      "html,body{width:100%;height:100%;background:#fff;overflow:hidden}",
+      ".sheet{width:100%;height:100%;display:flex;align-items:center;",
+      "justify-content:center;overflow:hidden;break-after:avoid;page-break-after:avoid}",
+      // 99% rather than 100% so sub-pixel rounding can never tip onto page two.
+      ".sheet img{max-width:100%;max-height:99%;width:auto;height:auto;display:block}",
+      "</style></head><body><div class='sheet'>",
+      `<img src="${image}" alt="Prescription">`,
+      "</div></body></html>",
+    ].join("");
+  }
+
+  /** Waits for the written document's image to decode, then prints it. */
+  function printWhenReady(win: Window, onDone?: () => void) {
+    const started = Date.now();
+    const attempt = () => {
+      let ready = true;
+      try {
+        const img = win.document.images[0];
+        ready = !img || (img.complete && img.naturalWidth > 0);
+      } catch {
+        ready = true;
+      }
+      if (!ready && Date.now() - started < 8000) {
+        setTimeout(attempt, 100);
+        return;
+      }
+      try {
+        win.focus();
+        win.print();
+      } catch (err) {
+        console.error("print() failed", err);
+      }
+      onDone?.();
+    };
+    setTimeout(attempt, 120);
+  }
+
+  function printViaIframe(html: string): boolean {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText =
+      "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    const win = frame.contentWindow;
+    if (!doc || !win) {
+      frame.remove();
+      return false;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    printWhenReady(win, () => setTimeout(() => frame.remove(), 60000));
+    return true;
+  }
+
   async function printRx() {
     if (busy) return;
 
-    // Safari's popup blocker only honours a window opened synchronously inside
-    // the click handler, so the tab is claimed before any awaiting begins.
-    const viaViewer = isAppleWebKit();
-    const preOpened = viaViewer ? window.open("", "_blank") : null;
+    // Safari only honours a window opened synchronously inside the click
+    // handler, so the tab is claimed before any awaiting begins.
+    const viaWindow = isAppleWebKit();
+    const preOpened = viaWindow ? window.open("", "_blank") : null;
+    if (preOpened) {
+      preOpened.document.write(
+        "<!doctype html><title>Prescription</title>" +
+          "<body style='font:15px system-ui;padding:24px;color:#334'>Preparing prescription...",
+      );
+    }
 
     setBusy("print");
     toast.loading("Preparing prescription...", { id: "print" });
     try {
       const out = await buildPdf();
-      if (!out) throw new Error("PDF generation failed");
-      const url = URL.createObjectURL(out.blob);
+      if (!out?.image) throw new Error("no printable capture");
+      const html = buildPrintDocument(out.image);
 
-      if (viaViewer) {
-        // Safari will not print a PDF out of a hidden iframe, so it is handed
-        // to the built-in viewer, whose own Print / Share controls work.
-        if (preOpened) {
-          preOpened.location.href = url;
-          toast.success("Prescription opened — use the viewer's Print option.", {
-            id: "print",
-            duration: 6000,
-          });
-        } else {
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = out.filename;
-          a.click();
-          toast.success("Prescription downloaded — open it to print.", {
-            id: "print",
-            duration: 6000,
-          });
-        }
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      // Dismissed before printing so the spinner can never be captured into
+      // the print preview, which is what happened previously.
+      toast.dismiss("print");
+
+      if (preOpened) {
+        preOpened.document.open();
+        preOpened.document.write(html);
+        preOpened.document.close();
+        printWhenReady(preOpened);
         return;
       }
-
-      const frame = document.createElement("iframe");
-      frame.setAttribute("aria-hidden", "true");
-      frame.style.cssText =
-        "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;";
-      frame.src = url;
-      frame.onload = () => {
-        try {
-          frame.contentWindow?.focus();
-          frame.contentWindow?.print();
-          toast.dismiss("print");
-        } catch {
-          printFromDom();
-        }
-      };
-      document.body.appendChild(frame);
-      setTimeout(() => {
-        frame.remove();
-        URL.revokeObjectURL(url);
-      }, 120000);
+      if (!printViaIframe(html)) throw new Error("could not open a print document");
     } catch (err) {
       console.error("Print error", err);
       preOpened?.close();
       toast.dismiss("print");
-      printFromDom();
+      // Never fall back to printing the app page — that is the original bug.
+      // Hand over the PDF instead so the prescription can still be printed.
+      const out = await buildPdf().catch(() => null);
+      if (out) {
+        const url = URL.createObjectURL(out.blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = out.filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast.info("Couldn't open the print dialog — the PDF was downloaded instead.", {
+          duration: 7000,
+        });
+      } else {
+        toast.error("Couldn't prepare the prescription for printing. Please retry.");
+      }
     } finally {
       setBusy(null);
     }
-  }
-
-  /**
-   * Fallback path: clones the sheet into a plain container at <body> level and
-   * prints that, so no fixed-position or scrollable ancestor reaches the print
-   * engine. Only used if the PDF could not be produced.
-   */
-  function printFromDom() {
-    const node = ref.current;
-    if (!node) {
-      window.print();
-      return;
-    }
-
-    document.getElementById("rx-print-portal")?.remove();
-
-    // Measured on the live node: the clone lives in a display:none portal and
-    // would report a height of zero. 1123px is A4's height at 96dpi, and the
-    // sheet's own `min-height: 297mm` means anything meaningfully above that
-    // is real overflow rather than rounding.
-    const PAGE_PX = 1123;
-    const overflows = node.scrollHeight > PAGE_PX + 12;
-
-    const portal = document.createElement("div");
-    portal.id = "rx-print-portal";
-    const clone = node.cloneNode(true) as HTMLElement;
-    clone.style.removeProperty("min-height");
-    clone.style.removeProperty("box-shadow");
-    if (overflows) clone.classList.add("rx-sheet-flow");
-    if (logoData) {
-      clone.querySelectorAll("img").forEach((img) => {
-        img.removeAttribute("crossorigin");
-        img.setAttribute("src", logoData);
-      });
-    }
-    portal.appendChild(clone);
-    document.body.appendChild(portal);
-    document.body.classList.add("rx-printing");
-
-    // Safari fires `afterprint` less reliably than Chrome, but does leave the
-    // print media query — both are watched so the portal is always torn down.
-    const mql = window.matchMedia?.("print");
-    let done = false;
-    const onMedia = (e: MediaQueryListEvent) => {
-      if (!e.matches) cleanup();
-    };
-    function cleanup() {
-      if (done) return;
-      done = true;
-      document.body.classList.remove("rx-printing");
-      portal.remove();
-      window.removeEventListener("afterprint", cleanup);
-      mql?.removeEventListener?.("change", onMedia);
-    }
-    window.addEventListener("afterprint", cleanup);
-    mql?.addEventListener?.("change", onMedia);
-    setTimeout(cleanup, 60000);
-
-    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
   }
 
   return (
