@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { LOGO_URL, branchById, getLogoDataUrl, isAppleWebKit, whatsappDigits } from "@/lib/logo";
+import {
+  LOGO_URL,
+  branchById,
+  getLogoDataUrl,
+  getLogoImage,
+  isAppleWebKit,
+  whatsappDigits,
+} from "@/lib/logo";
 import type { Patient, Visit } from "@/lib/types";
 import { slotConflict, store, takenSlotsForDate, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
@@ -50,6 +57,12 @@ interface Props {
 }
 
 type Step = "edit" | "preview";
+
+/** 1x1 transparent GIF — holds a logo's layout box without rasterising it. */
+const BLANK_PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+/** Ring around the header logo; a flat hex so no color function is involved. */
+const LOGO_RING = "#cce6f4";
 
 interface ReceiptItem {
   id: string;
@@ -109,7 +122,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       notes: "",
     },
   );
-  const [busy, setBusy] = useState<null | "pdf" | "wa">(null);
+  const [busy, setBusy] = useState<null | "pdf" | "wa" | "print">(null);
   const [waPrompt, setWaPrompt] = useState(false);
   const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
@@ -194,7 +207,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       await document.fonts?.ready?.catch?.(() => undefined);
       await new Promise((r) => setTimeout(r, 80));
 
-      const inlineLogo = logoData ?? (await getLogoDataUrl());
+      const logoImg = await getLogoImage();
 
       // Capture a CLONE inside an off-screen sandbox with a hard-coded A4
       // pixel width, zero margins, and no inherited transforms — so screen
@@ -215,7 +228,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
         "px;max-width:" +
         A4_PX +
         "px;margin:0 !important;transform:none !important;box-shadow:none;left:0;right:auto;";
-      sanitizeCloneForCapture(clone, inlineLogo);
+      sanitizeCloneForCapture(clone);
 
       // Pin the capture to exactly one A4 page. The live sheet is `min-height:
       // 297mm`, so its scrollHeight routinely measures a few pixels over the
@@ -231,28 +244,32 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       clone.style.setProperty("overflow", "hidden", "important");
 
       let dataUrl: string;
+      const RATIO = 2;
       try {
         await waitForImages(clone);
-        const { toJpeg } = await import("html-to-image");
+        const { toCanvas } = await import("html-to-image");
         const opts = {
-          quality: 0.95,
-          pixelRatio: 2,
+          pixelRatio: RATIO,
           backgroundColor: "#ffffff",
           // cacheBust appends a query string, forcing a fresh cross-origin-mode
-          // refetch that Safari can reject. The logo is inlined above, so there
-          // is nothing left to bust.
+          // refetch that Safari can reject, and nothing needs busting here.
           cacheBust: false,
           width: A4_PX,
           height: captureH,
           style: { margin: "0", transform: "none" },
         };
-        // Safari's foreignObject pipeline drops embedded resources on a cold
-        // first pass. A cheap throwaway render primes it so the real capture
-        // comes back complete.
+        // Safari's foreignObject pipeline returns an incomplete first render.
+        // A cheap throwaway pass primes it before the capture that counts.
         if (isAppleWebKit()) {
-          await toJpeg(clone, { ...opts, pixelRatio: 1, quality: 0.5 }).catch(() => undefined);
+          await toCanvas(clone, { ...opts, pixelRatio: 1 }).catch(() => undefined);
         }
-        dataUrl = await toJpeg(clone, opts);
+        const canvas = await toCanvas(clone, opts);
+        if (isBlankCapture(canvas)) throw new Error("rasteriser returned a blank sheet");
+        // The logo placeholders left by sanitizeCloneForCapture are filled in
+        // here, on the finished bitmap, where the crop maths is ours and not
+        // the rasteriser's.
+        drawLogosOnto(canvas, clone, RATIO, logoImg);
+        dataUrl = canvas.toDataURL("image/jpeg", 0.95);
       } finally {
         sandbox.remove();
       }
@@ -293,27 +310,24 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   }
 
   /**
-   * Makes a cloned sheet safe to rasterise on every engine before it is handed
-   * to html-to-image. Two Apple-specific defects are addressed:
+   * Prepares a cloned sheet for rasterising.
    *
-   *  1. Missing logo — Safari will not paint an external <img> inside the SVG
-   *     foreignObject used for capture, so every image is repointed at the
-   *     inlined data URL and the `crossorigin` attribute (which triggers a
-   *     CORS-mode fetch Safari can fail) is dropped.
-   *  2. Stray light-blue arc — Tailwind's `ring-*` utility compiles to a
-   *     box-shadow, and Safari renders a box-shadow on a `rounded-full` image
-   *     inside foreignObject as a detached crescent. Clearing box-shadow
-   *     removes it; the logo's outline is a real border instead (see markup).
+   * The two logo <img> elements are blanked out rather than captured. Safari
+   * ignores `object-fit` inside the SVG foreignObject that html-to-image
+   * renders through, so the 1068x768 source got drawn at its natural size into
+   * an 80x80 box and clipped — leaving only a crescent of the badge's blue rim,
+   * which is the "light blue arc" on iPhone. Their boxes are kept so layout is
+   * untouched; drawLogosOnto() paints the real artwork on afterwards.
+   *
+   * Box shadows go too: Tailwind's `ring-*` compiles to one, and WebKit renders
+   * shadows on rounded elements inside foreignObject as detached fragments.
    */
-  function sanitizeCloneForCapture(clone: HTMLElement, inlineLogo: string | null) {
-    if (inlineLogo) {
-      clone.querySelectorAll("img").forEach((img) => {
-        img.removeAttribute("crossorigin");
-        img.setAttribute("src", inlineLogo);
-        img.setAttribute("decoding", "sync");
-        img.setAttribute("loading", "eager");
-      });
-    }
+  function sanitizeCloneForCapture(clone: HTMLElement) {
+    clone.querySelectorAll<HTMLImageElement>("[data-rx-logo]").forEach((img) => {
+      img.removeAttribute("crossorigin");
+      img.setAttribute("src", BLANK_PIXEL);
+      img.style.setProperty("visibility", "hidden", "important");
+    });
     clone.querySelectorAll<HTMLElement>("*").forEach((el) => {
       el.style.setProperty("box-shadow", "none", "important");
       el.style.setProperty("text-shadow", "none", "important");
@@ -322,6 +336,92 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       el.style.setProperty("transition", "none", "important");
     });
     clone.style.setProperty("box-shadow", "none", "important");
+  }
+
+  /**
+   * Paints the header logo and the watermark onto the captured bitmap at the
+   * exact positions their placeholders occupy, reproducing `object-cover`,
+   * `object-contain`, the circular mask and the border in plain canvas calls.
+   */
+  function drawLogosOnto(
+    canvas: HTMLCanvasElement,
+    clone: HTMLElement,
+    ratio: number,
+    img: HTMLImageElement | null,
+  ) {
+    if (!img) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const base = clone.getBoundingClientRect();
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (!nw || !nh) return;
+
+    clone.querySelectorAll<HTMLElement>("[data-rx-logo]").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      const x = (r.left - base.left) * ratio;
+      const y = (r.top - base.top) * ratio;
+      const w = r.width * ratio;
+      const h = r.height * ratio;
+      if (w < 1 || h < 1) return;
+
+      ctx.save();
+      if (el.dataset.rxLogo === "watermark") {
+        // object-contain, at the same 7% opacity as the on-screen preview.
+        ctx.globalAlpha = 0.07;
+        const s = Math.min(w / nw, h / nh);
+        ctx.drawImage(img, x + (w - nw * s) / 2, y + (h - nh * s) / 2, nw * s, nh * s);
+      } else {
+        // object-cover inside a circular mask, then the border ring on top.
+        const border = 2 * ratio;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const radius = Math.min(w, h) / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0, radius - border), 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        const s = Math.max((w - border * 2) / nw, (h - border * 2) / nh);
+        ctx.drawImage(img, cx - (nw * s) / 2, cy - (nh * s) / 2, nw * s, nh * s);
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0, radius - border / 2), 0, Math.PI * 2);
+        ctx.lineWidth = border;
+        ctx.strokeStyle = LOGO_RING;
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  /**
+   * Guards against WebKit handing back an empty bitmap: if the sheet came out
+   * essentially blank, the drawn fallback is used instead of exporting a page
+   * containing nothing but a logo.
+   */
+  function isBlankCapture(canvas: HTMLCanvasElement): boolean {
+    try {
+      const probe = document.createElement("canvas");
+      probe.width = 60;
+      probe.height = 85;
+      const pctx = probe.getContext("2d");
+      if (!pctx) return false;
+      pctx.fillStyle = "#ffffff";
+      pctx.fillRect(0, 0, probe.width, probe.height);
+      pctx.drawImage(canvas, 0, 0, probe.width, probe.height);
+      const data = pctx.getImageData(0, 0, probe.width, probe.height).data;
+      let ink = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) ink += 1;
+      }
+      return ink / (data.length / 4) < 0.004;
+    } catch {
+      // Reading pixels back is a diagnostic, never a reason to fail the export.
+      return false;
+    }
   }
 
   async function buildPdfDrawn(): Promise<{ blob: Blob; filename: string } | null> {
@@ -689,16 +789,90 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   }
 
   /**
-   * Prints the A4 sheet — and only the A4 sheet — as a single page.
+   * Prints the generated PDF rather than the live DOM.
    *
-   * The live preview sits inside a `position: fixed`, scrollable modal. Print
-   * engines cannot paginate a fixed ancestor: Chrome cropped the sheet and
-   * pushed the footer onto a second page, and iOS Safari gave up and printed
-   * the entire web page. So instead of printing in place, the sheet is cloned
-   * into a plain, statically-positioned container at <body> level; the print
-   * stylesheet then hides every other top-level node.
+   * Printing the DOM meant fighting every browser's page box at once: paper
+   * size (a 296mm sheet spills onto a second page whenever the print dialog is
+   * set to Letter rather than A4, which is what kept producing two pages on
+   * Windows and Android), dialog margin overrides, and iOS Safari's inability
+   * to paginate a fixed-position ancestor at all — which is why it printed the
+   * whole web page. The PDF is one exact A4 page by construction, so printing
+   * it removes every one of those variables. printFromDom() below is kept as a
+   * fallback for the case where PDF generation itself fails.
    */
-  function runPrint() {
+  async function printRx() {
+    if (busy) return;
+
+    // Safari's popup blocker only honours a window opened synchronously inside
+    // the click handler, so the tab is claimed before any awaiting begins.
+    const viaViewer = isAppleWebKit();
+    const preOpened = viaViewer ? window.open("", "_blank") : null;
+
+    setBusy("print");
+    toast.loading("Preparing prescription...", { id: "print" });
+    try {
+      const out = await buildPdf();
+      if (!out) throw new Error("PDF generation failed");
+      const url = URL.createObjectURL(out.blob);
+
+      if (viaViewer) {
+        // Safari will not print a PDF out of a hidden iframe, so it is handed
+        // to the built-in viewer, whose own Print / Share controls work.
+        if (preOpened) {
+          preOpened.location.href = url;
+          toast.success("Prescription opened — use the viewer's Print option.", {
+            id: "print",
+            duration: 6000,
+          });
+        } else {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = out.filename;
+          a.click();
+          toast.success("Prescription downloaded — open it to print.", {
+            id: "print",
+            duration: 6000,
+          });
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+
+      const frame = document.createElement("iframe");
+      frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText =
+        "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;";
+      frame.src = url;
+      frame.onload = () => {
+        try {
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+          toast.dismiss("print");
+        } catch {
+          printFromDom();
+        }
+      };
+      document.body.appendChild(frame);
+      setTimeout(() => {
+        frame.remove();
+        URL.revokeObjectURL(url);
+      }, 120000);
+    } catch (err) {
+      console.error("Print error", err);
+      preOpened?.close();
+      toast.dismiss("print");
+      printFromDom();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Fallback path: clones the sheet into a plain container at <body> level and
+   * prints that, so no fixed-position or scrollable ancestor reaches the print
+   * engine. Only used if the PDF could not be produced.
+   */
+  function printFromDom() {
     const node = ref.current;
     if (!node) {
       window.print();
@@ -717,7 +891,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     const portal = document.createElement("div");
     portal.id = "rx-print-portal";
     const clone = node.cloneNode(true) as HTMLElement;
-    // Screen-only sizing; the print rules own the geometry from here.
     clone.style.removeProperty("min-height");
     clone.style.removeProperty("box-shadow");
     if (overflows) clone.classList.add("rx-sheet-flow");
@@ -748,20 +921,9 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     }
     window.addEventListener("afterprint", cleanup);
     mql?.addEventListener?.("change", onMedia);
-    // Last resort: the portal is display:none on screen, so an orphan is
-    // invisible, but it should never outlive the print job either way.
     setTimeout(cleanup, 60000);
 
     requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
-  }
-
-  function printRx() {
-    if (step !== "preview") {
-      setStep("preview");
-      setTimeout(() => runPrint(), 300);
-      return;
-    }
-    runPrint();
   }
 
   return (
@@ -827,8 +989,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   <Button size="sm" variant="outline" onClick={() => setStep("edit")}>
                     <ArrowLeft className="size-4" /> <Pencil className="size-4" /> Back to Content
                   </Button>
-                  <Button size="sm" variant="outline" onClick={printRx}>
-                    <Printer className="size-4" /> Print
+                  <Button size="sm" variant="outline" onClick={printRx} disabled={!!busy}>
+                    <Printer className="size-4" /> {busy === "print" ? "Preparing..." : "Print"}
                   </Button>
                   <Button
                     size="sm"
@@ -1098,6 +1260,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   aria-hidden
                 >
                   <img
+                    data-rx-logo="watermark"
                     src={logoSrc}
                     alt=""
                     className="w-[420px] h-[420px] object-contain"
@@ -1112,6 +1275,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                         rasterised. A real border is visually identical and
                         rasterises correctly on every engine. */}
                     <img
+                      data-rx-logo="header"
                       src={logoSrc}
                       alt="Logo"
                       className="w-20 h-20 rounded-full object-cover border-2 border-[#cce6f4] shrink-0"

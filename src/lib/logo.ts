@@ -49,6 +49,32 @@ export function getLogoDataUrl(maxSize = 512): Promise<string | null> {
   return logoDataPromise;
 }
 
+/**
+ * The decoded logo bitmap, for painting straight onto a canvas.
+ *
+ * This is the reliable path. Safari mis-renders an <img> inside the SVG
+ * foreignObject that html-to-image rasterises through — `object-fit` is
+ * ignored, so the 1068x768 source is drawn unscaled into an 80x80 box and all
+ * that survives the clip is a fragment of the badge's blue rim (the "arc").
+ * Compositing the logo onto the finished canvas ourselves sidesteps the
+ * rasteriser entirely, so every engine gets identical output.
+ */
+let logoImagePromise: Promise<HTMLImageElement | null> | null = null;
+
+export function getLogoImage(): Promise<HTMLImageElement | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (logoImagePromise) return logoImagePromise;
+
+  logoImagePromise = new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img.naturalWidth > 0 ? img : null);
+    img.onerror = () => resolve(null);
+    img.src = LOGO_URL;
+  });
+
+  return logoImagePromise;
+}
+
 /** True on iPhone, iPad (including desktop-mode) and macOS Safari. */
 export function isAppleWebKit(): boolean {
   if (typeof navigator === "undefined") return false;
