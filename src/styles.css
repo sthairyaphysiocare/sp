@@ -241,6 +241,101 @@
   }
 }
 
+/* ==========================================================================
+   Prescription printing
+   --------------------------------------------------------------------------
+   The prescription preview lives inside a `position: fixed`, scrollable modal.
+   Handing that tree to the print engine is what caused every reported bug:
+   Chrome cropped the sheet and pushed the footer onto a second page, and iOS
+   Safari — which cannot paginate a fixed ancestor — printed the whole web
+   page instead. `printRx()` therefore clones the A4 sheet into #rx-print-portal
+   at body level and sets `.rx-printing` on <body>; the rules below then print
+   that clone, and nothing else, as exactly one A4 page.
+   ========================================================================== */
+#rx-print-portal {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.rx-printing > *:not(#rx-print-portal) {
+    display: none !important;
+  }
+
+  body.rx-printing #rx-print-portal {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+  }
+
+  .rx-sheet {
+    position: relative !important;
+    box-sizing: border-box !important;
+    width: 210mm !important;
+    /* Deliberately 1mm under A4 height. At an exact 297mm the sub-pixel
+       rounding in Chrome and Safari spills a sliver onto a second, blank
+       sheet — this is the trailing-page bug. */
+    height: 296mm !important;
+    min-height: 0 !important;
+    max-height: 296mm !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: avoid-page !important;
+    page-break-after: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .rx-sheet * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Safety valve. The clamp above guarantees one page, but a prescription with
+     an unusually long receipt or exercise protocol genuinely needs two — and
+     silently clipping clinical text would be far worse than a second page.
+     printRx() measures the sheet and applies this class only in that case. */
+  .rx-sheet.rx-sheet-flow {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
+  .rx-sheet.rx-sheet-flow .rx-footer {
+    position: static !important;
+    bottom: auto !important;
+    margin-top: 12mm;
+  }
+
+  /* Keep the footer clear of the printer's non-printable edge (~5mm on most
+     consumer hardware) now that the page box itself has no margin. */
+  .rx-sheet .rx-footer {
+    bottom: 10mm !important;
+  }
+}
+
 /* FAB: brief periodic wiggle instead of a constant pulse */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes fab-wiggle {

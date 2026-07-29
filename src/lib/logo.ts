@@ -2,6 +2,63 @@ import type { Branch, AppSettings } from "./types";
 
 export const LOGO_URL: string = "/logo.jpg";
 
+/**
+ * Safari (iOS + macOS) refuses to paint an <img> whose src is an external URL
+ * when that image is inside the SVG `foreignObject` that html-to-image
+ * serialises. Chrome and Edge paint it happily, which is why the prescription
+ * logo rendered on Android/Windows but vanished on Apple devices. Data URLs
+ * are always painted, so every export path inlines the logo through here.
+ *
+ * The source file is a ~400 KB JPEG; it is re-encoded down to `maxSize` px so
+ * the base64 payload embedded in the capture stays small enough for mobile
+ * Safari to handle without stalling.
+ */
+let logoDataPromise: Promise<string | null> | null = null;
+
+export function getLogoDataUrl(maxSize = 512): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (logoDataPromise) return logoDataPromise;
+
+  logoDataPromise = new Promise<string | null>((resolve) => {
+    const img = new Image();
+    // Same-origin asset, so the canvas is never tainted and no CORS
+    // negotiation (which Safari can fail) is required.
+    img.decoding = "sync";
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxSize / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = LOGO_URL;
+  });
+
+  return logoDataPromise;
+}
+
+/** True on iPhone, iPad (including desktop-mode) and macOS Safari. */
+export function isAppleWebKit(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  const iOS = /iP(hone|ad|od)/.test(ua);
+  const iPadDesktopMode = /Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1;
+  const desktopSafari = /Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR|CriOS|FxiOS/.test(ua);
+  return iOS || iPadDesktopMode || desktopSafari;
+}
+
 export const CLINIC = {
   name: "Sthairya Physiocare",
   tagline: "Resilience • Firmness • Balance",

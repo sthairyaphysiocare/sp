@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { LOGO_URL, branchById, whatsappDigits } from "@/lib/logo";
+import { useEffect, useRef, useState } from "react";
+import { LOGO_URL, branchById, getLogoDataUrl, isAppleWebKit, whatsappDigits } from "@/lib/logo";
 import type { Patient, Visit } from "@/lib/types";
 import { slotConflict, store, takenSlotsForDate, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
@@ -113,6 +113,21 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   const [waPrompt, setWaPrompt] = useState(false);
   const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
+  // Inlined copy of the clinic logo. Preloaded as soon as the dialog opens so
+  // that Download / WhatsApp / Print never have to wait on it, and so Safari
+  // always has a data URL to paint (see getLogoDataUrl for the why).
+  const [logoData, setLogoData] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getLogoDataUrl().then((d) => {
+      if (alive) setLogoData(d);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const logoSrc = logoData ?? LOGO_URL;
+
   const reviewSlots = slotsForDateBranch(rx.reviewDate, branch);
   const reviewTaken = useStore((s) => takenSlotsForDate(s, rx.reviewDate, lastVisit?.id));
   const has = (s: string) => !!(s && s.trim());
@@ -174,7 +189,12 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       const node = ref.current;
       if (!node) throw new Error("Preview not mounted");
       await waitForImages(node);
+      // Webfonts are embedded into the capture by html-to-image; if they are
+      // still loading Safari rasterises fallback glyphs (or nothing at all).
+      await document.fonts?.ready?.catch?.(() => undefined);
       await new Promise((r) => setTimeout(r, 80));
+
+      const inlineLogo = logoData ?? (await getLogoDataUrl());
 
       // Capture a CLONE inside an off-screen sandbox with a hard-coded A4
       // pixel width, zero margins, and no inherited transforms — so screen
@@ -195,22 +215,44 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
         "px;max-width:" +
         A4_PX +
         "px;margin:0 !important;transform:none !important;box-shadow:none;left:0;right:auto;";
+      sanitizeCloneForCapture(clone, inlineLogo);
+
+      // Pin the capture to exactly one A4 page. The live sheet is `min-height:
+      // 297mm`, so its scrollHeight routinely measures a few pixels over the
+      // page — enough for the old code to emit a second, near-empty page. A
+      // small tolerance absorbs that rounding; genuinely overflowing content
+      // (a long receipt) still paginates.
+      const PAGE_PX = Math.round((A4_PX * 297) / 210); // 1123px = A4 @96dpi
       sandbox.appendChild(clone);
       document.body.appendChild(sandbox);
+      const captureH = clone.scrollHeight <= PAGE_PX + 12 ? PAGE_PX : clone.scrollHeight;
+      clone.style.setProperty("height", `${captureH}px`, "important");
+      clone.style.setProperty("min-height", "0", "important");
+      clone.style.setProperty("overflow", "hidden", "important");
 
       let dataUrl: string;
       try {
         await waitForImages(clone);
         const { toJpeg } = await import("html-to-image");
-        dataUrl = await toJpeg(clone, {
+        const opts = {
           quality: 0.95,
           pixelRatio: 2,
           backgroundColor: "#ffffff",
-          cacheBust: true,
+          // cacheBust appends a query string, forcing a fresh cross-origin-mode
+          // refetch that Safari can reject. The logo is inlined above, so there
+          // is nothing left to bust.
+          cacheBust: false,
           width: A4_PX,
-          height: clone.scrollHeight,
+          height: captureH,
           style: { margin: "0", transform: "none" },
-        });
+        };
+        // Safari's foreignObject pipeline drops embedded resources on a cold
+        // first pass. A cheap throwaway render primes it so the real capture
+        // comes back complete.
+        if (isAppleWebKit()) {
+          await toJpeg(clone, { ...opts, pixelRatio: 1, quality: 0.5 }).catch(() => undefined);
+        }
+        dataUrl = await toJpeg(clone, opts);
       } finally {
         sandbox.remove();
       }
@@ -227,16 +269,19 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       const pw = pdf.internal.pageSize.getWidth();
       const ph = pdf.internal.pageSize.getHeight();
       const imgH = (probe.height * pw) / probe.width;
-      if (imgH <= ph + 1) {
-        pdf.addImage(dataUrl, "JPEG", 0, 0, pw, imgH);
+      // 2mm of slack: anything within a rounding error of A4 is one page.
+      if (imgH <= ph + 2) {
+        pdf.addImage(dataUrl, "JPEG", 0, 0, pw, Math.min(imgH, ph));
       } else {
         let y = 0;
         let remaining = imgH;
-        while (remaining > 0) {
+        let guard = 0;
+        while (remaining > 0.5 && guard < 20) {
           pdf.addImage(dataUrl, "JPEG", 0, y, pw, imgH);
           remaining -= ph;
           y -= ph;
-          if (remaining > 0) pdf.addPage();
+          guard += 1;
+          if (remaining > 0.5) pdf.addPage();
         }
       }
       const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
@@ -247,11 +292,46 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     }
   }
 
+  /**
+   * Makes a cloned sheet safe to rasterise on every engine before it is handed
+   * to html-to-image. Two Apple-specific defects are addressed:
+   *
+   *  1. Missing logo — Safari will not paint an external <img> inside the SVG
+   *     foreignObject used for capture, so every image is repointed at the
+   *     inlined data URL and the `crossorigin` attribute (which triggers a
+   *     CORS-mode fetch Safari can fail) is dropped.
+   *  2. Stray light-blue arc — Tailwind's `ring-*` utility compiles to a
+   *     box-shadow, and Safari renders a box-shadow on a `rounded-full` image
+   *     inside foreignObject as a detached crescent. Clearing box-shadow
+   *     removes it; the logo's outline is a real border instead (see markup).
+   */
+  function sanitizeCloneForCapture(clone: HTMLElement, inlineLogo: string | null) {
+    if (inlineLogo) {
+      clone.querySelectorAll("img").forEach((img) => {
+        img.removeAttribute("crossorigin");
+        img.setAttribute("src", inlineLogo);
+        img.setAttribute("decoding", "sync");
+        img.setAttribute("loading", "eager");
+      });
+    }
+    clone.querySelectorAll<HTMLElement>("*").forEach((el) => {
+      el.style.setProperty("box-shadow", "none", "important");
+      el.style.setProperty("text-shadow", "none", "important");
+      el.style.setProperty("filter", "none", "important");
+      el.style.setProperty("animation", "none", "important");
+      el.style.setProperty("transition", "none", "important");
+    });
+    clone.style.setProperty("box-shadow", "none", "important");
+  }
+
   async function buildPdfDrawn(): Promise<{ blob: Blob; filename: string } | null> {
     // Fallback renderer: drawn directly with jsPDF primitives (the same
     // approach as the Reports module). Used only if capturing the on-screen
     // preview fails, so exports can never be fully broken.
     const { default: jsPDF } = await import("jspdf");
+    // jsPDF cannot resolve a bare path like "/logo.jpg"; it needs the encoded
+    // bytes. Without this the fallback silently produced a logo-less document.
+    const drawLogo = logoData ?? (await getLogoDataUrl());
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
     const pw = pdf.internal.pageSize.getWidth();
     const ph = pdf.internal.pageSize.getHeight();
@@ -267,7 +347,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
           (pdf as unknown as { setGState: (g: unknown) => void }).setGState(
             new G({ opacity: 0.05 }),
           );
-        pdf.addImage(LOGO_URL, "JPEG", pw / 2 - 55, ph / 2 - 55, 110, 110, undefined, "FAST");
+        if (drawLogo)
+          pdf.addImage(drawLogo, "JPEG", pw / 2 - 55, ph / 2 - 55, 110, 110, undefined, "FAST");
         pdf.restoreGraphicsState?.();
       } catch {
         /* watermark is decorative */
@@ -275,7 +356,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       pdf.setFillColor(2, 132, 199);
       pdf.rect(0, 0, pw, 20, "F");
       try {
-        pdf.addImage(LOGO_URL, "JPEG", margin, 3.5, 13, 13, undefined, "FAST");
+        if (drawLogo) pdf.addImage(drawLogo, "JPEG", margin, 3.5, 13, 13, undefined, "FAST");
       } catch {
         /* logo optional */
       }
@@ -607,13 +688,80 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     }
   }
 
+  /**
+   * Prints the A4 sheet — and only the A4 sheet — as a single page.
+   *
+   * The live preview sits inside a `position: fixed`, scrollable modal. Print
+   * engines cannot paginate a fixed ancestor: Chrome cropped the sheet and
+   * pushed the footer onto a second page, and iOS Safari gave up and printed
+   * the entire web page. So instead of printing in place, the sheet is cloned
+   * into a plain, statically-positioned container at <body> level; the print
+   * stylesheet then hides every other top-level node.
+   */
+  function runPrint() {
+    const node = ref.current;
+    if (!node) {
+      window.print();
+      return;
+    }
+
+    document.getElementById("rx-print-portal")?.remove();
+
+    // Measured on the live node: the clone lives in a display:none portal and
+    // would report a height of zero. 1123px is A4's height at 96dpi, and the
+    // sheet's own `min-height: 297mm` means anything meaningfully above that
+    // is real overflow rather than rounding.
+    const PAGE_PX = 1123;
+    const overflows = node.scrollHeight > PAGE_PX + 12;
+
+    const portal = document.createElement("div");
+    portal.id = "rx-print-portal";
+    const clone = node.cloneNode(true) as HTMLElement;
+    // Screen-only sizing; the print rules own the geometry from here.
+    clone.style.removeProperty("min-height");
+    clone.style.removeProperty("box-shadow");
+    if (overflows) clone.classList.add("rx-sheet-flow");
+    if (logoData) {
+      clone.querySelectorAll("img").forEach((img) => {
+        img.removeAttribute("crossorigin");
+        img.setAttribute("src", logoData);
+      });
+    }
+    portal.appendChild(clone);
+    document.body.appendChild(portal);
+    document.body.classList.add("rx-printing");
+
+    // Safari fires `afterprint` less reliably than Chrome, but does leave the
+    // print media query — both are watched so the portal is always torn down.
+    const mql = window.matchMedia?.("print");
+    let done = false;
+    const onMedia = (e: MediaQueryListEvent) => {
+      if (!e.matches) cleanup();
+    };
+    function cleanup() {
+      if (done) return;
+      done = true;
+      document.body.classList.remove("rx-printing");
+      portal.remove();
+      window.removeEventListener("afterprint", cleanup);
+      mql?.removeEventListener?.("change", onMedia);
+    }
+    window.addEventListener("afterprint", cleanup);
+    mql?.addEventListener?.("change", onMedia);
+    // Last resort: the portal is display:none on screen, so an orphan is
+    // invisible, but it should never outlive the print job either way.
+    setTimeout(cleanup, 60000);
+
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  }
+
   function printRx() {
     if (step !== "preview") {
       setStep("preview");
-      setTimeout(() => window.print(), 250);
+      setTimeout(() => runPrint(), 300);
       return;
     }
-    window.print();
+    runPrint();
   }
 
   return (
@@ -942,7 +1090,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
             <div className="p-2 sm:p-4 bg-muted print:p-0 print:bg-white overflow-x-auto">
               <div
                 ref={ref}
-                className="relative bg-white text-black p-8 pb-24 mx-auto shadow-sm print:shadow-none"
+                className="rx-sheet relative bg-white text-black p-8 pb-24 mx-auto shadow-sm print:shadow-none"
                 style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}
               >
                 <div
@@ -950,21 +1098,23 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   aria-hidden
                 >
                   <img
-                    src={LOGO_URL}
+                    src={logoSrc}
                     alt=""
                     className="w-[420px] h-[420px] object-contain"
                     style={{ opacity: 0.07 }}
-                    crossOrigin="anonymous"
                   />
                 </div>
 
                 <div className="relative flex items-start justify-between border-b-2 border-[#0284c7] pb-4">
                   <div className="flex items-center gap-4">
+                    {/* `ring-*` compiles to a box-shadow, which Safari renders
+                        as a detached light-blue crescent when the sheet is
+                        rasterised. A real border is visually identical and
+                        rasterises correctly on every engine. */}
                     <img
-                      src={LOGO_URL}
+                      src={logoSrc}
                       alt="Logo"
-                      className="w-20 h-20 rounded-full object-cover ring-2 ring-[#0284c7]/20 shrink-0"
-                      crossOrigin="anonymous"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-[#cce6f4] shrink-0"
                     />
                     <div>
                       <div className="text-2xl font-bold text-[#0c4a6e] leading-tight">
@@ -1152,7 +1302,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                 </div>
 
                 {/* Footer note — locked to the absolute bottom of the A4 page */}
-                <div className="absolute inset-x-8 bottom-6 pt-4 border-t border-dashed border-gray-300 text-center text-[11px] text-gray-600 italic">
+                <div className="rx-footer absolute inset-x-8 bottom-6 pt-4 border-t border-dashed border-gray-300 text-center text-[11px] text-gray-600 italic">
                   Note: This is a system generated document. A physical signature or stamp is not
                   required.
                 </div>
