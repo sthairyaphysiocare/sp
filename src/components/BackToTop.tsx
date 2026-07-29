@@ -71,25 +71,26 @@ export function BackToTop({ className }: { className?: string }) {
       title="Return to top"
       className={cn(
         "fixed bottom-5 left-5 z-50 grid place-items-center size-12 rounded-full print:hidden",
-        "backdrop-blur text-brand overflow-hidden",
+        "text-brand overflow-hidden",
         "transition-all duration-500 hover:scale-110 active:scale-95",
-        // Solid over empty space; glass over words.
+        // Solid over empty space; over words the disc drops away entirely and
+        // only the translucent progress ring and arrow remain. The frosted
+        // backdrop has to go with it: a blur masks whatever is behind it no
+        // matter how transparent the fill is, so it is applied only when the
+        // control is solid.
         quiet
-          ? "bg-card/25 border border-transparent shadow-none scale-90"
-          : "bg-card/90 border soft-shadow scale-100",
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6 pointer-events-none",
+          ? "bg-transparent border border-transparent shadow-none scale-90"
+          : "bg-card/90 backdrop-blur border soft-shadow scale-100",
+        visible
+          ? quiet
+            ? "opacity-45 translate-y-0"
+            : "opacity-100 translate-y-0"
+          : "opacity-0 translate-y-6 pointer-events-none",
         className,
       )}
     >
       {/* progress ring */}
-      <svg
-        viewBox="0 0 48 48"
-        className={cn(
-          "absolute inset-0 -rotate-90 transition-opacity duration-500",
-          quiet ? "opacity-40" : "opacity-100",
-        )}
-        aria-hidden
-      >
+      <svg viewBox="0 0 48 48" className="absolute inset-0 -rotate-90" aria-hidden>
         <circle cx="24" cy="24" r={R} fill="none" strokeWidth="3" className="stroke-brand/15" />
         <circle
           cx="24"
@@ -106,7 +107,6 @@ export function BackToTop({ className }: { className?: string }) {
       <ArrowUp
         className={cn(
           "size-5 transition-all duration-500",
-          quiet && "opacity-55",
           launching && "-translate-y-10 opacity-0 duration-500",
         )}
       />
