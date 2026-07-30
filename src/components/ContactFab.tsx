@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { CLINIC, whatsappDigits } from "@/lib/logo";
 import { cn } from "@/lib/utils";
 import { useContentBehind } from "@/lib/useContentBehind";
+import { ENQUIRY_MESSAGE, ENQUIRY_SUBJECT, mailtoLink, whatsappLink } from "@/lib/contactLinks";
 
 /**
  * Floating contact button (public site only). Expands into three actions:
@@ -29,9 +30,6 @@ export function ContactFab() {
 
   const wa = whatsappDigits(settings);
   const email = settings.globalEmail || CLINIC.email;
-  const message = encodeURIComponent(
-    "Hello Sthairya Physiocare, I'd like to know more about your services.",
-  );
 
   // Close when tapping anywhere else or pressing Escape.
   useEffect(() => {
@@ -61,7 +59,7 @@ export function ContactFab() {
     {
       key: "wa",
       label: "WhatsApp us",
-      href: `https://wa.me/${wa}?text=${message}`,
+      href: whatsappLink(wa, ENQUIRY_MESSAGE),
       icon: <WhatsAppIcon size={20} />,
       bg: "bg-emerald-500 hover:bg-emerald-600",
       external: true,
@@ -69,7 +67,7 @@ export function ContactFab() {
     {
       key: "mail",
       label: "Email us",
-      href: `mailto:${email}`,
+      href: mailtoLink(email, ENQUIRY_SUBJECT, ENQUIRY_MESSAGE),
       icon: <Mail className="size-5" />,
       bg: "bg-violet-500 hover:bg-violet-600",
     },

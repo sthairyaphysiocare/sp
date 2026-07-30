@@ -1,4 +1,5 @@
 import { ContactFab } from "@/components/ContactFab";
+import { mailtoLink } from "@/lib/contactLinks";
 import { BackToTop } from "@/components/BackToTop";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -272,7 +273,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 ) : null,
               )}
               <a
-                href={`mailto:${globalEmail}`}
+                href={mailtoLink(globalEmail)}
                 className="flex items-center gap-2 text-sm text-background/70 hover:text-background transition-colors break-all pt-1"
               >
                 <MailIcon className="size-3.5 shrink-0 text-background/90" />

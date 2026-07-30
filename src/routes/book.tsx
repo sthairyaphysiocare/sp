@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { WA_GREEN, WA_GREEN_DARK, WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { mailtoLink, whatsappLink } from "@/lib/contactLinks";
 import {
   filterPastSlots,
   fmtDate,
@@ -177,7 +178,7 @@ function BookPage() {
               Tap below to start a conversation with our front desk.
             </p>
             <a
-              href={`https://wa.me/${wa}?text=${encodeURIComponent("Hi, I'd like to book a physiotherapy session.")}`}
+              href={whatsappLink(wa)}
               target="_blank"
               rel="noreferrer"
               className="inline-block mt-5"
@@ -199,7 +200,7 @@ function BookPage() {
               Send your details and we'll reply with available slots.
             </p>
             <a
-              href={`mailto:${settings.globalEmail || CLINIC.email}?subject=${encodeURIComponent("Appointment Request")}`}
+              href={mailtoLink(settings.globalEmail || CLINIC.email)}
               className="inline-block mt-5"
             >
               <Button className="brand-gradient text-white border-0">

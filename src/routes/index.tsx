@@ -4,6 +4,7 @@ import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { mailtoLink, whatsappLink } from "@/lib/contactLinks";
 import { getIcon } from "@/lib/icons";
 import {
   Activity,
@@ -71,7 +72,7 @@ function HomePage() {
                   Book a Visit <ArrowRight className="size-4" />
                 </Button>
               </Link>
-              <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
+              <a href={whatsappLink(wa)} target="_blank" rel="noreferrer">
                 <Button
                   size="lg"
                   className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
@@ -257,7 +258,7 @@ function HomePage() {
                 </div>
               ))}
               <a
-                href={`mailto:${settings.globalEmail || CLINIC.email}`}
+                href={mailtoLink(settings.globalEmail || CLINIC.email)}
                 className="flex items-center gap-3 hover:underline underline-offset-2"
               >
                 <Mail className="size-4 shrink-0" />
@@ -271,7 +272,7 @@ function HomePage() {
                 Book Online
               </Button>
             </Link>
-            <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
+            <a href={whatsappLink(wa)} target="_blank" rel="noreferrer">
               <Button
                 size="lg"
                 variant="outline"

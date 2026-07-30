@@ -5,6 +5,7 @@ import { CLINIC, enabledBranches, whatsappDigits } from "@/lib/logo";
 import { useStore } from "@/lib/store";
 import { MapPin, Phone, Mail, Clock, ExternalLink } from "lucide-react";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { mailtoLink, whatsappLink } from "@/lib/contactLinks";
 import { Button } from "@/components/ui/button";
 import type { BranchHours } from "@/lib/types";
 
@@ -130,17 +131,15 @@ function ContactPage() {
                         <Phone className="size-4" /> Call
                       </Button>
                     </a>
-                    <a href={`https://wa.me/${bWa}`} target="_blank" rel="noreferrer">
+                    <a href={whatsappLink(bWa)} target="_blank" rel="noreferrer">
                       <Button
                         size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                        className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
                       >
                         <WhatsAppIcon size={14} /> WhatsApp Now
                       </Button>
                     </a>
-                    <a
-                      href={`mailto:${bEmail}?subject=${encodeURIComponent(`Enquiry — ${b.name}`)}`}
-                    >
+                    <a href={mailtoLink(bEmail)}>
                       <Button size="sm" variant="outline">
                         <Mail className="size-4" /> Send Email
                       </Button>
