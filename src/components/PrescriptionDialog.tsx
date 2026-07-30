@@ -292,9 +292,20 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       toast.error('This browser cannot attach files. Use "Open chat" instead.');
       return;
     }
+    const message = whatsappMessage();
     setSharing(true);
     try {
-      await nav.share({ files: [file], text: whatsappMessage(), title: waFile.filename });
+      // Copied first, so if WhatsApp drops the caption — iOS commonly ignores
+      // text when a file is present — it can simply be pasted into the chat.
+      try {
+        await navigator.clipboard?.writeText(message);
+      } catch {
+        // Clipboard permission is optional; sharing must not depend on it.
+      }
+      await nav.share({ files: [file], text: message, title: message });
+      toast.success("Message copied too — paste it if WhatsApp doesn't carry it over.", {
+        duration: 7000,
+      });
       setWaPrompt(false);
     } catch (err) {
       // Dismissing the sheet reports AbortError; that is a cancel, not a failure.
@@ -489,7 +500,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
           if (remaining > 0.5) pdf.addPage();
         }
       }
-      const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
+      const filename = `PRN_${patient.pid}_${Date.now()}.pdf`;
       // The bitmap is handed back too: printing reuses it rather than asking
       // the browser to print a PDF, which is what broke printing everywhere.
       log.push(`pages ${pdf.getNumberOfPages()}`);
@@ -814,7 +825,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     pdf.setFontSize(9);
     pdf.text(lastVisit?.tN || "Treating Therapist", pw - margin - 26, y + 13, { align: "center" });
 
-    const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
+    const filename = `PRN_${patient.pid}_${Date.now()}.pdf`;
     return { blob: pdf.output("blob"), filename };
   }
 
@@ -1616,8 +1627,9 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
               <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-5">
                 <h3 className="font-semibold text-lg">Send Prescription via WhatsApp</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  A browser can attach the PDF, or open the chat for a specific number, but not
-                  both. Pick whichever suits this send.
+                  {canShareFiles
+                    ? "The PDF and the message go across together. WhatsApp will ask which contact to send them to."
+                    : "This browser cannot attach files, so the chat opens with the message ready and the PDF is saved for you to attach."}
                 </p>
                 <div className="mt-4">
                   <Label>WhatsApp Number</Label>
@@ -1631,56 +1643,55 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   </p>
                 </div>
                 <div className="mt-5 space-y-3">
+                  {/* What will actually be sent, so it can be checked first. */}
+                  <div className="rounded-lg border bg-muted/40 p-3">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Message
+                    </p>
+                    <p className="text-sm mt-1">{whatsappMessage()}</p>
+                  </div>
+
                   {waBuilding || !waFile ? (
                     <Button className="w-full wa-btn border-0 bg-[#25D366] text-white" disabled>
                       <WhatsAppIcon size={16} /> Preparing PDF...
                     </Button>
-                  ) : (
-                    <>
-                      {canShareFiles && (
-                        <div>
-                          <Button
-                            className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
-                            onClick={handleAttachAndSend}
-                            disabled={sharing}
-                          >
-                            <WhatsAppIcon size={16} />{" "}
-                            {sharing ? "Opening..." : "Attach PDF & send"}
-                          </Button>
-                          <p className="text-[11px] text-muted-foreground mt-1 text-center">
-                            PDF attached with the message. Pick the contact in WhatsApp.
-                          </p>
-                        </div>
-                      )}
-                      <div>
-                        {/* A real link, so the jump to WhatsApp is an ordinary
-                            navigation from a user gesture and cannot be blocked. */}
-                        <a
-                          href={waValid ? waChatUrl : undefined}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={waValid ? handleWaSend : undefined}
-                          className={cn("block", !waValid && "pointer-events-none")}
-                        >
-                          <Button
-                            variant={canShareFiles ? "outline" : undefined}
-                            className={cn(
-                              "w-full",
-                              !canShareFiles &&
-                                "wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white",
-                            )}
-                            disabled={!waValid}
-                          >
-                            <WhatsAppIcon size={16} />{" "}
-                            {waValid ? `Open chat with +${waDigits}` : "Enter a number"}
-                          </Button>
-                        </a>
+                  ) : canShareFiles ? (
+                    <div>
+                      <Button
+                        className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
+                        onClick={handleAttachAndSend}
+                        disabled={sharing}
+                      >
+                        <WhatsAppIcon size={16} /> {sharing ? "Opening..." : "Attach PDF & send"}
+                      </Button>
+                      {waValid && (
                         <p className="text-[11px] text-muted-foreground mt-1 text-center">
-                          Goes straight to this number. PDF is saved for you to attach.
+                          Send to <span className="font-medium text-foreground">+{waDigits}</span>
                         </p>
-                      </div>
-                    </>
+                      )}
+                    </div>
+                  ) : (
+                    /* Desktop has no file sharing, so the chat link remains the
+                       only way to send from here. A real link, so the jump is an
+                       ordinary navigation from a user gesture and is never
+                       blocked. */
+                    <a
+                      href={waValid ? waChatUrl : undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={waValid ? handleWaSend : undefined}
+                      className={cn("block", !waValid && "pointer-events-none")}
+                    >
+                      <Button
+                        className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
+                        disabled={!waValid}
+                      >
+                        <WhatsAppIcon size={16} />{" "}
+                        {waValid ? `Open WhatsApp for +${waDigits}` : "Enter a number"}
+                      </Button>
+                    </a>
                   )}
+
                   <Button
                     variant="ghost"
                     className="w-full"
