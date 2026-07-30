@@ -19,7 +19,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -170,34 +170,34 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   }, [mounted, user]);
   const signedIn = mounted && !!user && liveSession;
 
-  // The mobile menu previously closed only via the X. It now also closes on a
-  // tap anywhere outside the header, or on Escape.
-  //
-  // The listener is bound on `pointerdown` in the capture phase rather than on
-  // `click`: capture means the toggle button and the menu's own links are still
-  // recognised as inside the header, and using pointerdown means the menu has
-  // already closed by the time the tap resolves into a click, so that tap still
-  // reaches whatever was underneath instead of being swallowed.
-  const headerRef = useRef<HTMLElement>(null);
+  // Escape closes the mobile menu. Tapping away from it is handled by the
+  // backdrop element rendered below, not by a document listener: a global
+  // pointerdown listener races with the very tap that opens the menu, which is
+  // what stopped the menu opening at all.
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!headerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
   return (
     <div data-ui-enhance className="min-h-screen flex flex-col">
-      <header ref={headerRef} className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
+      {/* Tap-away layer for the mobile menu. Sits below the header's z-40 so the
+          bar and the open panel stay interactive, and starts below the bar so
+          the logo and close button are never covered. Rendered as a sibling of
+          the header rather than a child because the header's backdrop-blur
+          establishes a containing block for fixed positioning. */}
+      {open && (
+        <div
+          className="md:hidden fixed inset-x-0 bottom-0 top-16 z-30 bg-foreground/10"
+          aria-hidden="true"
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center">
             <Logo size={52} />
