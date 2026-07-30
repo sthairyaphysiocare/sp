@@ -7,6 +7,7 @@ import {
   isAppleWebKit,
   whatsappDigits,
 } from "@/lib/logo";
+import { BUILD_ID } from "@/lib/build";
 import type { Patient, Visit } from "@/lib/types";
 import { slotConflict, store, takenSlotsForDate, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
@@ -129,6 +130,19 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   // Inlined copy of the clinic logo. Preloaded as soon as the dialog opens so
   // that Download / WhatsApp / Print never have to wait on it, and so Safari
   // always has a data URL to paint (see getLogoDataUrl for the why).
+  // Opt-in diagnostics: `?rxdebug=1` surfaces which bundle is running and what
+  // the export pipeline actually did, so Safari issues can be diagnosed on the
+  // device itself instead of inferred.
+  const [debugOn, setDebugOn] = useState(false);
+  const [diag, setDiag] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      setDebugOn(new URLSearchParams(window.location.search).has("rxdebug"));
+    } catch {
+      setDebugOn(false);
+    }
+  }, []);
+
   const [logoData, setLogoData] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -208,6 +222,11 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       await new Promise((r) => setTimeout(r, 80));
 
       const logoImg = await getLogoImage();
+      const log: string[] = [
+        `build ${BUILD_ID}`,
+        `webkit ${isAppleWebKit()}`,
+        `logo ${logoImg ? `${logoImg.naturalWidth}x${logoImg.naturalHeight}` : "FAILED TO LOAD"}`,
+      ];
 
       // Capture a CLONE inside an off-screen sandbox with a hard-coded A4
       // pixel width, zero margins, and no inherited transforms — so screen
@@ -264,7 +283,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
           await toCanvas(clone, { ...opts, pixelRatio: 1 }).catch(() => undefined);
         }
         const canvas = await toCanvas(clone, opts);
-        if (isBlankCapture(canvas)) throw new Error("rasteriser returned a blank sheet");
+        log.push(`canvas ${canvas.width}x${canvas.height}`);
+        const blank = isBlankCapture(canvas);
+        log.push(`blank ${blank}`);
+        if (blank) throw new Error("rasteriser returned a blank sheet");
         // Derive the scale from the canvas actually produced rather than
         // assuming it equals pixelRatio: html-to-image silently shrinks the
         // canvas when it would exceed the browser's maximum dimensions, which
@@ -273,8 +295,11 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
         // The logo placeholders left by sanitizeCloneForCapture are filled in
         // here, on the finished bitmap, where the crop maths is ours and not
         // the rasteriser's.
+        log.push(`scale ${scale.toFixed(2)}`);
+        log.push(`logos ${clone.querySelectorAll("[data-rx-logo]").length}`);
         drawLogosOnto(canvas, clone, scale, logoImg);
         dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+        log.push(`jpeg ${Math.round(dataUrl.length / 1024)}kb`);
       } finally {
         sandbox.remove();
       }
@@ -309,9 +334,18 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       const filename = `Prescription_${patient.pid}_${Date.now()}.pdf`;
       // The bitmap is handed back too: printing reuses it rather than asking
       // the browser to print a PDF, which is what broke printing everywhere.
+      log.push(`pages ${pdf.getNumberOfPages()}`);
+      log.push("path capture");
+      setDiag(log);
       return { blob: pdf.output("blob"), filename, image: dataUrl };
     } catch (err) {
       console.error("Preview capture failed, using drawn fallback:", err);
+      setDiag([
+        `build ${BUILD_ID}`,
+        `webkit ${isAppleWebKit()}`,
+        "path DRAWN FALLBACK",
+        `error ${err instanceof Error ? err.message : String(err)}`,
+      ]);
       return buildPdfDrawn();
     }
   }
@@ -993,6 +1027,16 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   <Button size="sm" variant="outline" onClick={() => setStep("edit")}>
                     <ArrowLeft className="size-4" /> <Pencil className="size-4" /> Back to Content
                   </Button>
+                  {debugOn && (
+                    <div className="w-full mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 font-mono text-[11px] leading-4 text-amber-900">
+                      <div className="font-semibold">rxdebug &middot; {BUILD_ID}</div>
+                      {diag.length === 0 ? (
+                        <div>Run Download or Print, then screenshot this box.</div>
+                      ) : (
+                        diag.map((line) => <div key={line}>{line}</div>)
+                      )}
+                    </div>
+                  )}
                   <Button size="sm" variant="outline" onClick={printRx} disabled={!!busy}>
                     <Printer className="size-4" /> {busy === "print" ? "Preparing..." : "Print"}
                   </Button>

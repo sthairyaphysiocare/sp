@@ -5,3 +5,20 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.emailjs.com; frame-src 'self' blob: https://www.google.com https://maps.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Build output is content-hashed, so it can be cached hard and forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# These two are NOT hashed, so they must revalidate or Safari will pin an old
+# copy indefinitely. Safari caches far more aggressively than Chrome, which is
+# why a deploy could appear live everywhere except on iPhone and Mac.
+/ui-enhancements.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/ui-enhancements.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/logo.jpg
+  Cache-Control: public, max-age=86400
