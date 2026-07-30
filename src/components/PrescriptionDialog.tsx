@@ -123,7 +123,7 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       notes: "",
     },
   );
-  const [busy, setBusy] = useState<null | "pdf" | "wa" | "print">(null);
+  const [busy, setBusy] = useState<null | "pdf" | "print">(null);
   const [waPrompt, setWaPrompt] = useState(false);
   const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
@@ -201,6 +201,68 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
 
   function whatsappMessage(): string {
     return `Hi, Please find the ${describeContents()} from Sthairya Physiocare.`;
+  }
+
+  // The PDF is built as soon as the number prompt opens, not when Send is
+  // pressed. That matters because the send control is a real link: browsers only
+  // honour a window opened directly from a user gesture, and the previous
+  // version claimed a blank tab and then held it across a multi-second build
+  // before pointing it at wa.me — which the popup blocker could drop, leaving
+  // neither the chat nor the message. With the file ready in advance, Send is an
+  // ordinary anchor navigation that cannot be blocked.
+  const [waFile, setWaFile] = useState<{ blob: Blob; filename: string } | null>(null);
+  const [waBuilding, setWaBuilding] = useState(false);
+
+  useEffect(() => {
+    if (!waPrompt) {
+      setWaFile(null);
+      setWaBuilding(false);
+      return;
+    }
+    let cancelled = false;
+    setWaBuilding(true);
+    setWaFile(null);
+    void (async () => {
+      try {
+        const out = await buildPdf();
+        if (cancelled) return;
+        if (out) setWaFile({ blob: out.blob, filename: out.filename });
+        else toast.error("Couldn't prepare the PDF. Please retry.");
+      } catch (err) {
+        console.error("WA prepare error", err);
+        if (!cancelled) toast.error("Couldn't prepare the PDF. Please retry.");
+      } finally {
+        if (!cancelled) setWaBuilding(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // buildPdf reads current state directly; re-running on every keystroke would
+    // rebuild the PDF needlessly, so this intentionally tracks only the prompt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waPrompt]);
+
+  const waDigitsRaw = waNumber.replace(/[^0-9]/g, "");
+  const waDigits = waDigitsRaw.length === 10 ? `91${waDigitsRaw}` : waDigitsRaw;
+  const waValid = waDigits.length >= 12;
+  const waChatUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(whatsappMessage())}`;
+
+  /**
+   * Saves the prepared PDF. Deliberately does not preventDefault, so the
+   * anchor's navigation to WhatsApp still happens on the same tap.
+   */
+  function handleWaSend() {
+    if (!waFile) return;
+    const url = URL.createObjectURL(waFile.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = waFile.filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast.success(`PDF saved. Attach it in the chat with +${waDigits}.`, { duration: 7000 });
+    // Left open briefly so the download registers before the dialog unmounts.
+    setTimeout(() => setWaPrompt(false), 400);
   }
 
   function addReceiptItem(desc = "") {
@@ -797,87 +859,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     setWaPrompt(true);
   }
 
-  async function sendWhatsApp() {
-    if (busy) return;
-    let digits = waNumber.replace(/[^0-9]/g, "");
-    if (digits.length < 10) {
-      toast.error("Enter a valid mobile number.");
-      return;
-    }
-    if (digits.length === 10) digits = `91${digits}`;
-
-    // Claimed synchronously, before any awaiting: a window opened after an
-    // await has lost the user gesture and browsers block it.
-    const chatWindow = window.open("", "_blank");
-
-    setBusy("wa");
-    toast.loading("Preparing prescription...", { id: "wa" });
-    try {
-      const out = await buildPdf();
-      if (!out) throw new Error("PDF generation failed");
-      const message = whatsappMessage();
-
-      // Save the PDF first so it is already on the device by the time the chat
-      // appears, ready to attach.
-      const url = URL.createObjectURL(out.blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = out.filename;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-
-      // Open the chat for the number that was entered.
-      //
-      // A wa.me link is the only way a browser can target a specific
-      // recipient. The Web Share API attaches the file but cannot choose who
-      // receives it — that is the contact picker that was appearing, and for a
-      // medical record it also carries a real risk of the wrong contact being
-      // tapped. Targeting the number removes that risk; the trade-off is that
-      // the file has to be attached, because no browser API can put a file
-      // into a specific WhatsApp conversation.
-      const chatUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
-      if (chatWindow) {
-        chatWindow.location.href = chatUrl;
-      } else {
-        // Popup blocked. Fall back to the share sheet so the send can still be
-        // completed in one hop, with the file already attached.
-        const file = new File([out.blob], out.filename, { type: "application/pdf" });
-        const nav = navigator as Navigator & {
-          canShare?: (data: ShareData) => boolean;
-          share?: (data: ShareData) => Promise<void>;
-        };
-        if (nav.canShare?.({ files: [file] }) && nav.share) {
-          try {
-            await nav.share({ files: [file], text: message, title: out.filename });
-            toast.success("Share sheet opened — choose WhatsApp to send the PDF.", { id: "wa" });
-            setWaPrompt(false);
-            return;
-          } catch (shareErr) {
-            // AbortError means the sheet was dismissed; that is not a failure.
-            if ((shareErr as Error)?.name === "AbortError") {
-              toast.dismiss("wa");
-              setWaPrompt(false);
-              return;
-            }
-          }
-        }
-        window.location.href = chatUrl;
-      }
-
-      toast.success(`WhatsApp opened for +${digits}. Attach the saved PDF and send.`, {
-        id: "wa",
-        duration: 7000,
-      });
-      setWaPrompt(false);
-    } catch (err) {
-      console.error("WA error", err);
-      chatWindow?.close();
-      toast.error("Couldn't prepare the WhatsApp share. Please retry.", { id: "wa" });
-    } finally {
-      setBusy(null);
-    }
-  }
-
   /**
    * Builds a complete, standalone document containing nothing but the captured
    * prescription bitmap, sized to fill exactly one page.
@@ -1100,12 +1081,11 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                    className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
                     onClick={openWhatsAppPrompt}
                     disabled={!!busy}
                   >
-                    <WhatsAppIcon size={16} />{" "}
-                    {busy === "wa" ? "Preparing..." : "Send via WhatsApp"}
+                    <WhatsAppIcon size={16} /> Send via WhatsApp
                   </Button>
                 </>
               )}
@@ -1577,8 +1557,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
               <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-5">
                 <h3 className="font-semibold text-lg">Send Prescription via WhatsApp</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Confirm the recipient's WhatsApp number. The PDF will be downloaded for you to
-                  attach in the chat.
+                  Confirm the recipient's WhatsApp number. The chat opens directly for that number
+                  with the message ready, and the PDF is saved for you to attach.
                 </p>
                 <div className="mt-4">
                   <Label>WhatsApp Number</Label>
@@ -1595,13 +1575,23 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   <Button variant="outline" onClick={() => setWaPrompt(false)}>
                     Cancel
                   </Button>
-                  <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
-                    onClick={sendWhatsApp}
-                    disabled={!!busy}
-                  >
-                    <WhatsAppIcon size={16} /> {busy === "wa" ? "Preparing..." : "Open WhatsApp"}
-                  </Button>
+                  {waBuilding || !waFile || !waValid ? (
+                    <Button
+                      className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
+                      disabled
+                    >
+                      <WhatsAppIcon size={16} />
+                      {waBuilding ? "Preparing..." : !waValid ? "Enter number" : "Preparing..."}
+                    </Button>
+                  ) : (
+                    /* A real link, so the jump to WhatsApp is an ordinary
+                       navigation from a user gesture and cannot be blocked. */
+                    <a href={waChatUrl} target="_blank" rel="noreferrer" onClick={handleWaSend}>
+                      <Button className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white">
+                        <WhatsAppIcon size={16} /> Open WhatsApp
+                      </Button>
+                    </a>
+                  )}
                 </div>
               </div>
             </div>
