@@ -1,5 +1,6 @@
 import { ContactFab } from "@/components/ContactFab";
-import { mailtoLink } from "@/lib/contactLinks";
+import { cn } from "@/lib/utils";
+import { ENQUIRY_MESSAGE, ENQUIRY_SUBJECT, mailtoLink } from "@/lib/contactLinks";
 import { BackToTop } from "@/components/BackToTop";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -18,7 +19,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -169,9 +170,34 @@ export function PublicLayout({ children }: { children: ReactNode }) {
   }, [mounted, user]);
   const signedIn = mounted && !!user && liveSession;
 
+  // The mobile menu previously closed only via the X. It now also closes on a
+  // tap anywhere outside the header, or on Escape.
+  //
+  // The listener is bound on `pointerdown` in the capture phase rather than on
+  // `click`: capture means the toggle button and the menu's own links are still
+  // recognised as inside the header, and using pointerdown means the menu has
+  // already closed by the time the tap resolves into a click, so that tap still
+  // reaches whatever was underneath instead of being swallowed.
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!headerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
     <div data-ui-enhance className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
+      <header ref={headerRef} className="sticky top-0 z-40 bg-background/90 backdrop-blur border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center">
             <Logo size={52} />
@@ -203,13 +229,31 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
         {open && (
-          <div className="md:hidden border-t bg-background px-4 py-3 space-y-1">
+          <div
+            className={cn(
+              "md:hidden border-t px-4 py-3 space-y-1",
+              // Overlays the page instead of sitting in the flow. In the flow it
+              // pushed all the content down on open and yanked it back up on
+              // close, so a tap outside the menu landed on whatever had moved
+              // into that spot rather than what was actually tapped. As an
+              // overlay nothing reflows, so the tap both closes the menu and
+              // reaches its intended target.
+              "absolute top-full left-0 right-0",
+              // Scrollable in case the menu ever outgrows the viewport.
+              "max-h-[calc(100vh-4rem)] overflow-y-auto",
+              // Ice-blue wash drawn from the same --surface / --accent tokens as
+              // the rest of the site, so it reads as part of the theme rather
+              // than a flat white sheet. Both tokens are theme-aware, so this
+              // follows dark mode automatically.
+              "bg-gradient-to-b from-surface to-accent soft-shadow",
+            )}
+          >
             {NAV.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
                 onClick={() => setOpen(false)}
-                className="block px-3 py-3 rounded-md hover:bg-accent text-sm font-medium"
+                className="block px-3 py-3 rounded-md text-sm font-medium transition-colors hover:bg-card hover:text-brand"
               >
                 {n.label}
               </Link>
@@ -273,7 +317,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 ) : null,
               )}
               <a
-                href={mailtoLink(globalEmail)}
+                href={mailtoLink(globalEmail, ENQUIRY_SUBJECT, ENQUIRY_MESSAGE)}
                 className="flex items-center gap-2 text-sm text-background/70 hover:text-background transition-colors break-all pt-1"
               >
                 <MailIcon className="size-3.5 shrink-0 text-background/90" />
