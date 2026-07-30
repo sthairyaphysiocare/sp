@@ -298,6 +298,68 @@
   box-shadow: 0 1px 2px rgba(6, 78, 59, 0.22);
 }
 
+/* ---------------------------------------------------------------------------
+   Mobile menu — entrance motion and press feedback.
+
+   Touch devices have no hover, so tapping a menu item previously gave no
+   confirmation of what had been pressed or that anything was happening. The
+   item now lights up the moment it is touched and stays lit while the next
+   route loads. The highlight is plain CSS/state and is deliberately NOT inside
+   the reduced-motion guard, because it is feedback rather than decoration; only
+   the entrance animations are opt-out.
+--------------------------------------------------------------------------- */
+.menu-item {
+  /* Suppress the browser's own grey flash so it doesn't fight the styled
+     press state. The styled state below replaces it. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes menu-backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes menu-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes menu-item-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .menu-backdrop-in {
+    animation: menu-backdrop-in 0.2s ease-out both;
+  }
+
+  .menu-panel-in {
+    animation: menu-panel-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Staggered per item via an inline animation-delay. */
+  .menu-item-in {
+    animation: menu-item-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
 /* FAB: brief periodic wiggle instead of a constant pulse */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes fab-wiggle {

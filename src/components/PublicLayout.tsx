@@ -10,6 +10,7 @@ import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import {
   BookOpen,
+  ChevronRight,
   ExternalLink,
   Facebook,
   Instagram,
@@ -19,7 +20,7 @@ import {
   X,
   Youtube,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
@@ -183,6 +184,40 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
+  // Which menu item was just tapped. Previously the panel closed on the same
+  // tick as the tap, so nothing was ever seen; the destination simply appeared.
+  // Holding the panel open briefly lets the highlight register, and the item
+  // stays lit while the route loads, which matters most when a chunk still has
+  // to be fetched. Navigation is untouched — the Link performs it on click
+  // exactly as before, so this is purely additive feedback.
+  const [pressedTo, setPressedTo] = useState<string | null>(null);
+  const closeTimer = useRef<number | null>(null);
+
+  const clearCloseTimer = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (!open) {
+      setPressedTo(null);
+      clearCloseTimer();
+    }
+  }, [open]);
+
+  useEffect(() => clearCloseTimer, []);
+
+  function handleMenuTap(to: string) {
+    setPressedTo(to);
+    clearCloseTimer();
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null;
+      setOpen(false);
+    }, 260);
+  }
+
   return (
     <div data-ui-enhance className="min-h-screen flex flex-col">
       {/* Tap-away layer for the mobile menu. Sits below the header's z-40 so the
@@ -192,7 +227,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           establishes a containing block for fixed positioning. */}
       {open && (
         <div
-          className="md:hidden fixed inset-x-0 bottom-0 top-16 z-30 bg-foreground/10"
+          className="menu-backdrop-in md:hidden fixed inset-x-0 bottom-0 top-16 z-30 bg-foreground/10"
           aria-hidden="true"
           onClick={() => setOpen(false)}
         />
@@ -246,20 +281,50 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               // than a flat white sheet. Both tokens are theme-aware, so this
               // follows dark mode automatically.
               "bg-gradient-to-b from-surface to-accent soft-shadow",
+              "menu-panel-in",
             )}
           >
-            {NAV.map((n) => (
+            {NAV.map((n, i) => (
               <Link
                 key={n.to}
                 to={n.to}
-                onClick={() => setOpen(false)}
-                className="block px-3 py-3 rounded-md text-sm font-medium transition-colors hover:bg-card hover:text-brand"
+                onClick={() => handleMenuTap(n.to)}
+                style={{ animationDelay: `${i * 35}ms` }}
+                className={cn(
+                  "menu-item menu-item-in flex items-center justify-between gap-2",
+                  "px-3 py-3 rounded-md text-sm font-medium",
+                  "transition-[background-color,color,transform] duration-150",
+                  // Fires on touch-down, before navigation begins, so the press
+                  // is acknowledged immediately. A solid brand fill rather than
+                  // a tint: against the panel's ice-blue wash a light background
+                  // is only a few shades different and barely registers.
+                  "active:scale-[0.985] active:bg-brand active:text-white",
+                  "hover:bg-card hover:text-brand",
+                  // Held until the panel closes, so the chosen item stays obvious
+                  // while the next route is still loading.
+                  pressedTo === n.to && "bg-brand text-white soft-shadow",
+                )}
+                // Marks the page currently being viewed.
+                activeProps={{ className: "bg-card/80 text-brand font-semibold" }}
+                activeOptions={{ exact: n.to === "/" }}
               >
-                {n.label}
+                <span>{n.label}</span>
+                <ChevronRight
+                  aria-hidden="true"
+                  className={cn(
+                    "size-4 shrink-0 transition-all duration-200",
+                    pressedTo === n.to ? "translate-x-0.5 text-white opacity-100" : "opacity-30",
+                  )}
+                />
               </Link>
             ))}
-            <Link to={signedIn ? "/app" : "/auth"} onClick={() => setOpen(false)} className="block">
-              <Button className="w-full brand-gradient text-white border-0">
+            <Link
+              to={signedIn ? "/app" : "/auth"}
+              onClick={() => handleMenuTap(signedIn ? "/app" : "/auth")}
+              style={{ animationDelay: `${NAV.length * 35}ms` }}
+              className="menu-item menu-item-in block pt-1"
+            >
+              <Button className="w-full brand-gradient text-white border-0 transition-transform duration-150 active:scale-[0.985]">
                 {signedIn ? "Open Dashboard" : "Staff Login"}
               </Button>
             </Link>
