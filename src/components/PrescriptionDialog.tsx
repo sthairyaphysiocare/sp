@@ -124,8 +124,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     },
   );
   const [busy, setBusy] = useState<null | "pdf" | "print">(null);
-  const [waPrompt, setWaPrompt] = useState(false);
-  const [waNumber, setWaNumber] = useState((patient.m || "").replace(/[^0-9]/g, ""));
 
   // Inlined copy of the clinic logo. Preloaded as soon as the dialog opens so
   // that Download / WhatsApp / Print never have to wait on it, and so Safari
@@ -203,136 +201,97 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     return `Hi, Please find the ${describeContents()} from Sthairya Physiocare.`;
   }
 
-  // The PDF is built as soon as the number prompt opens, not when Send is
-  // pressed. That matters because the send control is a real link: browsers only
-  // honour a window opened directly from a user gesture, and the previous
-  // version claimed a blank tab and then held it across a multi-second build
-  // before pointing it at wa.me — which the popup blocker could drop, leaving
-  // neither the chat nor the message. With the file ready in advance, Send is an
-  // ordinary anchor navigation that cannot be blocked.
+  /**
+   * Cached copy of the generated PDF, so a repeat send does not rebuild it.
+   * Only valid while the preview is on screen: content cannot change without
+   * returning to the Content step, and leaving the step clears it.
+   */
   const [waFile, setWaFile] = useState<{ blob: Blob; filename: string } | null>(null);
-  const [waBuilding, setWaBuilding] = useState(false);
-
-  useEffect(() => {
-    if (!waPrompt) {
-      setWaFile(null);
-      setWaBuilding(false);
-      return;
-    }
-    let cancelled = false;
-    setWaBuilding(true);
-    setWaFile(null);
-    void (async () => {
-      try {
-        const out = await buildPdf();
-        if (cancelled) return;
-        if (out) setWaFile({ blob: out.blob, filename: out.filename });
-        else toast.error("Couldn't prepare the PDF. Please retry.");
-      } catch (err) {
-        console.error("WA prepare error", err);
-        if (!cancelled) toast.error("Couldn't prepare the PDF. Please retry.");
-      } finally {
-        if (!cancelled) setWaBuilding(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // buildPdf reads current state directly; re-running on every keystroke would
-    // rebuild the PDF needlessly, so this intentionally tracks only the prompt.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waPrompt]);
-
-  const waDigitsRaw = waNumber.replace(/[^0-9]/g, "");
-  const waDigits = waDigitsRaw.length === 10 ? `91${waDigitsRaw}` : waDigitsRaw;
-  const waValid = waDigits.length >= 12;
-  const waChatUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(whatsappMessage())}`;
-
-  // Whether this browser can put a file into a share sheet at all. Probed once
-  // with a throwaway PDF, because canShare() only answers for concrete files.
-  const [canShareFiles, setCanShareFiles] = useState(false);
   const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
-    const nav = navigator as Navigator & {
-      canShare?: (data: ShareData) => boolean;
-      share?: (data: ShareData) => Promise<void>;
-    };
-    if (typeof nav.share !== "function" || typeof nav.canShare !== "function") {
-      setCanShareFiles(false);
-      return;
-    }
-    try {
-      const probe = new File([new Blob(["x"], { type: "application/pdf" })], "probe.pdf", {
-        type: "application/pdf",
-      });
-      setCanShareFiles(nav.canShare({ files: [probe] }));
-    } catch {
-      setCanShareFiles(false);
-    }
-  }, []);
+    if (step !== "preview") setWaFile(null);
+  }, [step]);
 
   /**
-   * Hands the PDF itself to WhatsApp, attached to the message.
+   * Sends the prescription through WhatsApp with the PDF and the message
+   * together, in one step.
    *
-   * This is the only way a browser can attach a file, and the cost is that the
-   * recipient is chosen in the share sheet: no web API can place a file into a
-   * conversation with a particular number. The other button targets the number
-   * instead but cannot carry the file. Doing both at once needs the WhatsApp
-   * Business Cloud API from a server.
+   * The share sheet is the only browser mechanism that can attach a file, and
+   * it chooses the recipient itself — no web API can place a file into a chat
+   * with a particular number — so no number is asked for.
+   *
+   * navigator.share needs transient user activation, which a slow PDF build can
+   * outlast. If that happens the file is already cached, so a second tap goes
+   * straight to the sheet; the toast says so rather than failing silently.
    */
-  async function handleAttachAndSend() {
-    if (!waFile || sharing) return;
+  async function sendWhatsApp() {
+    if (sharing) return;
     const nav = navigator as Navigator & {
       canShare?: (data: ShareData) => boolean;
       share?: (data: ShareData) => Promise<void>;
     };
-    const file = new File([waFile.blob], waFile.filename, { type: "application/pdf" });
-    if (!nav.canShare?.({ files: [file] }) || !nav.share) {
-      toast.error('This browser cannot attach files. Use "Open chat" instead.');
-      return;
-    }
-    const message = whatsappMessage();
+
     setSharing(true);
     try {
-      // Copied first, so if WhatsApp drops the caption — iOS commonly ignores
-      // text when a file is present — it can simply be pasted into the chat.
-      try {
-        await navigator.clipboard?.writeText(message);
-      } catch {
-        // Clipboard permission is optional; sharing must not depend on it.
+      let ready = waFile;
+      if (!ready) {
+        toast.loading("Preparing prescription...", { id: "wa" });
+        const out = await buildPdf();
+        if (!out) throw new Error("PDF generation failed");
+        ready = { blob: out.blob, filename: out.filename };
+        setWaFile(ready);
       }
-      await nav.share({ files: [file], text: message, title: message });
-      toast.success("Message copied too — paste it if WhatsApp doesn't carry it over.", {
+
+      const message = whatsappMessage();
+      const file = new File([ready.blob], ready.filename, { type: "application/pdf" });
+
+      if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
+        // Fire-and-forget so it cannot consume the activation that share needs.
+        // If WhatsApp drops the caption — iOS commonly ignores text when a file
+        // is attached — the message can simply be pasted.
+        void navigator.clipboard?.writeText(message).catch(() => undefined);
+        try {
+          await nav.share({ files: [file], text: message, title: message });
+          toast.dismiss("wa");
+        } catch (err) {
+          const name = (err as Error)?.name;
+          // Dismissing the sheet is a cancel, not a failure.
+          if (name === "AbortError") {
+            toast.dismiss("wa");
+            return;
+          }
+          if (name === "NotAllowedError") {
+            toast.info("Prescription ready — tap Send via WhatsApp again to choose the contact.", {
+              id: "wa",
+              duration: 7000,
+            });
+            return;
+          }
+          throw err;
+        }
+        return;
+      }
+
+      // No file sharing here (desktop browsers). Save the PDF and put the
+      // message on the clipboard so both can be dropped into WhatsApp Web.
+      const url = URL.createObjectURL(ready.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = ready.filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      void navigator.clipboard?.writeText(message).catch(() => undefined);
+      toast.success("PDF saved and message copied — attach them in WhatsApp.", {
+        id: "wa",
         duration: 7000,
       });
-      setWaPrompt(false);
     } catch (err) {
-      // Dismissing the sheet reports AbortError; that is a cancel, not a failure.
-      if ((err as Error)?.name !== "AbortError") {
-        console.error("WA share failed", err);
-        toast.error('Couldn\'t open the share sheet. Use "Open chat" instead.');
-      }
+      console.error("WA send failed", err);
+      toast.error("Couldn't prepare the prescription. Please retry.", { id: "wa" });
     } finally {
       setSharing(false);
     }
-  }
-
-  /**
-   * Saves the prepared PDF. Deliberately does not preventDefault, so the
-   * anchor's navigation to WhatsApp still happens on the same tap.
-   */
-  function handleWaSend() {
-    if (!waFile) return;
-    const url = URL.createObjectURL(waFile.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = waFile.filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast.success(`PDF saved. Attach it in the chat with +${waDigits}.`, { duration: 7000 });
-    // Left open briefly so the download registers before the dialog unmounts.
-    setTimeout(() => setWaPrompt(false), 400);
   }
 
   function addReceiptItem(desc = "") {
@@ -920,15 +879,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
     }
   }
 
-  async function openWhatsAppPrompt() {
-    if (step !== "preview") {
-      setStep("preview");
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
-    }
-    setWaNumber((patient.m || "").replace(/[^0-9]/g, ""));
-    setWaPrompt(true);
-  }
-
   /**
    * Builds a complete, standalone document containing nothing but the captured
    * prescription bitmap, sized to fill exactly one page.
@@ -1152,10 +1102,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                   <Button
                     size="sm"
                     className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
-                    onClick={openWhatsAppPrompt}
-                    disabled={!!busy}
+                    onClick={sendWhatsApp}
+                    disabled={!!busy || sharing}
                   >
-                    <WhatsAppIcon size={16} /> Send via WhatsApp
+                    <WhatsAppIcon size={16} /> {sharing ? "Preparing..." : "Send via WhatsApp"}
                   </Button>
                 </>
               )}
@@ -1616,90 +1566,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                 <div className="rx-footer absolute inset-x-8 bottom-6 pt-4 border-t border-dashed border-gray-300 text-center text-[11px] text-gray-600 italic">
                   Note: This is a system generated document. A physical signature or stamp is not
                   required.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* WhatsApp number prompt */}
-          {waPrompt && (
-            <div className="fixed inset-0 z-[60] bg-black/60 grid place-items-center p-4 print:hidden">
-              <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-5">
-                <h3 className="font-semibold text-lg">Send Prescription via WhatsApp</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {canShareFiles
-                    ? "The PDF and the message go across together. WhatsApp will ask which contact to send them to."
-                    : "This browser cannot attach files, so the chat opens with the message ready and the PDF is saved for you to attach."}
-                </p>
-                <div className="mt-4">
-                  <Label>WhatsApp Number</Label>
-                  <Input
-                    value={waNumber}
-                    onChange={(e) => setWaNumber(e.target.value)}
-                    placeholder="9900315254 or 919900315254"
-                  />
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    If you enter 10 digits, +91 will be added automatically.
-                  </p>
-                </div>
-                <div className="mt-5 space-y-3">
-                  {/* What will actually be sent, so it can be checked first. */}
-                  <div className="rounded-lg border bg-muted/40 p-3">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                      Message
-                    </p>
-                    <p className="text-sm mt-1">{whatsappMessage()}</p>
-                  </div>
-
-                  {waBuilding || !waFile ? (
-                    <Button className="w-full wa-btn border-0 bg-[#25D366] text-white" disabled>
-                      <WhatsAppIcon size={16} /> Preparing PDF...
-                    </Button>
-                  ) : canShareFiles ? (
-                    <div>
-                      <Button
-                        className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
-                        onClick={handleAttachAndSend}
-                        disabled={sharing}
-                      >
-                        <WhatsAppIcon size={16} /> {sharing ? "Opening..." : "Attach PDF & send"}
-                      </Button>
-                      {waValid && (
-                        <p className="text-[11px] text-muted-foreground mt-1 text-center">
-                          Send to <span className="font-medium text-foreground">+{waDigits}</span>
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    /* Desktop has no file sharing, so the chat link remains the
-                       only way to send from here. A real link, so the jump is an
-                       ordinary navigation from a user gesture and is never
-                       blocked. */
-                    <a
-                      href={waValid ? waChatUrl : undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={waValid ? handleWaSend : undefined}
-                      className={cn("block", !waValid && "pointer-events-none")}
-                    >
-                      <Button
-                        className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
-                        disabled={!waValid}
-                      >
-                        <WhatsAppIcon size={16} />{" "}
-                        {waValid ? `Open WhatsApp for +${waDigits}` : "Enter a number"}
-                      </Button>
-                    </a>
-                  )}
-
-                  <Button
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => setWaPrompt(false)}
-                    disabled={sharing}
-                  >
-                    Cancel
-                  </Button>
                 </div>
               </div>
             </div>
