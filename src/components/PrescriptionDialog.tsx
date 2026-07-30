@@ -166,6 +166,43 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   const receiptHasContent =
     receiptOn && receipt.items.some((i) => i.desc.trim() && (i.qty > 0 || i.rate > 0));
 
+  /**
+   * Describes what the generated PDF actually contains, for the WhatsApp
+   * message. Three independent parts can be present:
+   *
+   *   referral note   - "To Whomsoever It May Concern" has been filled in
+   *   prescription    - any clinical section is filled (diagnosis, manual
+   *                     therapy, modalities, exercise protocol, advice)
+   *   payment receipt - the receipt is switched on and has a usable line item
+   *
+   * They are listed in that fixed order and joined as "a", "a and b", or
+   * "a, b and c", so every combination reads naturally.
+   */
+  function describeContents(): string {
+    const parts: string[] = [];
+    if (has(rx.concern)) parts.push("referral note");
+    if (
+      has(rx.diagnosis) ||
+      has(rx.manualTherapy) ||
+      has(rx.modalities) ||
+      has(rx.exercises) ||
+      has(rx.advice)
+    ) {
+      parts.push("prescription");
+    }
+    if (receiptHasContent) parts.push("payment receipt");
+
+    // An empty sheet is still a prescription form, so fall back to that rather
+    // than producing "Please find the from ...".
+    if (parts.length === 0) return "prescription";
+    if (parts.length === 1) return parts[0];
+    return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  }
+
+  function whatsappMessage(): string {
+    return `Hi, Please find the ${describeContents()} from Sthairya Physiocare.`;
+  }
+
   function addReceiptItem(desc = "") {
     setReceipt((r) => ({
       ...r,
@@ -768,61 +805,73 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       return;
     }
     if (digits.length === 10) digits = `91${digits}`;
+
+    // Claimed synchronously, before any awaiting: a window opened after an
+    // await has lost the user gesture and browsers block it.
+    const chatWindow = window.open("", "_blank");
+
     setBusy("wa");
     toast.loading("Preparing prescription...", { id: "wa" });
     try {
       const out = await buildPdf();
       if (!out) throw new Error("PDF generation failed");
-      const dest = digits || whatsappDigits(settings);
-      const message =
-        `Hello ${patient.n}, your prescription from Sthairya Physiocare` +
-        `${branch?.name ? ` (${branch.name})` : ""} is ready. Please find the PDF attached.`;
+      const message = whatsappMessage();
 
-      // Preferred: hand the actual PDF file to WhatsApp via the Web Share
-      // API (works on Android/iOS and desktop WhatsApp app targets).
-      const file = new File([out.blob], out.filename, { type: "application/pdf" });
-      const nav = navigator as Navigator & {
-        canShare?: (data: ShareData) => boolean;
-        share?: (data: ShareData) => Promise<void>;
-      };
-      if (nav.canShare?.({ files: [file] }) && nav.share) {
-        try {
-          await nav.share({ files: [file], text: message, title: out.filename });
-          toast.success("Share sheet opened — choose WhatsApp to send the PDF.", { id: "wa" });
-          setWaPrompt(false);
-          return;
-        } catch (shareErr) {
-          // AbortError = user closed the sheet; treat as done, not an error.
-          if ((shareErr as Error)?.name === "AbortError") {
-            toast.dismiss("wa");
-            setWaPrompt(false);
-            return;
-          }
-          // Otherwise fall through to the wa.me flow below.
-        }
-      }
-
-      // Fallback (browsers without file-sharing, e.g. desktop Chrome):
-      // download the PDF, then open the chat with the number pre-selected
-      // so the file can be attached in one step.
+      // Save the PDF first so it is already on the device by the time the chat
+      // appears, ready to attach.
       const url = URL.createObjectURL(out.blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = out.filename;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      window.open(
-        `https://wa.me/${dest}?text=${encodeURIComponent(message)}`,
-        "_blank",
-        "noopener",
-      );
-      toast.success("PDF downloaded & WhatsApp chat opened — attach the file to send.", {
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+      // Open the chat for the number that was entered.
+      //
+      // A wa.me link is the only way a browser can target a specific
+      // recipient. The Web Share API attaches the file but cannot choose who
+      // receives it — that is the contact picker that was appearing, and for a
+      // medical record it also carries a real risk of the wrong contact being
+      // tapped. Targeting the number removes that risk; the trade-off is that
+      // the file has to be attached, because no browser API can put a file
+      // into a specific WhatsApp conversation.
+      const chatUrl = `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+      if (chatWindow) {
+        chatWindow.location.href = chatUrl;
+      } else {
+        // Popup blocked. Fall back to the share sheet so the send can still be
+        // completed in one hop, with the file already attached.
+        const file = new File([out.blob], out.filename, { type: "application/pdf" });
+        const nav = navigator as Navigator & {
+          canShare?: (data: ShareData) => boolean;
+          share?: (data: ShareData) => Promise<void>;
+        };
+        if (nav.canShare?.({ files: [file] }) && nav.share) {
+          try {
+            await nav.share({ files: [file], text: message, title: out.filename });
+            toast.success("Share sheet opened — choose WhatsApp to send the PDF.", { id: "wa" });
+            setWaPrompt(false);
+            return;
+          } catch (shareErr) {
+            // AbortError means the sheet was dismissed; that is not a failure.
+            if ((shareErr as Error)?.name === "AbortError") {
+              toast.dismiss("wa");
+              setWaPrompt(false);
+              return;
+            }
+          }
+        }
+        window.location.href = chatUrl;
+      }
+
+      toast.success(`WhatsApp opened for +${digits}. Attach the saved PDF and send.`, {
         id: "wa",
-        duration: 6000,
+        duration: 7000,
       });
       setWaPrompt(false);
     } catch (err) {
       console.error("WA error", err);
+      chatWindow?.close();
       toast.error("Couldn't prepare the WhatsApp share. Please retry.", { id: "wa" });
     } finally {
       setBusy(null);
