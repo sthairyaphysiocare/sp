@@ -10,7 +10,7 @@ import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { Mail, CheckCircle2 } from "lucide-react";
-import { WhatsAppIcon } from "@/components/WhatsAppIcon";
+import { WA_GREEN, WA_GREEN_DARK, WhatsAppIcon } from "@/components/WhatsAppIcon";
 import {
   filterPastSlots,
   fmtDate,
@@ -128,9 +128,9 @@ function BookPage() {
   }
 
   const channels: { id: Channel; label: string; icon: React.ReactNode }[] = [
-    { id: "form", label: "In App Form", icon: <CheckCircle2 className="size-4" /> },
+    { id: "form", label: "In App Form", icon: <CheckCircle2 className="size-4 shrink-0" /> },
     { id: "whatsapp", label: "WhatsApp", icon: <WhatsAppIcon size={16} /> },
-    { id: "email", label: "Email", icon: <Mail className="size-4" /> },
+    { id: "email", label: "Email", icon: <Mail className="size-4 shrink-0" /> },
   ];
 
   return (
@@ -156,8 +156,9 @@ function BookPage() {
                 }`}
               >
                 {c.icon}
-                <span className="hidden xs:inline sm:inline">{c.label}</span>
-                <span className="sm:hidden inline">{c.label}</span>
+                {/* min-w-0 lets the label absorb the squeeze in a narrow column
+                    instead of the icon, which has no intrinsic minimum. */}
+                <span className="min-w-0 text-center leading-tight">{c.label}</span>
               </button>
             );
           })}
@@ -165,7 +166,10 @@ function BookPage() {
 
         {channel === "whatsapp" && (
           <div className="mt-8 p-8 rounded-2xl bg-card border">
-            <div className="size-14 rounded-2xl bg-emerald-500/10 text-emerald-600 grid place-items-center mb-4">
+            <div
+              className="size-14 rounded-2xl grid place-items-center mb-4"
+              style={{ backgroundColor: `${WA_GREEN}1a`, color: WA_GREEN_DARK }}
+            >
               <WhatsAppIcon size={24} />
             </div>
             <h2 className="text-xl font-semibold">Chat on WhatsApp</h2>
@@ -178,7 +182,7 @@ function BookPage() {
               rel="noreferrer"
               className="inline-block mt-5"
             >
-              <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
+              <Button className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white">
                 <WhatsAppIcon size={16} /> Open WhatsApp Chat
               </Button>
             </a>

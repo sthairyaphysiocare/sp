@@ -74,7 +74,7 @@ function HomePage() {
               <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer">
                 <Button
                   size="lg"
-                  className="border-0 bg-[#25D366] text-white shadow-none hover:bg-[#128C7E] hover:text-white"
+                  className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
                 >
                   <WhatsAppIcon size={16} /> WhatsApp
                 </Button>

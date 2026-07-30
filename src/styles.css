@@ -280,6 +280,24 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   WhatsApp CTAs — official brand palette (#25D366 base, #128C7E pressed).
+   The flat brand green reads as a neon swatch against the pale blue hero, so a
+   green-tinted shadow gives it the depth of a real button without altering the
+   fill. Applied to every WhatsApp CTA so they match each other; the booking
+   page previously used Tailwind's emerald-600 (#059669), which is not a
+   WhatsApp colour at all.
+--------------------------------------------------------------------------- */
+.wa-btn {
+  box-shadow:
+    0 1px 2px rgba(6, 78, 59, 0.18),
+    0 10px 24px -8px rgba(37, 211, 102, 0.55);
+}
+
+.wa-btn:active {
+  box-shadow: 0 1px 2px rgba(6, 78, 59, 0.22);
+}
+
 /* FAB: brief periodic wiggle instead of a constant pulse */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes fab-wiggle {
