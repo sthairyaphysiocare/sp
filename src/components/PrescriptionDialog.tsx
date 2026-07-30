@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
-import { amountInWordsINR } from "@/lib/utils";
+import { amountInWordsINR, cn } from "@/lib/utils";
 import { fmtDate, fmtTime12, slotsForDateBranch, todayISO } from "@/lib/date";
 
 interface HistoricalRecord {
@@ -247,6 +247,65 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   const waDigits = waDigitsRaw.length === 10 ? `91${waDigitsRaw}` : waDigitsRaw;
   const waValid = waDigits.length >= 12;
   const waChatUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(whatsappMessage())}`;
+
+  // Whether this browser can put a file into a share sheet at all. Probed once
+  // with a throwaway PDF, because canShare() only answers for concrete files.
+  const [canShareFiles, setCanShareFiles] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean;
+      share?: (data: ShareData) => Promise<void>;
+    };
+    if (typeof nav.share !== "function" || typeof nav.canShare !== "function") {
+      setCanShareFiles(false);
+      return;
+    }
+    try {
+      const probe = new File([new Blob(["x"], { type: "application/pdf" })], "probe.pdf", {
+        type: "application/pdf",
+      });
+      setCanShareFiles(nav.canShare({ files: [probe] }));
+    } catch {
+      setCanShareFiles(false);
+    }
+  }, []);
+
+  /**
+   * Hands the PDF itself to WhatsApp, attached to the message.
+   *
+   * This is the only way a browser can attach a file, and the cost is that the
+   * recipient is chosen in the share sheet: no web API can place a file into a
+   * conversation with a particular number. The other button targets the number
+   * instead but cannot carry the file. Doing both at once needs the WhatsApp
+   * Business Cloud API from a server.
+   */
+  async function handleAttachAndSend() {
+    if (!waFile || sharing) return;
+    const nav = navigator as Navigator & {
+      canShare?: (data: ShareData) => boolean;
+      share?: (data: ShareData) => Promise<void>;
+    };
+    const file = new File([waFile.blob], waFile.filename, { type: "application/pdf" });
+    if (!nav.canShare?.({ files: [file] }) || !nav.share) {
+      toast.error('This browser cannot attach files. Use "Open chat" instead.');
+      return;
+    }
+    setSharing(true);
+    try {
+      await nav.share({ files: [file], text: whatsappMessage(), title: waFile.filename });
+      setWaPrompt(false);
+    } catch (err) {
+      // Dismissing the sheet reports AbortError; that is a cancel, not a failure.
+      if ((err as Error)?.name !== "AbortError") {
+        console.error("WA share failed", err);
+        toast.error('Couldn\'t open the share sheet. Use "Open chat" instead.');
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
 
   /**
    * Saves the prepared PDF. Deliberately does not preventDefault, so the
@@ -1557,8 +1616,8 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
               <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md p-5">
                 <h3 className="font-semibold text-lg">Send Prescription via WhatsApp</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Confirm the recipient's WhatsApp number. The chat opens directly for that number
-                  with the message ready, and the PDF is saved for you to attach.
+                  A browser can attach the PDF, or open the chat for a specific number, but not
+                  both. Pick whichever suits this send.
                 </p>
                 <div className="mt-4">
                   <Label>WhatsApp Number</Label>
@@ -1571,27 +1630,65 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                     If you enter 10 digits, +91 will be added automatically.
                   </p>
                 </div>
-                <div className="mt-5 flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setWaPrompt(false)}>
-                    Cancel
-                  </Button>
-                  {waBuilding || !waFile || !waValid ? (
-                    <Button
-                      className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
-                      disabled
-                    >
-                      <WhatsAppIcon size={16} />
-                      {waBuilding ? "Preparing..." : !waValid ? "Enter number" : "Preparing..."}
+                <div className="mt-5 space-y-3">
+                  {waBuilding || !waFile ? (
+                    <Button className="w-full wa-btn border-0 bg-[#25D366] text-white" disabled>
+                      <WhatsAppIcon size={16} /> Preparing PDF...
                     </Button>
                   ) : (
-                    /* A real link, so the jump to WhatsApp is an ordinary
-                       navigation from a user gesture and cannot be blocked. */
-                    <a href={waChatUrl} target="_blank" rel="noreferrer" onClick={handleWaSend}>
-                      <Button className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white">
-                        <WhatsAppIcon size={16} /> Open WhatsApp
-                      </Button>
-                    </a>
+                    <>
+                      {canShareFiles && (
+                        <div>
+                          <Button
+                            className="w-full wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
+                            onClick={handleAttachAndSend}
+                            disabled={sharing}
+                          >
+                            <WhatsAppIcon size={16} />{" "}
+                            {sharing ? "Opening..." : "Attach PDF & send"}
+                          </Button>
+                          <p className="text-[11px] text-muted-foreground mt-1 text-center">
+                            PDF attached with the message. Pick the contact in WhatsApp.
+                          </p>
+                        </div>
+                      )}
+                      <div>
+                        {/* A real link, so the jump to WhatsApp is an ordinary
+                            navigation from a user gesture and cannot be blocked. */}
+                        <a
+                          href={waValid ? waChatUrl : undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={waValid ? handleWaSend : undefined}
+                          className={cn("block", !waValid && "pointer-events-none")}
+                        >
+                          <Button
+                            variant={canShareFiles ? "outline" : undefined}
+                            className={cn(
+                              "w-full",
+                              !canShareFiles &&
+                                "wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white",
+                            )}
+                            disabled={!waValid}
+                          >
+                            <WhatsAppIcon size={16} />{" "}
+                            {waValid ? `Open chat with +${waDigits}` : "Enter a number"}
+                          </Button>
+                        </a>
+                        <p className="text-[11px] text-muted-foreground mt-1 text-center">
+                          Goes straight to this number. PDF is saved for you to attach.
+                        </p>
+                      </div>
+                    </>
                   )}
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => setWaPrompt(false)}
+                    disabled={sharing}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </div>
             </div>
