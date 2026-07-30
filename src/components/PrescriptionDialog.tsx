@@ -202,6 +202,41 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
   }
 
   /**
+   * Copies text synchronously, inside the tap that triggered it.
+   *
+   * WhatsApp discards the text that accompanies a shared document and opens its
+   * own empty caption box instead — nothing a browser sends can populate it. So
+   * the message is placed on the clipboard, and pasting it is one long-press.
+   *
+   * execCommand is deprecated but runs synchronously, so it cannot consume the
+   * transient activation that navigator.share needs immediately afterwards. The
+   * asynchronous Clipboard API is fired afterwards as an upgrade, and its
+   * failure does not matter because the sync path has already succeeded.
+   */
+  function copyMessageSync(text: string): boolean {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none;";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand("copy");
+      ta.remove();
+      void navigator.clipboard?.writeText(text).catch(() => undefined);
+      return ok;
+    } catch {
+      try {
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
+      } catch {
+        // Nothing further to try.
+      }
+      return false;
+    }
+  }
+
+  /**
    * Cached copy of the generated PDF, so a repeat send does not rebuild it.
    * Only valid while the preview is on screen: content cannot change without
    * returning to the Content step, and leaving the step clears it.
@@ -247,20 +282,23 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       const file = new File([ready.blob], ready.filename, { type: "application/pdf" });
 
       if (typeof nav.share === "function" && nav.canShare?.({ files: [file] })) {
-        // Fire-and-forget so it cannot consume the activation that share needs.
-        // If WhatsApp drops the caption — iOS commonly ignores text when a file
-        // is attached — the message can simply be pasted.
-        void navigator.clipboard?.writeText(message).catch(() => undefined);
+        // Copied before the sheet opens, so the message is already on the
+        // clipboard by the time WhatsApp's caption box appears. The text is
+        // still passed to share() as well: WhatsApp ignores it for documents,
+        // but other targets — email, Telegram, Drive — do use it.
+        const copied = copyMessageSync(message);
+        toast[copied ? "success" : "info"](
+          copied
+            ? "Message copied. In WhatsApp, long-press the caption box and tap Paste."
+            : "WhatsApp won't accept a caption from a browser — type the message in the caption box.",
+          { id: "wa", duration: 12000 },
+        );
         try {
           await nav.share({ files: [file], text: message, title: message });
-          toast.dismiss("wa");
         } catch (err) {
           const name = (err as Error)?.name;
           // Dismissing the sheet is a cancel, not a failure.
-          if (name === "AbortError") {
-            toast.dismiss("wa");
-            return;
-          }
+          if (name === "AbortError") return;
           if (name === "NotAllowedError") {
             toast.info("Prescription ready — tap Send via WhatsApp again to choose the contact.", {
               id: "wa",
@@ -281,11 +319,13 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       a.download = ready.filename;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
-      void navigator.clipboard?.writeText(message).catch(() => undefined);
-      toast.success("PDF saved and message copied — attach them in WhatsApp.", {
-        id: "wa",
-        duration: 7000,
-      });
+      const copiedDesktop = copyMessageSync(message);
+      toast.success(
+        copiedDesktop
+          ? "PDF saved and message copied — attach the PDF in WhatsApp and paste the message."
+          : "PDF saved — attach it in WhatsApp and add the message.",
+        { id: "wa", duration: 9000 },
+      );
     } catch (err) {
       console.error("WA send failed", err);
       toast.error("Couldn't prepare the prescription. Please retry.", { id: "wa" });
