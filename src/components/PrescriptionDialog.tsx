@@ -8,6 +8,7 @@ import {
   whatsappDigits,
 } from "@/lib/logo";
 import { BUILD_ID } from "@/lib/build";
+import { ENQUIRY_MESSAGE, ENQUIRY_SUBJECT, mailtoLink } from "@/lib/contactLinks";
 import type { Patient, Visit } from "@/lib/types";
 import { slotConflict, store, takenSlotsForDate, useStore } from "@/lib/store";
 import { Button } from "./ui/button";
@@ -27,6 +28,11 @@ import {
   Trash2,
   Save,
   History,
+  MapPin,
+  Phone,
+  Mail,
+  Globe,
+  BadgeCheck,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
@@ -199,6 +205,61 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
 
   function whatsappMessage(): string {
     return `Hi, Please find the ${describeContents()} from Sthairya Physiocare.`;
+  }
+
+  /**
+   * The clinic's contact details, resolved once so the header, the PDF link
+   * annotations and the print copy all describe exactly the same thing.
+   */
+  const branchEmail = branch ? branch.emailId || settings.globalEmail : "";
+  const branchWeb =
+    settings.prescriptionUrlEnabled !== false && settings.prescriptionUrl
+      ? settings.prescriptionUrl
+      : "";
+
+  /** Adds https:// when a bare host was configured, so links always resolve. */
+  const absoluteUrl = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
+
+  /**
+   * Anchors in the header are also targets for the PDF's link annotations.
+   *
+   * The PDF is a rasterised image of this preview, so text in it is not
+   * clickable by itself. Each contact row is measured here and a matching
+   * annotation is laid over the same spot in the PDF, which makes the phone,
+   * email and website live in the exported file as well as on screen.
+   */
+  const sheetRef = ref;
+  const linkRefs = useRef<Record<string, HTMLElement | null>>({});
+  const setLinkRef = (key: string) => (el: HTMLElement | null) => {
+    linkRefs.current[key] = el;
+  };
+
+  /**
+   * Overlays clickable regions onto the generated PDF, aligned to where the
+   * header links appear in the captured image.
+   */
+  function addHeaderLinks(pdf: import("jspdf").jsPDF, pageWidthMm: number) {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const base = sheet.getBoundingClientRect();
+    if (!base.width) return;
+    // The capture is scaled to the page width, so CSS pixels convert by this.
+    const mmPerPx = pageWidthMm / base.width;
+
+    for (const [, entry] of Object.entries(linkRefs.current)) {
+      if (!entry) continue;
+      const href = entry.getAttribute("href");
+      if (!href) continue;
+      const r = entry.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      pdf.link(
+        (r.left - base.left) * mmPerPx,
+        (r.top - base.top) * mmPerPx,
+        r.width * mmPerPx,
+        r.height * mmPerPx,
+        { url: href },
+      );
+    }
   }
 
   /**
@@ -499,6 +560,10 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
           if (remaining > 0.5) pdf.addPage();
         }
       }
+      // Link annotations sit on page 1, where the header is.
+      pdf.setPage(1);
+      addHeaderLinks(pdf, pw);
+
       const filename = `PRN_${patient.pid}_${Date.now()}.pdf`;
       // The bitmap is handed back too: printing reuses it rather than asking
       // the browser to print a PDF, which is what broke printing everywhere.
@@ -1429,39 +1494,109 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                           <div className="text-xs text-gray-700 mt-1 font-semibold">
                             {branch.name}
                           </div>
-                          <div className="text-xs text-gray-600">{branch.address}</div>
-                          <div className="text-xs text-gray-600">
-                            Phone: {branch.phone}
-                            {branch.license && <> · Reg. No: {branch.license}</>}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            {(branch.emailId || settings.globalEmail) && (
-                              <>Email: {branch.emailId || settings.globalEmail}</>
-                            )}
-                            {settings.prescriptionUrlEnabled !== false &&
-                              settings.prescriptionUrl && (
+                          {/* Contact rows. Each label is replaced by an icon that
+                              carries the same meaning, with the label kept on the
+                              icon's title/aria for screen readers and print. */}
+                          <div className="text-xs text-gray-600 mt-0.5 space-y-0.5">
+                            <div className="flex items-start gap-1.5">
+                              <MapPin
+                                className="size-3 shrink-0 mt-[2px] text-[#0284c7]"
+                                aria-hidden="true"
+                              />
+                              <span className="sr-only">Address:</span>
+                              <span>{branch.address}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Phone
+                                className="size-3 shrink-0 text-[#0284c7]"
+                                aria-hidden="true"
+                              />
+                              <span className="sr-only">Phone:</span>
+                              <a
+                                ref={setLinkRef("phone")}
+                                href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`}
+                                className="text-inherit no-underline hover:underline"
+                              >
+                                {branch.phone}
+                              </a>
+
+                              {branch.license && (
                                 <>
-                                  {(branch.emailId || settings.globalEmail) && (
-                                    <span className="mx-2 text-gray-400">|</span>
-                                  )}
-                                  Web: {settings.prescriptionUrl}
+                                  <span className="text-gray-300">|</span>
+                                  <BadgeCheck
+                                    className="size-3 shrink-0 text-[#0284c7]"
+                                    aria-hidden="true"
+                                  />
+                                  <span className="sr-only">Registration / License number:</span>
+                                  <span>{branch.license}</span>
                                 </>
                               )}
+                            </div>
+
+                            {(branchEmail || branchWeb) && (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {branchEmail && (
+                                  <>
+                                    <Mail
+                                      className="size-3 shrink-0 text-[#0284c7]"
+                                      aria-hidden="true"
+                                    />
+                                    <span className="sr-only">Email:</span>
+                                    <a
+                                      ref={setLinkRef("email")}
+                                      href={mailtoLink(
+                                        branchEmail,
+                                        ENQUIRY_SUBJECT,
+                                        ENQUIRY_MESSAGE,
+                                      )}
+                                      className="text-inherit no-underline hover:underline"
+                                    >
+                                      {branchEmail}
+                                    </a>
+                                  </>
+                                )}
+                                {branchWeb && (
+                                  <>
+                                    {branchEmail && <span className="text-gray-300">|</span>}
+                                    <Globe
+                                      className="size-3 shrink-0 text-[#0284c7]"
+                                      aria-hidden="true"
+                                    />
+                                    <span className="sr-only">Website:</span>
+                                    <a
+                                      ref={setLinkRef("web")}
+                                      href={absoluteUrl(branchWeb)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-inherit no-underline hover:underline"
+                                    >
+                                      {branchWeb}
+                                    </a>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {settings.globalUrl && (
+                              <div className="flex items-center gap-1.5">
+                                <Globe
+                                  className="size-3 shrink-0 text-[#0284c7]"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">Website:</span>
+                                <a
+                                  ref={setLinkRef("globalUrl")}
+                                  href={absoluteUrl(settings.globalUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#0284c7] underline underline-offset-2 break-all"
+                                >
+                                  {settings.globalUrl}
+                                </a>
+                              </div>
+                            )}
                           </div>
-                          {settings.globalUrl && (
-                            <a
-                              href={
-                                /^https?:\/\//i.test(settings.globalUrl)
-                                  ? settings.globalUrl
-                                  : `https://${settings.globalUrl}`
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-[#0284c7] underline underline-offset-2 break-all"
-                            >
-                              {settings.globalUrl}
-                            </a>
-                          )}
                         </>
                       )}
                     </div>
