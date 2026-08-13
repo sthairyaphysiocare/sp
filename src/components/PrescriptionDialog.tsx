@@ -32,7 +32,7 @@ import {
   Phone,
   Mail,
   Globe,
-  BadgeCheck,
+  ScrollText,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
@@ -1491,12 +1491,28 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                       </div>
                       {branch && (
                         <>
-                          <div className="text-xs text-gray-700 mt-1 font-semibold">
-                            {branch.name}
+                          {/* Branch name with its registration number alongside,
+                              so the credential reads as belonging to the branch
+                              rather than sitting among the contact details. */}
+                          <div className="flex items-center gap-2 flex-wrap mt-1">
+                            <span className="text-xs text-gray-700 font-semibold">
+                              {branch.name}
+                            </span>
+                            {branch.license && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-gray-500">
+                                <ScrollText
+                                  className="size-3 shrink-0 text-[#0284c7]"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">Registration / License number:</span>
+                                <span>Reg. {branch.license}</span>
+                              </span>
+                            )}
                           </div>
+
                           {/* Contact rows. Each label is replaced by an icon that
-                              carries the same meaning, with the label kept on the
-                              icon's title/aria for screen readers and print. */}
+                              carries the same meaning, with the wording kept as
+                              screen-reader-only text so nothing is lost. */}
                           <div className="text-xs text-gray-600 mt-0.5 space-y-0.5">
                             <div className="flex items-start gap-1.5">
                               <MapPin
@@ -1507,37 +1523,28 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                               <span>{branch.address}</span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Phone
-                                className="size-3 shrink-0 text-[#0284c7]"
-                                aria-hidden="true"
-                              />
-                              <span className="sr-only">Phone:</span>
-                              <a
-                                ref={setLinkRef("phone")}
-                                href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`}
-                                className="text-inherit no-underline hover:underline"
-                              >
-                                {branch.phone}
-                              </a>
+                            {/* Phone and email share a line; the website gets its
+                                own so long URLs never push the two apart. */}
+                            <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5">
+                                <Phone
+                                  className="size-3 shrink-0 text-[#0284c7]"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">Phone:</span>
+                                <a
+                                  ref={setLinkRef("phone")}
+                                  href={`tel:${branch.phone.replace(/[^0-9+]/g, "")}`}
+                                  className="text-inherit no-underline hover:underline"
+                                >
+                                  {branch.phone}
+                                </a>
+                              </span>
 
-                              {branch.license && (
+                              {branchEmail && (
                                 <>
                                   <span className="text-gray-300">|</span>
-                                  <BadgeCheck
-                                    className="size-3 shrink-0 text-[#0284c7]"
-                                    aria-hidden="true"
-                                  />
-                                  <span className="sr-only">Registration / License number:</span>
-                                  <span>{branch.license}</span>
-                                </>
-                              )}
-                            </div>
-
-                            {(branchEmail || branchWeb) && (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {branchEmail && (
-                                  <>
+                                  <span className="inline-flex items-center gap-1.5">
                                     <Mail
                                       className="size-3 shrink-0 text-[#0284c7]"
                                       aria-hidden="true"
@@ -1554,31 +1561,31 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                     >
                                       {branchEmail}
                                     </a>
-                                  </>
-                                )}
-                                {branchWeb && (
-                                  <>
-                                    {branchEmail && <span className="text-gray-300">|</span>}
-                                    <Globe
-                                      className="size-3 shrink-0 text-[#0284c7]"
-                                      aria-hidden="true"
-                                    />
-                                    <span className="sr-only">Website:</span>
-                                    <a
-                                      ref={setLinkRef("web")}
-                                      href={absoluteUrl(branchWeb)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-inherit no-underline hover:underline"
-                                    >
-                                      {branchWeb}
-                                    </a>
-                                  </>
-                                )}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {branchWeb && (
+                              <div className="flex items-center gap-1.5">
+                                <Globe
+                                  className="size-3 shrink-0 text-[#0284c7]"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">Website:</span>
+                                <a
+                                  ref={setLinkRef("web")}
+                                  href={absoluteUrl(branchWeb)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-inherit no-underline hover:underline break-all"
+                                >
+                                  {branchWeb}
+                                </a>
                               </div>
                             )}
 
-                            {settings.globalUrl && (
+                            {settings.globalUrl && settings.globalUrl !== branchWeb && (
                               <div className="flex items-center gap-1.5">
                                 <Globe
                                   className="size-3 shrink-0 text-[#0284c7]"
