@@ -236,7 +236,17 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
 
   /**
    * Overlays clickable regions onto the generated PDF, aligned to where the
-   * header links appear in the captured image.
+   * header links appear in the captured image, and lays real (invisible)
+   * text over each one so the value can be selected and copied too.
+   *
+   * The page itself is a bitmap — a captured image of the preview — so
+   * without this, nothing in the PDF is selectable at all: the phone number,
+   * email and website can be tapped (via the link annotation above) but not
+   * copied, since there is no text underneath a pixel. This adds a matching
+   * text run at the same position, in invisible rendering mode, so any PDF
+   * reader's normal "select text" / "copy" works on it exactly as it would
+   * on any other document — while the page looks completely unchanged,
+   * since the value is already visible in the captured image beneath it.
    */
   function addHeaderLinks(pdf: import("jspdf").jsPDF, pageWidthMm: number) {
     const sheet = sheetRef.current;
@@ -252,13 +262,25 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       if (!href) continue;
       const r = entry.getBoundingClientRect();
       if (!r.width || !r.height) continue;
-      pdf.link(
-        (r.left - base.left) * mmPerPx,
-        (r.top - base.top) * mmPerPx,
-        r.width * mmPerPx,
-        r.height * mmPerPx,
-        { url: href },
-      );
+      const x = (r.left - base.left) * mmPerPx;
+      const y = (r.top - base.top) * mmPerPx;
+      const w = r.width * mmPerPx;
+      const h = r.height * mmPerPx;
+
+      pdf.link(x, y, w, h, { url: href });
+
+      const value = (entry.textContent || "").trim();
+      if (!value) continue;
+      try {
+        const sizePt = Math.max(4, Math.min(14, h * 2.3));
+        pdf.setFontSize(sizePt);
+        pdf.text(value, x, y + h * 0.78, {
+          renderingMode: "invisible",
+          maxWidth: w * 1.6,
+        });
+      } catch {
+        // A missing text layer must never prevent the PDF from being produced.
+      }
     }
   }
 
