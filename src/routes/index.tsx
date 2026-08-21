@@ -129,7 +129,7 @@ function HomePage() {
               return (
                 <div
                   key={s.id}
-                  className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all hover:-translate-y-1"
+                  className="p-6 rounded-2xl bg-[#eef0fa] border hover:soft-shadow transition-all hover:-translate-y-1"
                 >
                   <div className="size-12 rounded-xl brand-gradient grid place-items-center text-white mb-4">
                     <Icon className="size-5" />
@@ -161,7 +161,7 @@ function HomePage() {
               {settings.clinicians.map((c) => (
                 <article
                   key={c.id}
-                  className="w-full sm:w-[300px] p-6 rounded-2xl bg-card border soft-shadow transition-transform duration-300 hover:scale-[1.03]"
+                  className="w-full sm:w-[300px] p-6 rounded-2xl bg-gradient-to-br from-[#eaf3fb] to-[#eef6f2] border soft-shadow transition-transform duration-300 hover:scale-[1.03]"
                 >
                   <div className="mx-auto size-36 sm:size-40 rounded-full bg-brand/10 grid place-items-center overflow-hidden ring-4 ring-brand/20 soft-shadow">
                     {c.photo ? (
@@ -209,19 +209,22 @@ function HomePage() {
               icon: ShieldCheck,
               t: "Evidence-Based Care",
               d: "Protocols backed by latest clinical research and outcome tracking.",
+              bg: "#e7f1fc",
             },
             {
               icon: UserCheck,
               t: "Personalised Plans",
               d: "Every recovery plan is tailored to your goals and lifestyle.",
+              bg: "#e3f6f6",
             },
             {
               icon: TrendingUp,
               t: "Progress You See",
               d: "Proactively tracking pain reduction and functional recovery.",
+              bg: "#e7f7ec",
             },
           ].map((x) => (
-            <div key={x.t} className="p-6 rounded-2xl bg-card border">
+            <div key={x.t} className="p-6 rounded-2xl border" style={{ backgroundColor: x.bg }}>
               <x.icon className="size-8 text-brand" />
               <h3 className="mt-4 font-semibold text-xl">{x.t}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{x.d}</p>

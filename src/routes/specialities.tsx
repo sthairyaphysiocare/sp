@@ -8,7 +8,11 @@ export const Route = createFileRoute("/specialities")({
   head: () => ({
     meta: [
       { title: `Specialities — ${CLINIC.name}` },
-      { name: "description", content: "Treatments offered: back pain, frozen shoulder, sports injuries, post-op rehab, neurological care." },
+      {
+        name: "description",
+        content:
+          "Treatments offered: back pain, frozen shoulder, sports injuries, post-op rehab, neurological care.",
+      },
     ],
     links: [{ rel: "canonical", href: "/specialities" }],
   }),
@@ -24,15 +28,18 @@ function SpecialitiesPage() {
         <div className="max-w-2xl">
           <h1 className="text-4xl sm:text-5xl font-bold">Specialities</h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            Comprehensive physiotherapy programs covering musculoskeletal, sports,
-            neurological, and post-surgical rehabilitation.
+            Comprehensive physiotherapy programs covering musculoskeletal, sports, neurological, and
+            post-surgical rehabilitation.
           </p>
         </div>
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {specs.map((i) => {
             const Icon = getIcon(i.icon);
             return (
-              <div key={i.id} className="p-6 rounded-2xl bg-card border hover:soft-shadow transition-all">
+              <div
+                key={i.id}
+                className="p-6 rounded-2xl bg-[#eef0fa] border hover:soft-shadow transition-all"
+              >
                 <div className="size-12 rounded-xl brand-gradient grid place-items-center text-white mb-4">
                   <Icon className="size-5" />
                 </div>

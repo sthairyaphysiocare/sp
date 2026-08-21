@@ -78,7 +78,7 @@ function ContactPage() {
                   type="button"
                   key={b.id}
                   onClick={() => setActiveId(b.id)}
-                  className={`block w-full text-left p-6 rounded-2xl bg-card border space-y-4 transition-all ${
+                  className={`block w-full text-left p-6 rounded-2xl bg-[#e3eef7] border space-y-4 transition-all ${
                     isActive
                       ? "ring-2 ring-brand border-brand bg-accent/50 soft-shadow"
                       : "hover:soft-shadow hover:border-brand/30"

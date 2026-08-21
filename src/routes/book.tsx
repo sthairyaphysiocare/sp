@@ -209,7 +209,10 @@ function BookPage() {
         )}
 
         {channel === "form" && (
-          <form onSubmit={submit} className="mt-8 p-6 sm:p-8 rounded-2xl bg-card border space-y-5">
+          <form
+            onSubmit={submit}
+            className="mt-8 p-6 sm:p-8 rounded-2xl bg-[#eaf7f1] border space-y-5"
+          >
             <h2 className="text-xl font-semibold">Appointment Request</h2>
             {done && (
               <div className="p-4 rounded-lg bg-emerald-500/10 text-emerald-700 text-sm flex items-center gap-2">
