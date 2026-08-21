@@ -164,47 +164,72 @@ function BookPage() {
         </div>
 
         {channel === "whatsapp" && (
-          <div className="mt-8 p-8 rounded-2xl bg-card border">
-            <div
-              className="size-14 rounded-2xl grid place-items-center mb-4"
-              style={{ backgroundColor: `${WA_GREEN}1a`, color: WA_GREEN_DARK }}
-            >
-              <WhatsAppIcon size={24} />
+          <div
+            className="relative overflow-hidden mt-8 p-8 rounded-2xl border max-w-2xl"
+            style={{ backgroundColor: `${WA_GREEN}0d` }}
+          >
+            {/* Large, very soft echo of the channel's own icon fills the space
+                that would otherwise sit empty beside the short left-aligned
+                content — decorative only, clipped by the card's rounded
+                corners via overflow-hidden on the parent. */}
+            <WhatsAppIcon
+              size={230}
+              className="absolute -right-8 -bottom-10 pointer-events-none"
+              style={{ color: WA_GREEN, opacity: 0.09 }}
+              aria-hidden="true"
+            />
+            <div className="relative">
+              <div
+                className="size-14 rounded-2xl grid place-items-center mb-4"
+                style={{ backgroundColor: `${WA_GREEN}1a`, color: WA_GREEN_DARK }}
+              >
+                <WhatsAppIcon size={24} />
+              </div>
+              <h2 className="text-xl font-semibold">Chat on WhatsApp</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Tap below to start a conversation with our front desk.
+              </p>
+              <a
+                href={whatsappLink(wa)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block mt-5"
+              >
+                <Button className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white">
+                  <WhatsAppIcon size={16} /> Open WhatsApp Chat
+                </Button>
+              </a>
             </div>
-            <h2 className="text-xl font-semibold">Chat on WhatsApp</h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              Tap below to start a conversation with our front desk.
-            </p>
-            <a
-              href={whatsappLink(wa)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block mt-5"
-            >
-              <Button className="wa-btn border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white">
-                <WhatsAppIcon size={16} /> Open WhatsApp Chat
-              </Button>
-            </a>
           </div>
         )}
 
         {channel === "email" && (
-          <div className="mt-8 p-8 rounded-2xl bg-card border">
-            <div className="size-14 rounded-2xl bg-blue-500/10 text-blue-600 grid place-items-center mb-4">
-              <Mail className="size-6" />
+          <div className="relative overflow-hidden mt-8 p-8 rounded-2xl border max-w-2xl bg-[#3b82f60d]">
+            {/* Same treatment as the WhatsApp card above: a large, very soft
+                echo of the channel's own icon fills the space that would
+                otherwise sit empty beside the short left-aligned content. */}
+            <Mail
+              className="absolute -right-8 -bottom-10 pointer-events-none text-[#3b82f6] opacity-10"
+              style={{ width: 230, height: 230 }}
+              aria-hidden="true"
+            />
+            <div className="relative">
+              <div className="size-14 rounded-2xl bg-blue-500/10 text-blue-600 grid place-items-center mb-4">
+                <Mail className="size-6" />
+              </div>
+              <h2 className="text-xl font-semibold">Email Us</h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Send your details and we'll reply with available slots.
+              </p>
+              <a
+                href={mailtoLink(settings.globalEmail || CLINIC.email)}
+                className="inline-block mt-5"
+              >
+                <Button className="brand-gradient text-white border-0">
+                  <Mail className="size-4" /> Compose Email
+                </Button>
+              </a>
             </div>
-            <h2 className="text-xl font-semibold">Email Us</h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              Send your details and we'll reply with available slots.
-            </p>
-            <a
-              href={mailtoLink(settings.globalEmail || CLINIC.email)}
-              className="inline-block mt-5"
-            >
-              <Button className="brand-gradient text-white border-0">
-                <Mail className="size-4" /> Compose Email
-              </Button>
-            </a>
           </div>
         )}
 
