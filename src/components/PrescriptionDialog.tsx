@@ -33,8 +33,6 @@ import {
   Mail,
   Globe,
   ScrollText,
-  Copy,
-  Check,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
@@ -97,42 +95,6 @@ function copyMessageSync(text: string): boolean {
     }
     return false;
   }
-}
-
-/**
- * Small copy control shown beside a contact detail.
- *
- * Marked data-no-capture so it is stripped before the sheet is rasterised —
- * without that it would be baked into the PDF and the printed page as a
- * meaningless icon.
- */
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      data-no-capture
-      aria-label={`Copy ${label}`}
-      title={`Copy ${label}`}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (copyMessageSync(value)) {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1400);
-        } else {
-          toast.error("Couldn't copy. Please select the text manually.");
-        }
-      }}
-      className="print:hidden inline-grid place-items-center size-4 rounded shrink-0 text-gray-400 hover:text-[#0284c7] hover:bg-[#0284c7]/10 transition-colors"
-    >
-      {copied ? (
-        <Check className="size-3 text-emerald-600" aria-hidden="true" />
-      ) : (
-        <Copy className="size-3" aria-hidden="true" />
-      )}
-    </button>
-  );
 }
 
 /** 1x1 transparent GIF — holds a logo's layout box without rasterising it. */
@@ -1593,7 +1555,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {branch.phone}
                                 </a>
-                                <CopyButton value={branch.phone} label="phone number" />
                               </span>
 
                               {branchEmail && (
@@ -1616,7 +1577,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                     >
                                       {branchEmail}
                                     </a>
-                                    <CopyButton value={branchEmail} label="email address" />
                                   </span>
                                 </>
                               )}
@@ -1638,7 +1598,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {branchWeb}
                                 </a>
-                                <CopyButton value={absoluteUrl(branchWeb)} label="website link" />
                               </div>
                             )}
 
@@ -1658,10 +1617,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {settings.globalUrl}
                                 </a>
-                                <CopyButton
-                                  value={absoluteUrl(settings.globalUrl)}
-                                  label="website link"
-                                />
                               </div>
                             )}
                           </div>
