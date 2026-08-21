@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useStore } from "@/lib/store";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { addDaysISO, fmtDate, fmtTime12, todayISO } from "@/lib/date";
 import { cn, openWhatsApp } from "@/lib/utils";
@@ -91,7 +90,6 @@ function UpcomingVisits() {
 
   return (
     <div>
-      <Toaster />
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <CalendarClock className="size-6 text-brand" /> Upcoming Visits

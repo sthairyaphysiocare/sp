@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { useStore, store } from "@/lib/store";
 import { generateOtp, sendOtpEmail } from "@/lib/emailOtp";
 import { clearOtp, OTP_TTL_MINUTES } from "@/lib/session";
@@ -206,7 +205,6 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen grid place-items-center px-4 py-12">
-      <Toaster />
       <div className="w-full max-w-md text-center">
         <div className="flex justify-center mb-6">
           <Link

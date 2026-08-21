@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useState } from "react";
 import { Search, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { IconButton } from "@/components/IconButton";
 import { Trash2 } from "lucide-react";
 
@@ -61,7 +60,6 @@ function Patients() {
 
   return (
     <div>
-      <Toaster />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Patients</h1>

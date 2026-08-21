@@ -39,7 +39,6 @@ import {
 } from "recharts";
 import { PrescriptionDialog } from "@/components/PrescriptionDialog";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { addDaysISO, fmtDate, fmtTime12, slotsForDateBranch, todayISO } from "@/lib/date";
 import { branchById, enabledBranches } from "@/lib/logo";
 import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
@@ -127,7 +126,6 @@ function PatientDetail() {
 
   return (
     <div>
-      <Toaster />
       <Link
         to="/app/patients"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"

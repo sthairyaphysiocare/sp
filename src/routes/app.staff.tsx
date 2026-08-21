@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { Trash2, Key, Pencil, X, Check, Lock, Unlock } from "lucide-react";
 import type { Role, User } from "@/lib/types";
 
@@ -139,7 +138,6 @@ function Staff() {
 
   return (
     <div>
-      <Toaster />
       <h1 className="text-2xl sm:text-3xl font-bold">Staff & Roles</h1>
       <p className="text-sm text-muted-foreground mt-1">
         Manage staff usernames, roles and passwords.

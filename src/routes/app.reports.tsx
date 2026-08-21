@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import {
   FileBarChart2,
@@ -317,7 +316,6 @@ function Reports() {
 
   return (
     <div>
-      <Toaster />
       <div className="flex items-center gap-3">
         <div className="size-10 rounded-xl brand-gradient grid place-items-center text-white">
           <FileBarChart2 className="size-5" />

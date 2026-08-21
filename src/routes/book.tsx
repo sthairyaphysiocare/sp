@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useMemo, useState } from "react";
 import { store, useStore, takenSlotsForDate } from "@/lib/store";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { Mail, CheckCircle2 } from "lucide-react";
 import { WA_GREEN, WA_GREEN_DARK, WhatsAppIcon } from "@/components/WhatsAppIcon";
 import { mailtoLink, whatsappLink } from "@/lib/contactLinks";
@@ -136,7 +135,6 @@ function BookPage() {
 
   return (
     <PublicLayout>
-      <Toaster />
       <section className="max-w-5xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
         <h1 className="text-4xl sm:text-5xl font-bold">Book Your Visit</h1>
         <p className="mt-4 text-lg text-muted-foreground">

@@ -10,6 +10,7 @@ import { LOGO_URL, CLINIC } from "@/lib/logo";
 import { AuthProvider } from "@/lib/auth";
 import { GlobalWatermark } from "@/components/GlobalWatermark";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { CloudSyncIndicator } from "@/components/CloudSyncIndicator";
 
 function NotFoundComponent() {
@@ -101,6 +102,10 @@ function RootComponent() {
             <Outlet />
           </div>
           <CloudSyncIndicator />
+          {/* The single, app-wide notification surface — see
+              components/ui/sonner.tsx for why this must not be duplicated
+              per-route. */}
+          <Toaster />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

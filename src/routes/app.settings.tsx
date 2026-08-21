@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImageCropModal } from "@/components/ImageCropModal";
-import { Toaster } from "@/components/ui/sonner";
 import {
   Globe,
   MapPin,
@@ -147,7 +146,6 @@ function Settings() {
 
   return (
     <div>
-      <Toaster />
       <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
 
       <form onSubmit={save} className="mt-6 p-6 rounded-2xl bg-card border max-w-xl space-y-4">

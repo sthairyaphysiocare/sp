@@ -3,7 +3,6 @@ import { useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Users, Activity, CalendarCheck2, Inbox } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
 import { fmtDate, fmtTime12, todayISO } from "@/lib/date";
 import { openWhatsApp } from "@/lib/utils";
 import { WhatsAppIcon } from "@/components/WhatsAppIcon";
@@ -247,7 +246,6 @@ function Dashboard() {
 
   return (
     <div>
-      <Toaster />
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold">Welcome back, {user?.name.split(" ")[0]}</h1>
         <p className="text-muted-foreground mt-1 capitalize">{user?.role} workspace</p>

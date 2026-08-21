@@ -8,7 +8,6 @@ import { MonthYearDatePicker } from "@/components/MonthYearDatePicker";
 import { useState } from "react";
 import { COMORBIDITIES, type Patient } from "@/lib/types";
 import { toast } from "sonner";
-import { Toaster } from "@/components/ui/sonner";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { enabledBranches } from "@/lib/logo";
@@ -88,7 +87,6 @@ function NewPatient() {
 
   return (
     <div>
-      <Toaster />
       <Link
         to="/app/patients"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
