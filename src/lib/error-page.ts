@@ -1,4 +1,41 @@
-export function renderErrorPage(): string {
+/**
+ * Formats a caught error for safe inclusion in the fallback page.
+ *
+ * Kept deliberately minimal — name, message, and the first few stack frames
+ * only. JS error text essentially never contains secret *values* (a missing
+ * credential throws with the variable's *name*, e.g. "TURSO_AUTH_TOKEN is not
+ * configured", never the token itself) but nothing here should be trusted
+ * blindly, so this stays conservative and truncates hard.
+ *
+ * Wrapped in its own try/catch: formatting the error for display must never
+ * become a second error. On any failure this returns undefined and the page
+ * renders exactly as it did before — silent degradation, not a crash.
+ */
+function formatErrorDetail(error: unknown): string | undefined {
+  try {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const stackLines = (err.stack ?? "").split("\n").slice(0, 6).join("\n");
+    const text = `${err.name}: ${err.message}\n${stackLines}`.slice(0, 2000);
+    // HTML-comment-safe: a literal "-->" in the message could otherwise close
+    // the comment early and leak the rest of the page's markup as visible text.
+    return text.replace(/--/g, "\u2011\u2011");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Renders the generic "something went wrong" page shown for any server-side
+ * failure. `detail`, when provided, is embedded as an HTML comment — invisible
+ * to a visitor looking at the rendered page, but present in view-source /
+ * "Copy page source", which is a far faster path to the real cause than
+ * digging through Cloudflare's live log stream for the matching request.
+ */
+export function renderErrorPage(error?: unknown): string {
+  const detail = error !== undefined ? formatErrorDetail(error) : undefined;
+  const diagnostic = detail
+    ? `\n  <!-- DIAGNOSTIC (view-source only, safe to share with support):\n${detail}\n  -->`
+    : "";
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -25,6 +62,6 @@ export function renderErrorPage(): string {
         <a class="secondary" href="/">Go home</a>
       </div>
     </div>
-  </body>
+  </body>${diagnostic}
 </html>`;
 }
