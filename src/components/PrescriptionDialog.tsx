@@ -33,8 +33,6 @@ import {
   Mail,
   Globe,
   ScrollText,
-  Copy,
-  Check,
 } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { toast } from "sonner";
@@ -66,74 +64,6 @@ interface Props {
 }
 
 type Step = "edit" | "preview";
-
-/**
- * Copies text synchronously, inside the gesture that triggered it.
- *
- * execCommand is deprecated but runs synchronously, so it works inside a tap
- * without needing clipboard permission, and cannot consume the transient
- * activation that navigator.share needs immediately afterwards. The asynchronous
- * Clipboard API is fired after as an upgrade; its failure does not matter
- * because the synchronous path has already succeeded.
- */
-function copyMessageSync(text: string): boolean {
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none;";
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, text.length);
-    const ok = document.execCommand("copy");
-    ta.remove();
-    void navigator.clipboard?.writeText(text).catch(() => undefined);
-    return ok;
-  } catch {
-    try {
-      void navigator.clipboard?.writeText(text).catch(() => undefined);
-    } catch {
-      // Nothing further to try.
-    }
-    return false;
-  }
-}
-
-/**
- * Small copy control shown beside a contact detail.
- *
- * Marked data-no-capture so it is stripped before the sheet is rasterised —
- * without that it would be baked into the PDF and the printed page as a
- * meaningless icon.
- */
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      data-no-capture
-      aria-label={`Copy ${label}`}
-      title={`Copy ${label}`}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (copyMessageSync(value)) {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1400);
-        } else {
-          toast.error("Couldn't copy. Please select the text manually.");
-        }
-      }}
-      className="print:hidden inline-grid place-items-center size-4 rounded shrink-0 text-gray-400 hover:text-[#0284c7] hover:bg-[#0284c7]/10 transition-colors"
-    >
-      {copied ? (
-        <Check className="size-3 text-emerald-600" aria-hidden="true" />
-      ) : (
-        <Copy className="size-3" aria-hidden="true" />
-      )}
-    </button>
-  );
-}
 
 /** 1x1 transparent GIF — holds a logo's layout box without rasterising it. */
 const BLANK_PIXEL =
@@ -322,30 +252,48 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
       if (!href) continue;
       const r = entry.getBoundingClientRect();
       if (!r.width || !r.height) continue;
-      const x = (r.left - base.left) * mmPerPx;
-      const y = (r.top - base.top) * mmPerPx;
-      const w = r.width * mmPerPx;
-      const h = r.height * mmPerPx;
+      pdf.link(
+        (r.left - base.left) * mmPerPx,
+        (r.top - base.top) * mmPerPx,
+        r.width * mmPerPx,
+        r.height * mmPerPx,
+        { url: href },
+      );
+    }
+  }
 
-      pdf.link(x, y, w, h, { url: href });
-
-      // The page itself is a bitmap, so nothing in it is selectable. An
-      // invisible text run is laid over each detail so it can be selected and
-      // copied in any PDF reader — which is what makes the phone number and
-      // email address usable on phones, where readers commonly ignore tel: and
-      // mailto: annotations altogether.
-      const value = (entry.textContent || "").trim();
-      if (!value) continue;
+  /**
+   * Copies text synchronously, inside the tap that triggered it.
+   *
+   * WhatsApp discards the text that accompanies a shared document and opens its
+   * own empty caption box instead — nothing a browser sends can populate it. So
+   * the message is placed on the clipboard, and pasting it is one long-press.
+   *
+   * execCommand is deprecated but runs synchronously, so it cannot consume the
+   * transient activation that navigator.share needs immediately afterwards. The
+   * asynchronous Clipboard API is fired afterwards as an upgrade, and its
+   * failure does not matter because the sync path has already succeeded.
+   */
+  function copyMessageSync(text: string): boolean {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none;";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand("copy");
+      ta.remove();
+      void navigator.clipboard?.writeText(text).catch(() => undefined);
+      return ok;
+    } catch {
       try {
-        const sizePt = Math.max(4, Math.min(14, h * 2.3));
-        pdf.setFontSize(sizePt);
-        pdf.text(value, x, y + h * 0.78, {
-          renderingMode: "invisible",
-          maxWidth: w * 1.6,
-        });
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
       } catch {
-        // A missing text layer must never prevent the PDF from being produced.
+        // Nothing further to try.
       }
+      return false;
     }
   }
 
@@ -649,8 +597,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
    * shadows on rounded elements inside foreignObject as detached fragments.
    */
   function sanitizeCloneForCapture(clone: HTMLElement) {
-    // Screen-only affordances must not be rasterised into the document.
-    clone.querySelectorAll("[data-no-capture]").forEach((el) => el.remove());
     clone.querySelectorAll<HTMLImageElement>("[data-rx-logo]").forEach((img) => {
       img.removeAttribute("crossorigin");
       img.setAttribute("src", BLANK_PIXEL);
@@ -1593,7 +1539,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {branch.phone}
                                 </a>
-                                <CopyButton value={branch.phone} label="phone number" />
                               </span>
 
                               {branchEmail && (
@@ -1616,7 +1561,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                     >
                                       {branchEmail}
                                     </a>
-                                    <CopyButton value={branchEmail} label="email address" />
                                   </span>
                                 </>
                               )}
@@ -1638,7 +1582,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {branchWeb}
                                 </a>
-                                <CopyButton value={absoluteUrl(branchWeb)} label="website link" />
                               </div>
                             )}
 
@@ -1658,10 +1601,6 @@ export function PrescriptionDialog({ patient, lastVisit, onClose, historical }: 
                                 >
                                   {settings.globalUrl}
                                 </a>
-                                <CopyButton
-                                  value={absoluteUrl(settings.globalUrl)}
-                                  label="website link"
-                                />
                               </div>
                             )}
                           </div>
