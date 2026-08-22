@@ -165,8 +165,8 @@ function BookPage() {
 
         {channel === "whatsapp" && (
           <div
-            className="relative overflow-hidden mt-8 p-8 rounded-2xl border max-w-2xl"
-            style={{ backgroundColor: `${WA_GREEN}0d` }}
+            className="relative overflow-hidden mt-8 p-8 rounded-2xl border-[#25D36661] border max-w-2xl soft-shadow"
+            style={{ backgroundColor: `${WA_GREEN}2e` }}
           >
             {/* Large, very soft echo of the channel's own icon fills the space
                 that would otherwise sit empty beside the short left-aligned
@@ -204,7 +204,7 @@ function BookPage() {
         )}
 
         {channel === "email" && (
-          <div className="relative overflow-hidden mt-8 p-8 rounded-2xl border max-w-2xl bg-[#3b82f60d]">
+          <div className="relative overflow-hidden mt-8 p-8 rounded-2xl border-[#3b82f661] border max-w-2xl bg-[#3b82f62e] soft-shadow">
             {/* Same treatment as the WhatsApp card above: a large, very soft
                 echo of the channel's own icon fills the space that would
                 otherwise sit empty beside the short left-aligned content. */}
@@ -236,7 +236,7 @@ function BookPage() {
         {channel === "form" && (
           <form
             onSubmit={submit}
-            className="mt-8 p-6 sm:p-8 rounded-2xl bg-[#eaf7f1] border space-y-5"
+            className="mt-8 p-6 sm:p-8 rounded-2xl bg-[#1357882e] border-[#13578861] border soft-shadow space-y-5"
           >
             <h2 className="text-xl font-semibold">Appointment Request</h2>
             {done && (
@@ -250,6 +250,7 @@ function BookPage() {
                 <Label htmlFor="name">Full Name *</Label>
                 <Input
                   id="name"
+                  className="bg-background"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
@@ -259,6 +260,7 @@ function BookPage() {
                 <Label htmlFor="phone">Phone *</Label>
                 <Input
                   id="phone"
+                  className="bg-background"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   required
@@ -268,6 +270,7 @@ function BookPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
+                  className="bg-background"
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -295,6 +298,7 @@ function BookPage() {
                 <Label htmlFor="prefDate">Preferred Date *</Label>
                 <Input
                   id="prefDate"
+                  className="bg-background"
                   type="date"
                   min={today}
                   value={form.prefDate}
@@ -325,6 +329,7 @@ function BookPage() {
               <Label htmlFor="concern">Concern / Symptoms</Label>
               <Textarea
                 id="concern"
+                className="bg-background"
                 rows={4}
                 value={form.concern}
                 onChange={(e) => setForm({ ...form, concern: e.target.value })}

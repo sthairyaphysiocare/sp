@@ -52,17 +52,33 @@ function AboutPage() {
             {
               t: "Mission",
               d: "Restore movement, reduce pain and rebuild confidence in every patient.",
-              bg: "#e8f0fc",
+              bg: "#1357882e",
+              border: "#13578861",
+              fg: "#135788",
             },
-            { t: "Vision", d: "Be the most trusted physiotherapy partner.", bg: "#e6f5f6" },
+            {
+              t: "Vision",
+              d: "Be the most trusted physiotherapy partner.",
+              bg: "#1188b32e",
+              border: "#1188b361",
+              fg: "#1188B3",
+            },
             {
               t: "Values",
               d: "Integrity, evidence, empathy and measurable outcomes.",
-              bg: "#eaf6ef",
+              bg: "#3e91662e",
+              border: "#3e916661",
+              fg: "#3E9166",
             },
           ].map((x) => (
-            <div key={x.t} className="p-6 rounded-2xl border" style={{ backgroundColor: x.bg }}>
-              <h3 className="font-semibold text-brand">{x.t}</h3>
+            <div
+              key={x.t}
+              className="p-6 rounded-2xl border soft-shadow"
+              style={{ backgroundColor: x.bg, borderColor: x.border }}
+            >
+              <h3 className="font-semibold" style={{ color: x.fg }}>
+                {x.t}
+              </h3>
               <p className="text-sm text-muted-foreground mt-2">{x.d}</p>
             </div>
           ))}

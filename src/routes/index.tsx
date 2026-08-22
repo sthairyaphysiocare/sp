@@ -124,21 +124,39 @@ function HomePage() {
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {settings.specialities.slice(0, 4).map((s) => {
-              const Icon = getIcon(s.icon);
-              return (
-                <div
-                  key={s.id}
-                  className="p-6 rounded-2xl bg-[#eef0fa] border hover:soft-shadow transition-all hover:-translate-y-1"
-                >
-                  <div className="size-12 rounded-xl brand-gradient grid place-items-center text-white mb-4">
-                    <Icon className="size-5" />
+            {(() => {
+              // Five tints cycling by card position, all derived from the
+              // logo's own sampled colors — deliberately kept identical here
+              // and on the full /specialities page so the same speciality
+              // always reads the same colour in both places.
+              const palette = [
+                { bg: "#1357882e", border: "#13578861", fg: "#135788" },
+                { bg: "#1188b32e", border: "#1188b361", fg: "#1188B3" },
+                { bg: "#3e91662e", border: "#3e916661", fg: "#3E9166" },
+                { bg: "#1266952e", border: "#12669561", fg: "#126695" },
+                { bg: "#288c8c2e", border: "#288c8c61", fg: "#288c8c" },
+              ];
+              return settings.specialities.slice(0, 4).map((s, i) => {
+                const Icon = getIcon(s.icon);
+                const c = palette[i % palette.length];
+                return (
+                  <div
+                    key={s.id}
+                    className="p-6 rounded-2xl border soft-shadow transition-all hover:-translate-y-1"
+                    style={{ backgroundColor: c.bg, borderColor: c.border }}
+                  >
+                    <div
+                      className="size-12 rounded-xl grid place-items-center text-white mb-4"
+                      style={{ backgroundColor: c.fg }}
+                    >
+                      <Icon className="size-5" />
+                    </div>
+                    <h3 className="font-semibold text-lg">{s.title}</h3>
+                    <p className="text-sm text-muted-foreground mt-2">{s.desc}</p>
                   </div>
-                  <h3 className="font-semibold text-lg">{s.title}</h3>
-                  <p className="text-sm text-muted-foreground mt-2">{s.desc}</p>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
           <div className="text-center mt-10">
             <Link to="/specialities">
@@ -161,7 +179,7 @@ function HomePage() {
               {settings.clinicians.map((c) => (
                 <article
                   key={c.id}
-                  className="w-full sm:w-[300px] p-6 rounded-2xl bg-gradient-to-br from-[#eaf3fb] to-[#eef6f2] border soft-shadow transition-transform duration-300 hover:scale-[1.03]"
+                  className="w-full sm:w-[300px] p-6 rounded-2xl bg-gradient-to-br from-[#1357882e] to-[#1188b32e] border-[#61a0c761] border soft-shadow transition-transform duration-300 hover:scale-[1.03]"
                 >
                   <div className="mx-auto size-36 sm:size-40 rounded-full bg-brand/10 grid place-items-center overflow-hidden ring-4 ring-brand/20 soft-shadow">
                     {c.photo ? (
@@ -209,23 +227,33 @@ function HomePage() {
               icon: ShieldCheck,
               t: "Evidence-Based Care",
               d: "Protocols backed by latest clinical research and outcome tracking.",
-              bg: "#e7f1fc",
+              bg: "#1357882e",
+              border: "#13578861",
+              fg: "#135788",
             },
             {
               icon: UserCheck,
               t: "Personalised Plans",
               d: "Every recovery plan is tailored to your goals and lifestyle.",
-              bg: "#e3f6f6",
+              bg: "#1188b32e",
+              border: "#1188b361",
+              fg: "#1188B3",
             },
             {
               icon: TrendingUp,
               t: "Progress You See",
               d: "Proactively tracking pain reduction and functional recovery.",
-              bg: "#e7f7ec",
+              bg: "#3e91662e",
+              border: "#3e916661",
+              fg: "#3E9166",
             },
           ].map((x) => (
-            <div key={x.t} className="p-6 rounded-2xl border" style={{ backgroundColor: x.bg }}>
-              <x.icon className="size-8 text-brand" />
+            <div
+              key={x.t}
+              className="p-6 rounded-2xl border soft-shadow"
+              style={{ backgroundColor: x.bg, borderColor: x.border }}
+            >
+              <x.icon className="size-8" style={{ color: x.fg }} />
               <h3 className="mt-4 font-semibold text-xl">{x.t}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{x.d}</p>
             </div>

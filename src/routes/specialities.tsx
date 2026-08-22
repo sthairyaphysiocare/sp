@@ -33,21 +33,38 @@ function SpecialitiesPage() {
           </p>
         </div>
         <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {specs.map((i) => {
-            const Icon = getIcon(i.icon);
-            return (
-              <div
-                key={i.id}
-                className="p-6 rounded-2xl bg-[#eef0fa] border hover:soft-shadow transition-all"
-              >
-                <div className="size-12 rounded-xl brand-gradient grid place-items-center text-white mb-4">
-                  <Icon className="size-5" />
+          {(() => {
+            // Same five tints, same cycling order, as the homepage's
+            // specialities preview — so a given speciality always reads the
+            // same colour on both pages.
+            const palette = [
+              { bg: "#1357882e", border: "#13578861", fg: "#135788" },
+              { bg: "#1188b32e", border: "#1188b361", fg: "#1188B3" },
+              { bg: "#3e91662e", border: "#3e916661", fg: "#3E9166" },
+              { bg: "#1266952e", border: "#12669561", fg: "#126695" },
+              { bg: "#288c8c2e", border: "#288c8c61", fg: "#288c8c" },
+            ];
+            return specs.map((i, idx) => {
+              const Icon = getIcon(i.icon);
+              const c = palette[idx % palette.length];
+              return (
+                <div
+                  key={i.id}
+                  className="p-6 rounded-2xl border soft-shadow transition-all"
+                  style={{ backgroundColor: c.bg, borderColor: c.border }}
+                >
+                  <div
+                    className="size-12 rounded-xl grid place-items-center text-white mb-4"
+                    style={{ backgroundColor: c.fg }}
+                  >
+                    <Icon className="size-5" />
+                  </div>
+                  <h3 className="font-semibold text-lg">{i.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-2">{i.desc}</p>
                 </div>
-                <h3 className="font-semibold text-lg">{i.title}</h3>
-                <p className="text-sm text-muted-foreground mt-2">{i.desc}</p>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       </section>
     </PublicLayout>
