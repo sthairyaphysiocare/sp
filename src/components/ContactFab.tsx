@@ -54,21 +54,14 @@ export function ContactFab() {
       label: "Call us",
       href: `tel:+${wa}`,
       icon: <Phone className="size-5" />,
-      // Verified brand blue (same anchor used across Mission/Vision/Values,
-      // Specialities, and the rest of the site's colour treatment) — was
-      // bg-sky-500, a generic Tailwind colour unrelated to the actual brand.
-      bg: "bg-[#135788] hover:bg-[#0f4569]",
+      bg: "bg-sky-500 hover:bg-sky-600",
     },
     {
       key: "wa",
       label: "WhatsApp us",
       href: whatsappLink(wa, ENQUIRY_MESSAGE),
       icon: <WhatsAppIcon size={20} />,
-      // WhatsApp's actual verified brand green (same WA_GREEN/WA_GREEN_DARK
-      // pair used on every other WhatsApp button on the site) — was
-      // bg-emerald-500, a generic Tailwind green that is visibly not the
-      // real WhatsApp colour.
-      bg: "bg-[#25D366] hover:bg-[#128C7E]",
+      bg: "bg-emerald-500 hover:bg-emerald-600",
       external: true,
     },
     {

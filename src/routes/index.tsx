@@ -307,8 +307,7 @@ function HomePage() {
             <a href={whatsappLink(wa)} target="_blank" rel="noreferrer">
               <Button
                 size="lg"
-                variant="outline"
-                className="w-full bg-transparent border-white text-white hover:bg-white/10"
+                className="w-full border-0 bg-[#25D366] text-white hover:bg-[#128C7E] hover:text-white"
               >
                 <WhatsAppIcon size={16} /> Chat on WhatsApp
               </Button>
@@ -316,8 +315,7 @@ function HomePage() {
             <a href={`tel:+${wa}`}>
               <Button
                 size="lg"
-                variant="outline"
-                className="w-full bg-transparent border-white text-white hover:bg-white/10"
+                className="w-full border-0 bg-sky-500 text-white hover:bg-sky-600 hover:text-white"
               >
                 <Phone className="size-4" /> Call
               </Button>
