@@ -14,31 +14,41 @@ import { whatsappLink, mailtoLink } from "@/lib/contactLinks";
  * The card's palette is intentionally NOT the site's brand colours — a
  * separate, personal-brand dark/neon aesthetic, as requested.
  *
- * ---- Things that still need real values, flagged here and in the summary
- * given after building this ----
- *   - DEV_EMAIL is empty. No email address was given, and this file will not
- *     guess one for a real person. The mail icon renders but is inert
- *     (aria-disabled, no href) until a real address is supplied.
- *   - LINKEDIN_URL points at instagram.com, and the X/Facebook/Instagram URLs
- *     are bare domain roots. Both are exactly as explicitly specified, given
- *     twice, not an assumption on this file's part — update the constants
- *     below whenever the real destinations are ready.
+ * All contact values below are real, as given directly, not placeholders.
+ * One thing worth knowing if this ever needs revisiting: the LinkedIn link
+ * points at the same URL as Instagram — given that way explicitly, more than
+ * once, not an assumption made by this file.
  */
 
 const DEV_NAME = "Vaishak Rao Shuntipady";
 const DEV_TITLE = "Digital Craftsman";
 const DEV_INITIALS = "VS";
 const DEV_WHATSAPP_DIGITS = "918197339371"; // +91 8197339371
-const DEV_EMAIL = ""; // TODO: real address needed — see file header
+const DEV_EMAIL = "vaishak.srao@gmail.com";
 const DEV_MESSAGE =
   "Hi Vaishak! I came across your work through the Sthairya Physiocare website and I'd like to talk about a web/app development project.";
 const TECH_STACK = ["React", "TypeScript", "Node.js", "Tailwind CSS"];
 
 const SOCIAL_LINKS = [
-  { key: "x", label: "X", href: "https://x.com", icon: XIcon },
-  { key: "facebook", label: "Facebook", href: "https://facebook.com", icon: Facebook },
-  { key: "instagram", label: "Instagram", href: "https://instagram.com", icon: Instagram },
-  { key: "linkedin", label: "LinkedIn", href: "https://instagram.com", icon: Linkedin },
+  { key: "x", label: "X", href: "https://x.com/Nibhruth_a", icon: XIcon },
+  {
+    key: "facebook",
+    label: "Facebook",
+    href: "https://www.facebook.com/share/19bCAFEhnf/",
+    icon: Facebook,
+  },
+  {
+    key: "instagram",
+    label: "Instagram",
+    href: "https://www.instagram.com/vaishak_rao_s?igsi=end6MmJ4bXVjbTNi",
+    icon: Instagram,
+  },
+  {
+    key: "linkedin",
+    label: "LinkedIn",
+    href: "https://www.instagram.com/vaishak_rao_s?igsi=end6MmJ4bXVjbTNi",
+    icon: Linkedin,
+  },
 ] as const;
 
 export function DeveloperCredit() {
@@ -79,8 +89,13 @@ export function DeveloperCredit() {
 
   function composedMessage() {
     const who = formName.trim() ? `My name is ${formName.trim()}. ` : "";
-    const body = formMessage.trim() || DEV_MESSAGE;
-    return `Hi Vaishak! ${who}${body}`;
+    const typedMessage = formMessage.trim();
+    if (typedMessage) return `Hi Vaishak! ${who}${typedMessage}`;
+    // No typed message — DEV_MESSAGE already opens with its own greeting, so
+    // reuse it rather than prepend a second one. Splice the name in right
+    // after that known, fixed prefix instead.
+    const GREETING = "Hi Vaishak! ";
+    return who ? `${GREETING}${who}${DEV_MESSAGE.slice(GREETING.length)}` : DEV_MESSAGE;
   }
 
   return (
@@ -174,6 +189,8 @@ export function DeveloperCredit() {
                   href={
                     DEV_EMAIL ? mailtoLink(DEV_EMAIL, "Project enquiry", DEV_MESSAGE) : undefined
                   }
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-disabled={!DEV_EMAIL}
                   aria-label="Email"
                   title={DEV_EMAIL ? "Email" : "Email (not yet configured)"}
@@ -220,6 +237,8 @@ export function DeveloperCredit() {
                       ? mailtoLink(DEV_EMAIL, "Project enquiry", composedMessage())
                       : undefined
                   }
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-disabled={!DEV_EMAIL}
                   className="dc-send-btn dc-send-mail aria-disabled:opacity-40 aria-disabled:pointer-events-none inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-transform active:scale-95"
                 >
