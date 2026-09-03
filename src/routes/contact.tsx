@@ -50,12 +50,33 @@ function ContactPage() {
   // Valid Google Maps EMBED url per branch: if the admin pasted an official
   // embed link (google.com/maps/embed...), use it verbatim; otherwise build
   // the keyless embed format from the branch's address.
+  //
+  // A plain "name + address" text search here is what previously produced a
+  // cluttered, low-confidence area view rather than a single pin — Google's
+  // geocoder treats a landmark phrase like "Near Ambika Book Stall" as
+  // ambiguous, and shows several nearby points of interest instead of
+  // committing to one. Verified via a live Google Places lookup that this
+  // clinic is itself a listed business (place_id ChIJKxOaOAC9pDsRwZPGfMOWwok)
+  // at 12.7791495, 75.1821296 — using those exact coordinates instead of a
+  // text query drops a single, unambiguous pin, since no geocoding guess is
+  // involved at all. Matched narrowly against this specific branch's address
+  // so a future, different branch without a configured mapUrl still falls
+  // through to the generic text-search behaviour below, unaffected.
+  const KNOWN_PRECISE_LOCATIONS: Record<string, string> = {
+    "vivekananda college road": "12.7791495,75.1821296",
+  };
+  const addressKey = (active?.address ?? "").toLowerCase();
+  const knownCoords = Object.entries(KNOWN_PRECISE_LOCATIONS).find(([key]) =>
+    addressKey.includes(key),
+  )?.[1];
   const mapEmbedSrc =
     active?.mapUrl && /google\.[a-z.]+\/maps\/embed/i.test(active.mapUrl)
       ? active.mapUrl
-      : `https://www.google.com/maps?q=${encodeURIComponent(
-          `${active?.name ?? "Sthairya Physiocare"} ${active?.address ?? "Puttur Karnataka"}`,
-        )}&output=embed`;
+      : knownCoords
+        ? `https://www.google.com/maps?q=${knownCoords}&z=17&output=embed`
+        : `https://www.google.com/maps?q=${encodeURIComponent(
+            `${active?.name ?? "Sthairya Physiocare"} ${active?.address ?? "Puttur Karnataka"}`,
+          )}&output=embed`;
   const mapQuery = encodeURIComponent(active?.address || CLINIC.mapRef);
 
   return (
