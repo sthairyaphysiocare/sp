@@ -148,7 +148,10 @@ function ContactPage() {
                   </div>
                   <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <a href={`tel:${bTel}`}>
-                      <Button size="sm" variant="outline">
+                      <Button
+                        size="sm"
+                        className="border-0 bg-[#135788] text-white hover:bg-[#0f4569] hover:text-white"
+                      >
                         <Phone className="size-4" /> Call
                       </Button>
                     </a>

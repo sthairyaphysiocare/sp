@@ -129,25 +129,26 @@ function HomePage() {
               // logo's own sampled colors — deliberately kept identical here
               // and on the full /specialities page so the same speciality
               // always reads the same colour in both places.
-              const palette = [
-                { bg: "#1357882e", border: "#13578861", fg: "#135788" },
-                { bg: "#1188b32e", border: "#1188b361", fg: "#1188B3" },
-                { bg: "#3e91662e", border: "#3e916661", fg: "#3E9166" },
-                { bg: "#1266952e", border: "#12669561", fg: "#126695" },
-                { bg: "#288c8c2e", border: "#288c8c61", fg: "#288c8c" },
-              ];
+              // Same blue throughout, as requested — the fill and border are
+              // now identical for every card, matching Back & Neck Pain
+              // exactly. The only variation left is a restrained cycle of
+              // closely-related shades of that same blue (same hue/
+              // saturation, only lightness shifted) on the icon badges, for
+              // a touch of rhythm without the grid reading as multi-coloured.
+              const fill = "#1357882e";
+              const border = "#13578861";
+              const iconShades = ["#104c76", "#135788", "#1768a3", "#1b79be"];
               return settings.specialities.slice(0, 4).map((s, i) => {
                 const Icon = getIcon(s.icon);
-                const c = palette[i % palette.length];
                 return (
                   <div
                     key={s.id}
                     className="p-6 rounded-2xl border soft-shadow transition-all hover:-translate-y-1"
-                    style={{ backgroundColor: c.bg, borderColor: c.border }}
+                    style={{ backgroundColor: fill, borderColor: border }}
                   >
                     <div
                       className="size-12 rounded-xl grid place-items-center text-white mb-4"
-                      style={{ backgroundColor: c.fg }}
+                      style={{ backgroundColor: iconShades[i % iconShades.length] }}
                     >
                       <Icon className="size-5" />
                     </div>

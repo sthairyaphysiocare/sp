@@ -37,25 +37,20 @@ function SpecialitiesPage() {
             // Same five tints, same cycling order, as the homepage's
             // specialities preview — so a given speciality always reads the
             // same colour on both pages.
-            const palette = [
-              { bg: "#1357882e", border: "#13578861", fg: "#135788" },
-              { bg: "#1188b32e", border: "#1188b361", fg: "#1188B3" },
-              { bg: "#3e91662e", border: "#3e916661", fg: "#3E9166" },
-              { bg: "#1266952e", border: "#12669561", fg: "#126695" },
-              { bg: "#288c8c2e", border: "#288c8c61", fg: "#288c8c" },
-            ];
+            const fill = "#1357882e";
+            const border = "#13578861";
+            const iconShades = ["#104c76", "#135788", "#1768a3", "#1b79be"];
             return specs.map((i, idx) => {
               const Icon = getIcon(i.icon);
-              const c = palette[idx % palette.length];
               return (
                 <div
                   key={i.id}
                   className="p-6 rounded-2xl border soft-shadow transition-all"
-                  style={{ backgroundColor: c.bg, borderColor: c.border }}
+                  style={{ backgroundColor: fill, borderColor: border }}
                 >
                   <div
                     className="size-12 rounded-xl grid place-items-center text-white mb-4"
-                    style={{ backgroundColor: c.fg }}
+                    style={{ backgroundColor: iconShades[idx % iconShades.length] }}
                   >
                     <Icon className="size-5" />
                   </div>
