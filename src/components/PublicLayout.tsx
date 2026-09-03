@@ -1,4 +1,5 @@
 import { ContactFab } from "@/components/ContactFab";
+import { DeveloperCredit } from "@/components/DeveloperCredit";
 import { cn } from "@/lib/utils";
 import { ENQUIRY_MESSAGE, ENQUIRY_SUBJECT, mailtoLink } from "@/lib/contactLinks";
 import { BackToTop } from "@/components/BackToTop";
@@ -409,8 +410,11 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="border-t border-background/10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-xs text-background/50 text-center">
-            © {new Date().getFullYear()} {CLINIC.name}. All rights reserved.
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 text-xs text-background/50">
+            <span>
+              © {new Date().getFullYear()} {CLINIC.name}. All rights reserved.
+            </span>
+            <DeveloperCredit />
           </div>
         </div>
       </footer>
