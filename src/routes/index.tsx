@@ -262,7 +262,7 @@ function HomePage() {
         </div>
       </section>
 
-      <section className="py-16 sm:py-20">
+      <section className="pt-16 sm:pt-20 pb-8 sm:pb-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 rounded-3xl brand-gradient text-white p-8 sm:p-12 grid md:grid-cols-2 gap-8">
           <div>
             <h2 className="text-3xl font-bold">Ready to start your recovery?</h2>

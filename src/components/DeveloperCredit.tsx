@@ -23,7 +23,7 @@ export function DeveloperCredit() {
     >
       <span className="dc-pill-glow" aria-hidden="true" />
       <span className="relative">
-        Developed by <span className="font-semibold">Vaishak Rao Shuntipady</span>
+        Developed by <span className="dc-pill-name font-semibold">Vaishak Rao Shuntipady</span>
       </span>
       <ArrowUpRight className="dc-pill-arrow relative size-4 shrink-0 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
       <style>{`
@@ -34,6 +34,8 @@ export function DeveloperCredit() {
           opacity: 0; transition: opacity .35s ease; z-index: -1;
         }
         .dc-pill:hover .dc-pill-glow { opacity: 1; }
+        .dc-pill-name { color: #5eead4; }
+        .dc-pill:hover .dc-pill-name { color: #99f6e4; }
         .dc-pill-arrow { animation: dc-arrow-nudge 2.4s ease-in-out infinite; }
         @keyframes dc-arrow-nudge {
           0%, 80%, 100% { transform: translate(0, 0); }
