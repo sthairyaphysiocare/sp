@@ -56,7 +56,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: `${CLINIC.name} — Resilience. Firmness. Balance.` },
+      { title: `${CLINIC.name} - Resilience. Firmness. Balance.` },
       { name: "description", content: "Sthairya Physiocare in Puttur — expert musculoskeletal rehabilitation, sports injury care, and post-operative recovery." },
       { name: "author", content: CLINIC.name },
       { property: "og:title", content: CLINIC.name },

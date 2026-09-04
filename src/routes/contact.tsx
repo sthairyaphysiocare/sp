@@ -12,7 +12,7 @@ import type { BranchHours } from "@/lib/types";
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: `Contact — ${CLINIC.name}` },
+      { title: `Contact - ${CLINIC.name}` },
       { name: "description", content: `Visit us at ${CLINIC.address}. Phone ${CLINIC.phone}.` },
       { property: "og:title", content: `Contact — ${CLINIC.name}` },
       { property: "og:url", content: "/contact" },

@@ -5,12 +5,12 @@ import { CLINIC } from "@/lib/logo";
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: [
-      { title: `About — ${CLINIC.name}` },
+      { title: `About - ${CLINIC.name}` },
       {
         name: "description",
-        content: "About Sthairya Physiocare — our mission, philosophy, and team.",
+        content: "About Sthairya Physiocare - our mission, philosophy, and team.",
       },
-      { property: "og:title", content: `About — ${CLINIC.name}` },
+      { property: "og:title", content: `About - ${CLINIC.name}` },
       { property: "og:url", content: "/about" },
     ],
     links: [{ rel: "canonical", href: "/about" }],
@@ -24,7 +24,7 @@ function AboutPage() {
       <section className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
         <h1 className="text-4xl sm:text-5xl font-bold">About Sthairya</h1>
         <p className="mt-5 text-lg text-muted-foreground">
-          Sthairya — meaning <em>resilience, firmness and balance</em> — captures our approach to
+          Sthairya - meaning <em>resilience, firmness and balance</em> - captures our approach to
           physiotherapy. We blend evidence based musculoskeletal rehabilitation with compassionate,
           individualised care.
         </p>

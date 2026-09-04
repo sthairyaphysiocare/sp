@@ -13,7 +13,7 @@ import { CLINIC } from "@/lib/logo";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
-    meta: [{ title: "Staff Login — Sthairya Physiocare" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "Staff Login - Sthairya Physiocare" }, { name: "robots", content: "noindex" }],
   }),
   component: AuthPage,
 });

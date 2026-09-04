@@ -23,7 +23,7 @@ import {
 export const Route = createFileRoute("/book")({
   head: () => ({
     meta: [
-      { title: `Book a Visit — ${CLINIC.name}` },
+      { title: `Book a Visit - ${CLINIC.name}` },
       {
         name: "description",
         content: "Book your physiotherapy appointment online — WhatsApp, email, or form.",

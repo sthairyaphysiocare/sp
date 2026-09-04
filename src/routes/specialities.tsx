@@ -7,7 +7,7 @@ import { getIcon } from "@/lib/icons";
 export const Route = createFileRoute("/specialities")({
   head: () => ({
     meta: [
-      { title: `Specialities — ${CLINIC.name}` },
+      { title: `Specialities - ${CLINIC.name}` },
       {
         name: "description",
         content:
