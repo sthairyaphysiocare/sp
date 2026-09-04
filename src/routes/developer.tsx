@@ -1,13 +1,12 @@
 import { useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Code2, Mail, Rocket, Send } from "lucide-react";
-import { WhatsAppIcon } from "@/components/WhatsAppIcon";
-import { whatsappLink, mailtoLink } from "@/lib/contactLinks";
+import { mailtoLink } from "@/lib/contactLinks";
 
 export const Route = createFileRoute("/developer")({
   head: () => ({
     meta: [
-      { title: "Vaishak Rao Shuntipady — Digital Craftsman" },
+      { title: "Developer Profile" },
       {
         name: "description",
         content: "Turning ideas into apps, and data into insight.",
@@ -20,7 +19,6 @@ export const Route = createFileRoute("/developer")({
 const DEV_NAME = "Vaishak Rao Shuntipady";
 const DEV_TITLE = "Digital Craftsman";
 const DEV_CAPTION = "Turning ideas into apps, and data into insight.";
-const DEV_WHATSAPP_DIGITS = "918197339371"; // +91 8197339371
 const DEV_EMAIL = "vaishak.srao@gmail.com";
 const DEV_MESSAGE =
   "Hi Vaishak! I came across your work through the Sthairya Physiocare website and I'd like to talk about a web/app development project.";
@@ -149,17 +147,6 @@ function DeveloperPage() {
                   <s.Icon />
                 </a>
               ))}
-              <a
-                href={whatsappLink(DEV_WHATSAPP_DIGITS, DEV_MESSAGE)}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="WhatsApp"
-                title="WhatsApp"
-                className="dc-social grid size-10 place-items-center rounded-full text-white transition-transform"
-                style={{ background: "#25D366" }}
-              >
-                <WhatsAppIcon size={17} />
-              </a>
               <a
                 href={mailtoLink(DEV_EMAIL, "Project enquiry", DEV_MESSAGE)}
                 target="_blank"
