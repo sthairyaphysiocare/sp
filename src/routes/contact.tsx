@@ -174,16 +174,67 @@ function ContactPage() {
             })}
           </div>
 
-          <div className="rounded-2xl overflow-hidden border bg-card min-h-[400px] lg:sticky lg:top-24 lg:self-start">
+          <div className="relative rounded-2xl overflow-hidden border bg-card min-h-[400px] lg:sticky lg:top-24 lg:self-start">
             <iframe
               key={active?.id}
-              title={`Map — ${active?.name || "Clinic"}`}
+              title={`Map - ${active?.name || "Clinic"}`}
               src={mapEmbedSrc}
               className="w-full h-full min-h-[400px] border-0"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen
             />
+
+            {/*
+              Always-visible location card, rendered over the map.
+
+              Google's own info bubble cannot be forced open from here: the map
+              is a cross-origin iframe served by google.com, and browsers seal
+              those off completely, so no script on this page can reach inside
+              it to open a popup or drop a marker. (Doing it inside the map
+              itself would mean the Google Maps JavaScript API, which needs a
+              billed API key.) This card is therefore our own element sitting
+              above the iframe, styled to read like Google's, which achieves
+              the same result for a visitor without that dependency.
+
+              Everything in it comes from the active branch's own configured
+              record, with the same fallbacks used by the branch list above, so
+              a branch added later is picked up automatically with no work
+              here. pointer-events-none on the wrapper keeps the map fully
+              draggable underneath; the card itself re-enables them so its own
+              link stays clickable.
+            */}
+            {active && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
+                <div className="pointer-events-auto max-w-[19rem] rounded-lg bg-white shadow-[0_2px_6px_rgba(0,0,0,0.3)] overflow-hidden">
+                  <div className="p-3">
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[#EA4335]/10">
+                        <MapPin className="size-4 text-[#EA4335]" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-tight text-[#202124]">
+                          {CLINIC.name}
+                          {active.name ? ` - ${active.name}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs leading-snug text-[#5f6368]">{active.address}</p>
+                        {active.phone && (
+                          <p className="mt-1 text-xs text-[#5f6368]">{active.phone}</p>
+                        )}
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#1a73e8] hover:underline"
+                        >
+                          View larger map <ExternalLink className="size-3" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
