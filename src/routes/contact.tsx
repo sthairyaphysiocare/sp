@@ -49,41 +49,34 @@ function ContactPage() {
   const active = branches.find((b) => b.id === activeId) || branches[0];
   // Valid Google Maps EMBED url per branch: if the admin pasted an official
   // embed link (google.com/maps/embed...), use it verbatim; otherwise build
-  // the keyless embed format below.
+  // the keyless embed format from the branch's address.
   //
-  // Identify the branch as a BUSINESS, not as a point on the map. This is what
-  // makes Google render its own native info card (the white panel with the
-  // business name, address and a directions button) rather than a bare pin:
-  // a raw lat/lng pair is just a coordinate, so Google has nothing to show a
-  // card about, which is why the previous coordinate-based embed produced a
-  // pin with no card. A place ID names the actual listing, so Google draws the
-  // card itself from its own data.
-  //
-  // Place ID verified via a live Google Places lookup for this clinic. Google's
-  // embed syntax requires the `place_id:` prefix. Coordinates are kept as the
-  // second choice: they still put the pin in exactly the right spot for a
-  // branch that has no place ID recorded, just without the card.
-  const KNOWN_PLACE_IDS: Record<string, string> = {
-    "vivekananda college road": "ChIJKxOaOAC9pDsRwZPGfMOWwok",
-  };
+  // A plain "name + address" text search here is what previously produced a
+  // cluttered, low-confidence area view rather than a single pin — Google's
+  // geocoder treats a landmark phrase like "Near Ambika Book Stall" as
+  // ambiguous, and shows several nearby points of interest instead of
+  // committing to one. Verified via a live Google Places lookup that this
+  // clinic is itself a listed business (place_id ChIJKxOaOAC9pDsRwZPGfMOWwok)
+  // at 12.7791495, 75.1821296 — using those exact coordinates instead of a
+  // text query drops a single, unambiguous pin, since no geocoding guess is
+  // involved at all. Matched narrowly against this specific branch's address
+  // so a future, different branch without a configured mapUrl still falls
+  // through to the generic text-search behaviour below, unaffected.
   const KNOWN_PRECISE_LOCATIONS: Record<string, string> = {
     "vivekananda college road": "12.7791495,75.1821296",
   };
   const addressKey = (active?.address ?? "").toLowerCase();
-  const matchKey = (map: Record<string, string>) =>
-    Object.entries(map).find(([key]) => addressKey.includes(key))?.[1];
-  const knownPlaceId = matchKey(KNOWN_PLACE_IDS);
-  const knownCoords = matchKey(KNOWN_PRECISE_LOCATIONS);
+  const knownCoords = Object.entries(KNOWN_PRECISE_LOCATIONS).find(([key]) =>
+    addressKey.includes(key),
+  )?.[1];
   const mapEmbedSrc =
     active?.mapUrl && /google\.[a-z.]+\/maps\/embed/i.test(active.mapUrl)
       ? active.mapUrl
-      : knownPlaceId
-        ? `https://www.google.com/maps?q=place_id:${knownPlaceId}&z=17&output=embed`
-        : knownCoords
-          ? `https://www.google.com/maps?q=${knownCoords}&z=17&output=embed`
-          : `https://www.google.com/maps?q=${encodeURIComponent(
-              `${active?.name ?? "Sthairya Physiocare"} ${active?.address ?? "Puttur Karnataka"}`,
-            )}&output=embed`;
+      : knownCoords
+        ? `https://www.google.com/maps?q=${knownCoords}&z=17&output=embed`
+        : `https://www.google.com/maps?q=${encodeURIComponent(
+            `${active?.name ?? "Sthairya Physiocare"} ${active?.address ?? "Puttur Karnataka"}`,
+          )}&output=embed`;
   const mapQuery = encodeURIComponent(active?.address || CLINIC.mapRef);
 
   return (
@@ -193,20 +186,16 @@ function ContactPage() {
             />
 
             {/*
-              Fallback location card, rendered over the map.
+              Always-visible location card, rendered over the map.
 
-              The embed above now identifies the branch by place ID, so Google
-              renders its OWN native info card for branches it can resolve --
-              that is the card in the reference screenshot, drawn by Google
-              from its own listing data, which is not something this page can
-              produce or style. This element is the fallback beneath that: it
-              only renders for a branch with no place ID recorded, where
-              Google shows a bare pin and no card at all.
-
-              Deliberately positioned bottom-left, clear of the top-left corner
-              Google uses for its own card, so the two cannot collide if a
-              future Google change starts rendering a card for a branch this
-              did not expect.
+              Google's own info bubble cannot be forced open from here: the map
+              is a cross-origin iframe served by google.com, and browsers seal
+              those off completely, so no script on this page can reach inside
+              it to open a popup or drop a marker. (Doing it inside the map
+              itself would mean the Google Maps JavaScript API, which needs a
+              billed API key.) This card is therefore our own element sitting
+              above the iframe, styled to read like Google's, which achieves
+              the same result for a visitor without that dependency.
 
               Everything in it comes from the active branch's own configured
               record, with the same fallbacks used by the branch list above, so
@@ -215,8 +204,8 @@ function ContactPage() {
               draggable underneath; the card itself re-enables them so its own
               link stays clickable.
             */}
-            {active && !knownPlaceId && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
+            {active && (
+              <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
                 <div className="pointer-events-auto max-w-[19rem] rounded-lg bg-white shadow-[0_2px_6px_rgba(0,0,0,0.3)] overflow-hidden">
                   <div className="p-3">
                     <div className="flex items-start gap-2.5">
