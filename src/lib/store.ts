@@ -137,176 +137,6 @@ const DEFAULT_SPECIALITIES: SpecialityItem[] = [
   },
 ];
 
-function seedPatients(): Patient[] {
-  const base: Omit<Patient, "id" | "pid" | "sn" | "ts">[] = [
-    {
-      n: "Ramesh Kamath",
-      dob: "1972-04-12",
-      g: "M",
-      m: "9845012345",
-      am: "",
-      e: "ramesh@example.com",
-      oc: "Teacher",
-      em: "Sushma 9845011111",
-      emN: "Sushma",
-      emP: "9845011111",
-      bg: "B+",
-      h: 172,
-      w: 78,
-      cc: "Low back pain radiating to right leg",
-      pi: "Onset 3 weeks ago after lifting",
-      sx: "Nil",
-      med: "Paracetamol PRN",
-      al: "Nil",
-      cm: [2],
-      lf: "Sedentary",
-      fh: "Father diabetic",
-      br: DEFAULT_BRANCH.id,
-      tId: "u2",
-      status: "active",
-    },
-    {
-      n: "Anjali Shenoy",
-      dob: "1995-09-23",
-      g: "F",
-      m: "9742056789",
-      am: "",
-      e: "anjali@example.com",
-      oc: "IT Engineer",
-      em: "Rohit 9742000000",
-      emN: "Rohit",
-      emP: "9742000000",
-      bg: "O+",
-      h: 162,
-      w: 58,
-      cc: "Neck stiffness, headaches",
-      pi: "Desk work, 6 weeks",
-      sx: "Nil",
-      med: "Nil",
-      al: "Dust",
-      cm: [],
-      lf: "Active weekends",
-      fh: "Nil",
-      br: DEFAULT_BRANCH.id,
-      tId: "u2",
-      status: "active",
-    },
-    {
-      n: "Vinod Bhat",
-      dob: "1965-01-30",
-      g: "M",
-      m: "9986234567",
-      am: "",
-      e: "vinod@example.com",
-      oc: "Retired",
-      em: "Lata 9986200000",
-      emN: "Lata",
-      emP: "9986200000",
-      bg: "A+",
-      h: 168,
-      w: 82,
-      cc: "Frozen shoulder right side",
-      pi: "Gradual onset 2 months",
-      sx: "Appendectomy 1995",
-      med: "Metformin",
-      al: "Nil",
-      cm: [1, 2],
-      lf: "Walks daily",
-      fh: "Diabetic",
-      br: DEFAULT_BRANCH.id,
-      tId: "u2",
-      status: "active",
-    },
-    {
-      n: "Priya Pai",
-      dob: "1988-07-18",
-      g: "F",
-      m: "9663112233",
-      am: "",
-      e: "priya@example.com",
-      oc: "Homemaker",
-      em: "Suresh 9663100000",
-      emN: "Suresh",
-      emP: "9663100000",
-      bg: "AB+",
-      h: 158,
-      w: 65,
-      cc: "Post-op knee rehab (TKR)",
-      pi: "TKR done 3 weeks back",
-      sx: "TKR Right knee",
-      med: "Calcium, D3",
-      al: "Nil",
-      cm: [],
-      lf: "Limited mobility",
-      fh: "Mother arthritic",
-      br: DEFAULT_BRANCH.id,
-      tId: "u2",
-      status: "active",
-    },
-    {
-      n: "Karthik Hegde",
-      dob: "2001-03-05",
-      g: "M",
-      m: "9036778899",
-      am: "",
-      e: "karthik@example.com",
-      oc: "Cricketer",
-      em: "Rajesh 9036700000",
-      emN: "Rajesh",
-      emP: "9036700000",
-      bg: "O-",
-      h: 178,
-      w: 74,
-      cc: "Right shoulder impingement",
-      pi: "Sports injury 10 days back",
-      sx: "Nil",
-      med: "Nil",
-      al: "Nil",
-      cm: [],
-      lf: "Athlete",
-      fh: "Nil",
-      br: DEFAULT_BRANCH.id,
-      tId: "u2",
-      status: "completed",
-    },
-  ];
-  const now = Date.now();
-  return base.map((b, i) => ({
-    ...b,
-    id: `p${i + 1}`,
-    pid: `STP${String(i + 1).padStart(6, "0")}`,
-    sn: b.n.toLowerCase(),
-    ts: now - (5 - i) * 86400000,
-  }));
-}
-
-function seedVisits(patients: Patient[]): Visit[] {
-  const out: Visit[] = [];
-  patients.forEach((p, idx) => {
-    const count = 3 + (idx % 3);
-    for (let i = 0; i < count; i++) {
-      const date = new Date(Date.now() - (count - i) * 5 * 86400000);
-      out.push({
-        id: `${p.id}-v${i + 1}`,
-        patientId: p.id,
-        vN: i + 1,
-        dt: date.toISOString().slice(0, 10),
-        tId: "u2",
-        tN: "Dr. Plinija",
-        pS: Math.max(1, 8 - i * 1.5 + (idx % 2)),
-        sym: i === 0 ? "Initial assessment" : "Follow-up",
-        rom: i === 0 ? "Flexion limited 30%" : `Flexion improved ${20 + i * 15}%`,
-        str: `MMT ${Math.min(5, 3 + i)}/5`,
-        tx: "Manual therapy, IFT, therapeutic exercises",
-        adv: "HEP: stretching 3x/day, posture correction",
-        fi: Math.min(100, 30 + i * 18 + (idx % 3) * 5),
-        nxt: new Date(date.getTime() + 5 * 86400000).toISOString().slice(0, 10),
-      });
-    }
-  });
-  return out;
-}
-
 function defaultSettings(): AppSettings {
   return {
     publicStatsEnabled: false,
@@ -348,12 +178,29 @@ function emptyDb(): DB {
   };
 }
 
+/**
+ * The state used for a genuinely empty database and for the SSR snapshot.
+ *
+ * Contains the default admin account and clinic settings so a fresh install
+ * is usable and first-run login works — but NO patients and NO visits.
+ *
+ * Fabricated patient records used to be seeded here (seedPatients /
+ * seedVisits: invented names, dates of birth, phone numbers and clinical
+ * histories). That demo data is what repeatedly overwrote the clinic's real
+ * records: whenever it was loaded and then synced, the server's prune step
+ * deleted every genuine patient absent from it.
+ *
+ * Guards now prevent the sync paths that did that, but the deeper problem was
+ * that convincing-looking fake patient records existed in the app at all. A
+ * clinical system should never be able to invent a patient. With none to
+ * invent, the worst case of any remaining bug is an empty screen rather than
+ * a destroyed patient database.
+ */
 function defaultDb(): DB {
-  const p = seedPatients();
   return {
     users: DEFAULT_USERS,
-    patients: p,
-    visits: seedVisits(p),
+    patients: [],
+    visits: [],
     notes: [],
     bookings: [],
     blocked: [],
