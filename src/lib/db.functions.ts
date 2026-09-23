@@ -170,6 +170,50 @@ export const syncState = createServerFn({ method: "POST" })
         }
       }
     }
+
+    // ---- MASS-DELETE CIRCUIT BREAKER -------------------------------------
+    // Refuse any sync that would remove a large share of an existing table.
+    //
+    // This exists because the clinic's live data was destroyed repeatedly: the
+    // client would end up holding seed/sample state and push it, and this
+    // prune step faithfully deleted every real patient, visit and note that
+    // was "missing" from that payload. Client-side guards were added for the
+    // known path, but a guess at the client path is not a guarantee — this is
+    // the one place every destructive delete must pass through, whatever
+    // caused it, so the stop belongs here.
+    //
+    // The rule: a table that currently holds rows may not lose most of them in
+    // a single sync. Real usage deletes a patient or a booking at a time; only
+    // a state reset removes nearly everything at once. Deliberately generous
+    // so ordinary bulk edits are unaffected, and only engaged for tables with
+    // enough rows that "most of them" is meaningful — a 2-row table legitimately
+    // going to 0 is not evidence of anything.
+    const MASS_DELETE_MIN_ROWS = 5; // below this, proportion is meaningless
+    const MASS_DELETE_RATIO = 0.5; // never drop >50% of an established table
+    const blocked: string[] = [];
+    for (let si = 0; si < specs.length; si++) {
+      const sp = specs[si];
+      const existing = existingIds[si].size;
+      if (existing < MASS_DELETE_MIN_ROWS) continue;
+      const removing = deletes.filter((d) => d.sql.includes(`FROM ${sp.table} `)).length;
+      if (removing > existing * MASS_DELETE_RATIO) {
+        blocked.push(`${sp.table}:${removing}/${existing}`);
+      }
+    }
+    if (blocked.length > 0) {
+      // Abort the whole sync, not just the deletes: a payload this wrong is
+      // not trustworthy for its upserts either. Upserts already applied are
+      // non-destructive (they only add/overwrite by id), and the rows that
+      // matter are still on disk.
+      console.error(
+        "[sync] BLOCKED: refusing a mass delete. This payload would remove most of",
+        blocked.join(", "),
+        "- rejecting it as a probable client state reset. No rows were deleted.",
+      );
+      await auditEvent("state.sync.blocked_mass_delete", blocked.join(","));
+      return { ok: false as const, failures: [`blocked-mass-delete:${blocked.join(",")}`] };
+    }
+
     if (deletes.length > 0) {
       try {
         await db.batch(deletes, "write");
