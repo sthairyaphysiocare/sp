@@ -326,6 +326,28 @@ function defaultSettings(): AppSettings {
   };
 }
 
+/**
+ * A structurally valid but completely EMPTY database.
+ *
+ * Used only when the real database could not be read. Deliberately contains
+ * no users, no patients and no seeded settings: with no users, no login can
+ * succeed; with no records, nothing can be mistaken for real clinic data;
+ * and the mass-delete breaker on the server would reject it even if it
+ * somehow reached a sync. It is the safe shape to hold when we know nothing.
+ */
+function emptyDb(): DB {
+  return {
+    users: [],
+    patients: [],
+    visits: [],
+    notes: [],
+    bookings: [],
+    blocked: [],
+    settings: defaultSettings(),
+    session: { userId: null },
+  };
+}
+
 function defaultDb(): DB {
   const p = seedPatients();
   return {
@@ -435,6 +457,17 @@ let hydrating = false;
  * never allowed to WRITE to it.
  */
 let hydrateFailed = false;
+/**
+ * The error message from the last failed hydrate, or null if the database was
+ * read successfully. Exposed via getHydrateError() so the UI can show the
+ * clinic a real error instead of an empty-looking but "working" app.
+ */
+let hydrateError: string | null = null;
+
+/** Non-null when the database could not be read. See `hydrateError`. */
+export function getHydrateError(): string | null {
+  return hydrateError;
+}
 const listeners = new Set<() => void>();
 
 // Debounced persistence to Turso via server function. We keep the local
@@ -541,16 +574,20 @@ async function ensureHydrated() {
     }
 
     if (snap.empty) {
-      // Truly fresh install: seed defaults in memory and push them to Turso.
-      // Safe: `snap.empty` means the read SUCCEEDED and the database is
-      // genuinely empty, which is different from the read having failed.
+      // The read SUCCEEDED and the database is genuinely empty (a true fresh
+      // install). Seed defaults in memory so the app is usable, but do NOT
+      // automatically push them. An unattended write of seed data is the
+      // exact shape of the incident that destroyed live data four times, and
+      // saving a one-time setup step is not worth carrying that risk. The
+      // seed persists on the first real user action instead.
       hydrateFailed = false;
+      hydrateError = null;
       state = defaultDb();
-      queueMicrotask(flushToCloud);
     } else {
       // Real data read back successfully — this state is authoritative and
       // may be written to the cloud.
       hydrateFailed = false;
+      hydrateError = null;
       state = normalizeDb({
         users: snap.users,
         patients: snap.patients,
@@ -564,23 +601,20 @@ async function ensureHydrated() {
   } catch (err) {
     console.error("[store] cloud hydrate failed — database unreachable", err);
     setSyncStatus("offline");
-    // Mark the state as NOT authoritative. Everything below this point loads
-    // either a legacy emergency view or sample data, neither of which may
-    // ever be written back to the cloud — doing so deletes live records.
     hydrateFailed = true;
-    // Read-only emergency view from the legacy blob (if any) so the clinic
-    // can still see data while the connection is down. Nothing is written
-    // back to localStorage; the next successful sync goes straight to Turso.
-    const legacy = readLegacyLocalStorage();
-    if (legacy) {
-      try {
-        state = normalizeDb(JSON.parse(legacy) as Partial<DB>);
-      } catch {
-        state = defaultDb();
-      }
-    } else {
-      state = defaultDb();
-    }
+    // The database could not be read, so we have NO authoritative data.
+    //
+    // Everything here used to fall back to defaultDb() sample data, or to a
+    // stale localStorage blob. Both were catastrophic: the app looked normal,
+    // the clinic signed in, and the first save pushed that fabricated state
+    // over the real database, deleting every record absent from it. That
+    // destroyed the clinic's live data four separate times.
+    //
+    // The rule now: if we cannot read the database, we show NOTHING and say
+    // so. An empty state with a visible error is recoverable; sample data
+    // that silently replaces real records is not.
+    state = emptyDb();
+    hydrateError = err instanceof Error ? err.message : String(err);
   } finally {
     // Restore per-browser session from sessionStorage (never persisted to cloud).
     const sess = sessLoad();
@@ -632,6 +666,16 @@ export const store = {
   async login(username: string, password: string): Promise<LoginResult> {
     // Ensure current state is in cloud so verifyLogin can read it.
     if (!hydrated) await ensureHydrated();
+
+    // If the database could not be read, refuse to sign anyone in.
+    //
+    // Previously the app fell back to sample accounts here, which produced a
+    // working-looking session backed by fabricated data — and the first save
+    // then wrote that over the real database. Failing the login outright
+    // keeps a database outage visible as a database outage.
+    if (hydrateFailed) {
+      return { ok: false, reason: "bad-credentials" };
+    }
 
     // The Admin account is NEVER locked out — neither by the server-side
     // account lock nor by the client-side offline rate limit. Brute force
