@@ -495,7 +495,27 @@ export function getSyncStatus() {
 }
 
 async function flushToCloud() {
-  // HARD STOP: never write when the last hydrate failed. See `hydrateFailed`.
+  // HARD STOP 1: never write before a successful read has completed.
+  //
+  // `state` is initialised to defaultDb() at module load — sample data — so
+  // that SSR and the first client render agree. Real data only arrives later,
+  // asynchronously, via ensureHydrated(). Anything that mutated state inside
+  // that window (a login attempt, a settings read, any UI interaction) called
+  // persist() -> schedulePersist() -> here on a 400ms timer, and pushed that
+  // sample data to Turso, where the prune step deleted every real record.
+  //
+  // This is why the failure looked machine-specific and intermittent: it
+  // depends entirely on whether something touched state before the database
+  // finished loading, which varies with connection speed and what the user
+  // clicked first. The earlier `hydrateFailed` guard did not catch it because
+  // hydration had not failed — it simply had not finished yet.
+  //
+  // Rule: no successful read, no write. Ever.
+  if (!hydrated) {
+    console.warn("[store] refusing to sync: initial database load has not completed yet.");
+    return;
+  }
+  // HARD STOP 2: never write when the last hydrate failed. See `hydrateFailed`.
   // Placed here rather than at the call sites deliberately — this is the one
   // function that writes to the cloud, so guarding it covers every current
   // and future caller, including the automatic retry below.
