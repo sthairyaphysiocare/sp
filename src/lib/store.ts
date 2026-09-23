@@ -417,6 +417,24 @@ const SERVER_SNAPSHOT: DB = defaultDb();
 let state: DB = SERVER_SNAPSHOT;
 let hydrated = false;
 let hydrating = false;
+/**
+ * Set when a cloud hydrate FAILED and the in-memory state is therefore NOT a
+ * true reflection of the database — it is either the emergency legacy
+ * localStorage view or, worse, `defaultDb()` sample data.
+ *
+ * While this is true, nothing may be written to the cloud. syncState is
+ * destructive by design: it upserts the records it is given and then DELETES
+ * any row whose id is absent from the payload. So syncing sample data over a
+ * live database does not merely add junk, it erases every real patient,
+ * visit, note and booking. That is exactly what happened twice in production:
+ * the database was briefly unreachable, the app fell back to sample data,
+ * marked itself hydrated anyway, and the first save wiped the clinic's
+ * records.
+ *
+ * The rule this enforces: if we never successfully READ the database, we are
+ * never allowed to WRITE to it.
+ */
+let hydrateFailed = false;
 const listeners = new Set<() => void>();
 
 // Debounced persistence to Turso via server function. We keep the local
@@ -444,6 +462,17 @@ export function getSyncStatus() {
 }
 
 async function flushToCloud() {
+  // HARD STOP: never write when the last hydrate failed. See `hydrateFailed`.
+  // Placed here rather than at the call sites deliberately — this is the one
+  // function that writes to the cloud, so guarding it covers every current
+  // and future caller, including the automatic retry below.
+  if (hydrateFailed) {
+    console.warn(
+      "[store] refusing to sync: the database could not be read, so in-memory state is not authoritative. Writing now would delete live records.",
+    );
+    setSyncStatus("offline");
+    return;
+  }
   if (saveInFlight) {
     pendingSave = true;
     return;
@@ -513,9 +542,15 @@ async function ensureHydrated() {
 
     if (snap.empty) {
       // Truly fresh install: seed defaults in memory and push them to Turso.
+      // Safe: `snap.empty` means the read SUCCEEDED and the database is
+      // genuinely empty, which is different from the read having failed.
+      hydrateFailed = false;
       state = defaultDb();
       queueMicrotask(flushToCloud);
     } else {
+      // Real data read back successfully — this state is authoritative and
+      // may be written to the cloud.
+      hydrateFailed = false;
       state = normalizeDb({
         users: snap.users,
         patients: snap.patients,
@@ -529,6 +564,10 @@ async function ensureHydrated() {
   } catch (err) {
     console.error("[store] cloud hydrate failed — database unreachable", err);
     setSyncStatus("offline");
+    // Mark the state as NOT authoritative. Everything below this point loads
+    // either a legacy emergency view or sample data, neither of which may
+    // ever be written back to the cloud — doing so deletes live records.
+    hydrateFailed = true;
     // Read-only emergency view from the legacy blob (if any) so the clinic
     // can still see data while the connection is down. Nothing is written
     // back to localStorage; the next successful sync goes straight to Turso.
@@ -629,10 +668,18 @@ export const store = {
       matched = state.users.find((u) => u.id === serverOk) ?? null;
     } else if (!serverReachable) {
       // Offline / no cloud state yet — allow legacy plaintext local match.
-      matched =
-        state.users.find(
-          (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
-        ) ?? null;
+      //
+      // But NOT when the hydrate failed: in that case `state.users` is the
+      // built-in sample seed, not the real staff list. Signing in against
+      // sample accounts is what let a database outage turn into data loss —
+      // the user got a working-looking session backed by sample data, and
+      // the first save wiped the real records. Refuse instead, so the outage
+      // stays visible as an outage.
+      matched = hydrateFailed
+        ? null
+        : (state.users.find(
+            (x) => x.email.toLowerCase() === username.toLowerCase() && x.password === password,
+          ) ?? null);
     }
 
     if (!matched) {
