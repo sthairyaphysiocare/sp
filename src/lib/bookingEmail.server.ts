@@ -26,16 +26,58 @@ export interface BookingNotification {
 /**
  * Resolve Resend configuration from the environment.
  *
- * RESEND_FROM is optional: Resend requires the sender to be on a domain you
- * have verified with them, so this is left configurable rather than hardcoded
- * to a domain that may not be verified yet.
+ * Resend will only send FROM a domain you have verified with them. A
+ * free-mail address such as a gmail.com one can never be a valid sender —
+ * nobody can send as gmail.com except Google — so Resend rejects it with a
+ * 403 and no email arrives.
+ *
+ * Without a verified domain, Resend's shared test sender
+ * (onboarding@resend.dev) is the supported route. Per their documentation it
+ * delivers ONLY to the email address that owns the Resend account, which is
+ * exactly this use case: the booking alert goes to the clinic's own inbox.
+ *
+ * So rather than fail on an address Resend will certainly reject, fall back
+ * to the test sender and log why. The alternative — sending nothing — is
+ * worse, and the clinic would have no idea the setting was unusable.
  */
+const RESEND_TEST_SENDER = "onboarding@resend.dev";
+
 function resolveEnv(): { apiKey: string; from: string } {
   const env = process.env;
-  return {
-    apiKey: env.RESEND_API_KEY || "",
-    from: env.RESEND_FROM || "",
-  };
+  const apiKey = env.RESEND_API_KEY || "";
+  const configuredFrom = (env.RESEND_FROM || "").trim();
+
+  if (!configuredFrom) return { apiKey, from: RESEND_TEST_SENDER };
+
+  // Extract the domain, tolerating a "Name <addr@domain>" style value.
+  const addr = configuredFrom.match(/<([^>]+)>/)?.[1] ?? configuredFrom;
+  const domain = addr.split("@")[1]?.toLowerCase() ?? "";
+
+  // Domains nobody can send as. Not exhaustive by design — it only needs to
+  // catch the realistic mistake of using the clinic's own mailbox address.
+  const UNSENDABLE = new Set([
+    "gmail.com",
+    "googlemail.com",
+    "yahoo.com",
+    "yahoo.co.in",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "icloud.com",
+    "rediffmail.com",
+  ]);
+
+  if (UNSENDABLE.has(domain)) {
+    console.warn(
+      `[booking-email] RESEND_FROM is "${addr}", but Resend cannot send from ${domain} — ` +
+        `that domain is not yours to send as. Falling back to ${RESEND_TEST_SENDER}, which ` +
+        `delivers to the Resend account owner's address. To send from your own address, ` +
+        `verify a domain at https://resend.com/domains and set RESEND_FROM to an address on it.`,
+    );
+    return { apiKey, from: RESEND_TEST_SENDER };
+  }
+
+  return { apiKey, from: configuredFrom };
 }
 
 function escapeHtml(s: string): string {
@@ -58,10 +100,11 @@ export async function sendBookingNotification(
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const { apiKey, from } = resolveEnv();
 
-  // Not configured yet — do nothing, quietly. This keeps the site working
-  // normally before the Resend key is added, rather than logging an error on
-  // every booking.
-  if (!apiKey || !from) {
+  // No API key — do nothing, quietly. This keeps the site working normally
+  // before Resend is set up, rather than logging an error on every booking.
+  // `from` always resolves (to the test sender if nothing usable is set), so
+  // only the key can leave this unconfigured.
+  if (!apiKey) {
     return { ok: false, skipped: true, error: "resend-not-configured" };
   }
   if (!n.toEmail || !/.+@.+\..+/.test(n.toEmail)) {

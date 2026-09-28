@@ -107,28 +107,33 @@ function BookPage() {
       prefTime: form.prefTime,
       br: form.br || branches[0]?.id,
     });
-    // Silent internal notification to the clinic (fire-and-forget; the
-    // visitor sees nothing). Sent server-side via Resend, so the email
-    // provider's API key never reaches the browser — unlike the EmailJS path
-    // this replaced, whose credentials are necessarily exposed client-side
-    // and whose only template was built for password-reset codes.
+    // Silent internal notification to the clinic.
     //
-    // The booking is already stored by this point. If the email fails, or is
-    // not configured yet, the booking is unaffected and the visitor sees the
-    // normal confirmation.
-    void import("@/lib/db.functions").then(({ notifyBooking }) =>
-      notifyBooking({
-        data: {
-          toEmail: settings.globalEmail || CLINIC.email,
-          patientName: form.name,
-          phone: form.phone,
-          patientEmail: form.email,
-          concern: form.concern,
-          when: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
-          branch: branch?.name || "",
-        },
-      }).catch((err) => console.error("[book] booking notification failed", err)),
-    );
+    // CRITICAL: this must never be able to fail a booking. The booking is
+    // already stored above, and everything below is wrapped so that no error
+    // — network, import, misconfiguration, or a synchronous throw — can reach
+    // the submit handler. The visitor always sees the normal confirmation.
+    try {
+      void import("@/lib/db.functions")
+        .then(({ notifyBooking }) =>
+          notifyBooking({
+            data: {
+              toEmail: settings.globalEmail || CLINIC.email,
+              patientName: form.name,
+              phone: form.phone,
+              patientEmail: form.email,
+              concern: form.concern,
+              when: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
+              branch: branch?.name || "",
+            },
+          }),
+        )
+        .catch((err) => console.error("[book] booking notification failed", err));
+    } catch (err) {
+      // Defence in depth: even a synchronous throw here is swallowed, because
+      // a notification is never worth losing a patient's booking over.
+      console.error("[book] booking notification could not be dispatched", err);
+    }
     toast.success("Booking received — we'll contact you shortly.");
     setDone(true);
     setForm({ ...form, name: "", phone: "", email: "", concern: "", prefTime: "" });
