@@ -700,3 +700,34 @@ export const searchPatients = createServerFn({ method: "GET" })
       return { patients: [] };
     }
   });
+
+/**
+ * One page of patients, sorted and filtered across the whole table.
+ *
+ * Lets the patients list sort the entire clinic rather than only the loaded
+ * snapshot window. Read-only, and every input is validated and bounded: the
+ * sort key is resolved against a fixed allowlist server-side, so it can never
+ * reach the SQL string.
+ */
+export const fetchPatientsPage = createServerFn({ method: "GET" })
+  .inputValidator((input: { sort?: string; q?: string; offset?: number; limit?: number }) => {
+    if (!input || typeof input !== "object") throw new Error("Invalid payload");
+    const n = (v: unknown, dflt: number) => (Number.isFinite(Number(v)) ? Number(v) : dflt);
+    return {
+      sort: typeof input.sort === "string" ? input.sort.slice(0, 32) : "recent",
+      q: typeof input.q === "string" ? input.q.slice(0, 120) : "",
+      offset: Math.max(0, Math.floor(n(input.offset, 0))),
+      limit: Math.min(200, Math.max(1, Math.floor(n(input.limit, 20)))),
+    };
+  })
+  .handler(async ({ data }) => {
+    const { listPatientsPage } = await import("./turso.server");
+    try {
+      return await listPatientsPage(data);
+    } catch (err) {
+      console.error("[fetchPatientsPage] failed:", err);
+      // Signalled rather than thrown, so the list can fall back to its
+      // in-memory view instead of rendering an error.
+      return { patients: [], total: -1 };
+    }
+  });

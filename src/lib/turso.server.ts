@@ -292,3 +292,85 @@ export async function searchPatientsServer(query: string, limit = 50): Promise<P
   type R = Array<Record<string, unknown>>;
   return (res.rows as unknown as R).map(rowToPatient);
 }
+
+/**
+ * Sort key -> ORDER BY clause.
+ *
+ * A fixed allowlist, looked up by key. The caller's value NEVER reaches the
+ * SQL string: an unrecognised key falls back to the default rather than being
+ * interpolated, so this cannot become a SQL-injection surface.
+ *
+ * Every clause ends with `id` so the ordering is total. Without that
+ * tiebreaker, rows sharing a name or a created_at would have an unspecified
+ * relative order, and LIMIT/OFFSET paging over an unstable order can return
+ * the same row on two pages and omit another entirely.
+ *
+ * `patient_id` sorts lexicographically, which matches numeric order here
+ * because PIDs are zero-padded to a fixed width (STP000002 < STP000010).
+ */
+const PATIENT_ORDER_BY: Record<string, string> = {
+  recent: "created_at DESC, id ASC",
+  oldest: "created_at ASC, id ASC",
+  "name-asc": "full_name COLLATE NOCASE ASC, id ASC",
+  "name-desc": "full_name COLLATE NOCASE DESC, id ASC",
+  pid: "patient_id ASC, id ASC",
+  status:
+    "CASE lower(status) WHEN 'active' THEN 0 WHEN 'completed' THEN 1 WHEN 'inactive' THEN 2 ELSE 99 END ASC, full_name COLLATE NOCASE ASC, id ASC",
+};
+
+export interface PatientPage {
+  patients: Patient[];
+  /** Total rows matching the search, across the whole table — for page count. */
+  total: number;
+}
+
+/**
+ * One page of patients, sorted and filtered across the ENTIRE table.
+ *
+ * The list page can sort and paginate in memory while the whole clinic fits
+ * inside the loaded snapshot window, but past that an in-memory sort only
+ * orders the rows that happen to be loaded. This does the ordering in SQL so
+ * "Name A–Z" means the first patient alphabetically in the clinic, not the
+ * first among those cached.
+ *
+ * Read-only: it cannot create, modify or remove anything.
+ */
+export async function listPatientsPage(opts: {
+  sort: string;
+  q: string;
+  offset: number;
+  limit: number;
+}): Promise<PatientPage> {
+  await ensureSchema();
+  const db = turso();
+
+  const orderBy = PATIENT_ORDER_BY[opts.sort] ?? PATIENT_ORDER_BY.recent;
+  const limit = Math.min(Math.max(opts.limit, 1), 200);
+  const offset = Math.max(opts.offset, 0);
+
+  const q = opts.q.trim().toLowerCase();
+  // Same fields the in-memory filter matches on, so switching between the
+  // in-memory and server paths cannot change which records a search finds.
+  const where = q
+    ? `WHERE lower(full_name) LIKE :like OR lower(search_name) LIKE :like
+         OR lower(patient_id) LIKE :like OR mobile LIKE :like`
+    : "";
+  const args = q ? { like: `%${q}%` } : {};
+
+  const [rowsRes, countRes] = await db.batch(
+    [
+      {
+        sql: `SELECT * FROM patients ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`,
+        args,
+      },
+      { sql: `SELECT COUNT(*) AS c FROM patients ${where}`, args },
+    ],
+    "read",
+  );
+
+  type R = Array<Record<string, unknown>>;
+  return {
+    patients: (rowsRes.rows as unknown as R).map(rowToPatient),
+    total: Number((countRes.rows[0] as Record<string, unknown> | undefined)?.c ?? 0),
+  };
+}

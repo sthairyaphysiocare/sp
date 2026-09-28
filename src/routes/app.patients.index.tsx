@@ -1,5 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { store, useStore, getDbCounts, hasMorePatientsThanLoaded } from "@/lib/store";
+import {
+  store,
+  useStore,
+  getDbCounts,
+  hasMorePatientsThanLoaded,
+  pendingDeletedPatientIds,
+} from "@/lib/store";
 import type { Patient } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
@@ -121,13 +127,75 @@ function Patients() {
   // so the page boundaries always follow the order the user chose.
   const sorted = useMemo(() => [...filtered].sort(COMPARATORS[sort]), [filtered, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  // ---------------------------------------------------------------------
+  // Server-side sorting + paging, used only when the clinic is larger than
+  // the loaded snapshot window.
+  //
+  // Sorting in memory can only order the rows that happen to be loaded, so
+  // past the window "Name A–Z" would mean the first patient alphabetically
+  // among the CACHED ones rather than in the clinic. Ordering and paging in
+  // SQL removes that boundary.
+  //
+  // When everything fits in the window the in-memory path above is already
+  // exact and instant, so it is kept and no request is made at all — which
+  // means this clinic's current behaviour is untouched.
+  // ---------------------------------------------------------------------
+  const serverMode = hasMorePatientsThanLoaded();
+  const [serverPage, setServerPage] = useState<{ patients: Patient[]; total: number } | null>(null);
+  const [loadingPage, setLoadingPage] = useState(false);
+
+  useEffect(() => {
+    if (!serverMode) {
+      setServerPage(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPage(true);
+    void import("@/lib/db.functions")
+      .then(({ fetchPatientsPage }) =>
+        fetchPatientsPage({
+          data: { sort, q: dq, offset: (page - 1) * pageSize, limit: pageSize },
+        }),
+      )
+      .then((r) => {
+        // total === -1 signals a server-side failure; keep the in-memory view
+        // rather than blanking the list.
+        if (!cancelled && r && r.total >= 0) setServerPage(r);
+      })
+      .catch((err) => console.error("[patients] page fetch failed", err))
+      .finally(() => {
+        if (!cancelled) setLoadingPage(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [serverMode, sort, dq, page, pageSize, patients]);
+
+  const usingServer = serverMode && serverPage !== null;
+
+  // Total row count driving the pager: authoritative from the server when
+  // paging server-side, otherwise the in-memory result length.
+  const totalRows = usingServer ? serverPage.total : sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   // Clamp rather than trust `page`: deleting records, searching, or switching
   // to a larger page size can all leave the current page beyond the end of the
   // list, which would otherwise render an empty table with no way back.
   const safePage = Math.min(page, totalPages);
   const startIdx = (safePage - 1) * pageSize;
-  const visible = sorted.slice(startIdx, startIdx + pageSize);
+
+  const visible = useMemo(() => {
+    if (!usingServer) return sorted.slice(startIdx, startIdx + pageSize);
+    // The server decides membership and order. Local state only overlays it:
+    //  - a record edited but not yet synced shows the user's own version
+    //  - a record just deleted disappears immediately rather than lingering
+    //    until the sync lands
+    // Nothing is added or reordered here, so the server's ordering stands.
+    const localById = new Map(patients.map((p) => [p.id, p]));
+    const deleted = pendingDeletedPatientIds();
+    return serverPage.patients
+      .filter((p) => !deleted.has(p.id))
+      .map((p) => localById.get(p.id) ?? p);
+  }, [usingServer, serverPage, sorted, startIdx, pageSize, patients]);
 
   // Return to the first page whenever the result set or its ordering changes.
   // Without this, narrowing a search while on page 7 would show nothing.
@@ -291,7 +359,10 @@ function Patients() {
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center text-muted-foreground py-12">
-                    No patients match your search.
+                    {/* While a server page is in flight we do not yet know
+                        whether there are matches, so avoid asserting there
+                        are none. */}
+                    {loadingPage ? "Loading patients…" : "No patients match your search."}
                   </td>
                 </tr>
               )}
@@ -300,10 +371,10 @@ function Patients() {
         </div>
       </div>
 
-      {sorted.length > 0 && (
+      {totalRows > 0 && (
         <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground order-2 sm:order-1">
-            Showing {startIdx + 1}–{Math.min(startIdx + pageSize, sorted.length)} of {sorted.length}
+            Showing {startIdx + 1}–{Math.min(startIdx + pageSize, totalRows)} of {totalRows}
           </p>
           {totalPages > 1 && (
             <nav

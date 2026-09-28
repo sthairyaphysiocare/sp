@@ -386,6 +386,19 @@ function snapshotPendingDeletes(): Record<string, string[]> {
   return out;
 }
 
+/**
+ * Ids of patients the user has deleted but whose deletion has not yet been
+ * confirmed by the server.
+ *
+ * The patients list can render a page fetched from the server, which will
+ * still contain a record the user just deleted until the sync lands. Exposing
+ * the queue lets the list hide those rows immediately, so a delete looks
+ * instant instead of appearing to fail. Read-only — a copy, not the live set.
+ */
+export function pendingDeletedPatientIds(): Set<string> {
+  return new Set(pendingDeletes.patients);
+}
+
 /** Drop only what the server confirmed it applied; anything else is retried. */
 function clearAppliedDeletes(applied: Record<string, string[]>) {
   for (const [table, ids] of Object.entries(applied)) {
