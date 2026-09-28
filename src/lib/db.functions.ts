@@ -259,13 +259,89 @@ export const syncState = createServerFn({ method: "POST" })
 
     if (parsed.settings) {
       try {
+        // app_settings is one row replaced wholesale, so it has no per-record
+        // delete protection like the tables above. Two safeguards apply here
+        // instead.
+        const prev = await db.execute({
+          sql: "SELECT data FROM app_settings WHERE id = ?",
+          args: ["main"],
+        });
+        const prevRaw = prev.rows[0] ? String(prev.rows[0].data) : null;
+
+        // SAFEGUARD 1 — refuse a write that would wipe a configured clinic.
+        //
+        // Branches, clinicians and specialities are the substance of the
+        // settings blob. A payload that empties ALL of them at once, against
+        // stored settings that had them, is never a real user action: the UI
+        // deletes these one at a time, and a clinic cannot operate with zero
+        // branches. It is the signature of default/partial state being
+        // written over real configuration - the same failure that repeatedly
+        // destroyed the patient tables.
+        //
+        // Deliberately narrow: emptying ALL THREE simultaneously is required,
+        // so deleting the last speciality (or clinician, or branch)
+        // individually still works exactly as before.
+        if (prevRaw) {
+          try {
+            const before = JSON.parse(prevRaw) as Record<string, unknown[]>;
+            const after = parsed.settings as unknown as Record<string, unknown[]>;
+            const count = (o: Record<string, unknown[]>, k: string) =>
+              Array.isArray(o?.[k]) ? o[k].length : 0;
+            const hadContent =
+              count(before, "branches") +
+                count(before, "clinicians") +
+                count(before, "specialities") >
+              0;
+            const wipesAll =
+              count(after, "branches") === 0 &&
+              count(after, "clinicians") === 0 &&
+              count(after, "specialities") === 0;
+            if (hadContent && wipesAll) {
+              console.error(
+                "[sync] BLOCKED: refusing a settings write that would empty branches, clinicians AND specialities at once. Treating it as default/partial state overwriting real configuration.",
+              );
+              await auditEvent("settings.blocked_wipe", "all-collections-emptied");
+              failures.push("settings:blocked-wipe");
+              throw new Error("settings-wipe-blocked");
+            }
+          } catch (err) {
+            // A parse failure on the PREVIOUS value must not block a
+            // legitimate write; only the explicit block above should.
+            if (err instanceof Error && err.message === "settings-wipe-blocked") throw err;
+          }
+        }
+
+        // SAFEGUARD 2 — archive the previous value before replacing it, so a
+        // bad write is always recoverable rather than silently final.
+        if (prevRaw) {
+          try {
+            await db.execute({
+              sql: "INSERT INTO app_settings_history (data, archived_at) VALUES (?, ?)",
+              args: [prevRaw, Date.now()],
+            });
+            // Keep the history bounded; pruning is by count only and never
+            // driven by anything the client sends.
+            await db.execute({
+              sql: `DELETE FROM app_settings_history WHERE id NOT IN (
+                      SELECT id FROM app_settings_history ORDER BY id DESC LIMIT 50)`,
+              args: [],
+            });
+          } catch (err) {
+            // Archiving is best-effort: never block a legitimate settings
+            // save because the history write failed.
+            console.error("[sync] settings history archive failed:", err);
+          }
+        }
+
         await db.execute({
           sql: rows.UPSERT_SETTINGS,
           args: ["main", JSON.stringify(parsed.settings), Date.now()],
         });
       } catch (err) {
-        console.error("[sync] failed to upsert settings:", err);
-        failures.push("settings:main");
+        if (!(err instanceof Error && err.message === "settings-wipe-blocked")) {
+          console.error("[sync] failed to upsert settings:", err);
+          failures.push("settings:main");
+        }
       }
     }
 

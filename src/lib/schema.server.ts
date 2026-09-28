@@ -127,6 +127,23 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     updated_at INTEGER NOT NULL DEFAULT 0
   )`,
 
+  // Version history for app_settings.
+  //
+  // app_settings is a single row holding one JSON blob (branches, clinicians,
+  // specialities, clinic hours, contact details), replaced wholesale on every
+  // sync. Unlike the row-based tables it therefore has no per-record delete
+  // protection: one bad write silently destroys the clinic's entire
+  // configuration with nothing left to recover from.
+  //
+  // Every settings write now archives the PREVIOUS value here first, so a bad
+  // write is always recoverable. Append-only and never deleted by sync; old
+  // versions are pruned by count, not by any client instruction.
+  `CREATE TABLE IF NOT EXISTS app_settings_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    data       TEXT NOT NULL,
+    archived_at INTEGER NOT NULL
+  )`,
+
   // Saved prescriptions/receipts (assigned sequential receipt numbers).
   `CREATE TABLE IF NOT EXISTS prescriptions (
     id         TEXT PRIMARY KEY,
