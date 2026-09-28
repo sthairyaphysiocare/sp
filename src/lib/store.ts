@@ -858,14 +858,12 @@ export const store = {
     persist();
   },
   deletePatient(id: string) {
-    // Deleting a patient cascades to their visits and notes, so each removed
-    // row must be declared explicitly — the server no longer infers any of it.
+    // Only the patient id is declared. The server cascades to that patient's
+    // visits and notes by patient_id — it must, because those tables are
+    // moving to on-demand loading and the client can no longer see every
+    // child row to enumerate it. Enumerating from a partial view would
+    // silently orphan the rows it could not see.
     markDeleted("patients", id);
-    markDeleted("visits", ...state.visits.filter((v) => v.patientId === id).map((v) => v.id));
-    markDeleted(
-      "clinical_notes",
-      ...state.notes.filter((n) => n.patientId === id).map((n) => n.id),
-    );
     state = {
       ...state,
       patients: state.patients.filter((p) => p.id !== id),

@@ -202,6 +202,33 @@ export const syncState = createServerFn({ method: "POST" })
         if (sent.has(id)) continue; // still present in state — do not delete
         deletes.push({ sql: `DELETE FROM ${sp.table} WHERE id = ?`, args: [id] });
         appliedDeletes.push(`${sp.table}:${id}`);
+
+        // Cascade a patient deletion to that patient's visits and notes,
+        // server-side and by patient_id.
+        //
+        // The client used to enumerate those child ids itself, which only
+        // worked while every visit and note was held in memory. As those
+        // tables move to being loaded on demand (so the app can scale to tens
+        // of thousands of patients), the client can no longer see them — and
+        // enumerating from a partial view would silently orphan the rows it
+        // could not see.
+        //
+        // This stays consistent with "nothing is deleted unless a user
+        // deletes it": it fires only for a patient id the user explicitly
+        // deleted, and removes only rows belonging to that patient. It cannot
+        // widen to anything else.
+        if (sp.table === "patients") {
+          // Bounded by patient_id, so each statement can only ever touch one
+          // patient's children. Noted explicitly because the mass-delete
+          // breaker below counts STATEMENTS, not rows: a patient-scoped
+          // cascade is deliberately exempt from that accounting, since its
+          // blast radius is limited by construction to rows belonging to a
+          // patient the user just deleted. It cannot widen to a whole table
+          // the way an unscoped prune could.
+          deletes.push({ sql: `DELETE FROM visits WHERE patient_id = ?`, args: [id] });
+          deletes.push({ sql: `DELETE FROM clinical_notes WHERE patient_id = ?`, args: [id] });
+          appliedDeletes.push(`cascade:${id}`);
+        }
       }
     }
 
@@ -229,7 +256,14 @@ export const syncState = createServerFn({ method: "POST" })
       const sp = specs[si];
       const existing = existingIds[si].size;
       if (existing < MASS_DELETE_MIN_ROWS) continue;
-      const removing = deletes.filter((d) => d.sql.includes(`FROM ${sp.table} `)).length;
+      // Count only id-scoped deletes. Patient-scoped cascades
+      // (DELETE ... WHERE patient_id = ?) are excluded deliberately: they are
+      // bounded to one patient's children by construction, and counting them
+      // here would be meaningless anyway since one statement removes an
+      // unknown number of rows.
+      const removing = deletes.filter(
+        (d) => d.sql.includes(`FROM ${sp.table} `) && d.sql.includes("WHERE id = ?"),
+      ).length;
       if (removing > existing * MASS_DELETE_RATIO) {
         blocked.push(`${sp.table}:${removing}/${existing}`);
       }
