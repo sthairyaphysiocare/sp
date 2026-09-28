@@ -85,3 +85,43 @@ export function amountInWordsINR(amount: number): string {
   if (rest) parts.push(three(rest));
   return `Rupees ${parts.join(" ")} Only`;
 }
+
+/**
+ * Height conversion helpers.
+ *
+ * Patient height is STORED in centimetres and always has been; only the way
+ * it is entered and displayed changes to feet. Converting the stored values
+ * instead would mean rewriting every existing patient row, and a bulk rewrite
+ * of live patient data is not a risk worth taking for a units change — so the
+ * database is left exactly as it is and the conversion happens at the edges.
+ *
+ * Feet are expressed as feet + inches (5'7") rather than a decimal, since
+ * that is how height is normally read and written.
+ */
+const CM_PER_INCH = 2.54;
+const INCHES_PER_FOOT = 12;
+
+/** Centimetres -> { feet, inches }, inches rounded to the nearest whole. */
+export function cmToFeetInches(cm: number): { feet: number; inches: number } {
+  if (!cm || cm <= 0) return { feet: 0, inches: 0 };
+  const totalInches = Math.round(cm / CM_PER_INCH);
+  return {
+    feet: Math.floor(totalInches / INCHES_PER_FOOT),
+    inches: totalInches % INCHES_PER_FOOT,
+  };
+}
+
+/** Centimetres -> display string, e.g. 170 -> `5'7"`. Empty when unset. */
+export function cmToFeetLabel(cm: number): string {
+  if (!cm || cm <= 0) return "";
+  const { feet, inches } = cmToFeetInches(cm);
+  return `${feet}'${inches}"`;
+}
+
+/** feet + inches -> centimetres, for storing what the user typed. */
+export function feetInchesToCm(feet: number, inches: number): number {
+  const f = Number(feet) || 0;
+  const i = Number(inches) || 0;
+  if (f <= 0 && i <= 0) return 0;
+  return Math.round((f * INCHES_PER_FOOT + i) * CM_PER_INCH);
+}

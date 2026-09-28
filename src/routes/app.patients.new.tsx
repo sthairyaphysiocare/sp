@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { cmToFeetInches, feetInchesToCm } from "@/lib/utils";
 import { store, useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -193,12 +194,36 @@ function NewPatient() {
               <Input value={f.bg} onChange={(e) => setF({ ...f, bg: e.target.value })} />
             </div>
             <div>
-              <Label>Height (cm)</Label>
-              <Input
-                type="number"
-                value={f.h || ""}
-                onChange={(e) => setF({ ...f, h: +e.target.value })}
-              />
+              <Label>Height (ft / in)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  aria-label="Height in feet"
+                  placeholder="ft"
+                  value={cmToFeetInches(f.h).feet || ""}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      h: feetInchesToCm(+e.target.value, cmToFeetInches(f.h).inches),
+                    })
+                  }
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  max={11}
+                  aria-label="Height in inches"
+                  placeholder="in"
+                  value={cmToFeetInches(f.h).inches || ""}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      h: feetInchesToCm(cmToFeetInches(f.h).feet, +e.target.value),
+                    })
+                  }
+                />
+              </div>
             </div>
             <div>
               <Label>Weight (kg)</Label>

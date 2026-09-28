@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate, useParams } from "@tanstack/react-router";
 import { store, useStore, takenSlotsForDate, slotConflict } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { cn, cmToFeetInches, cmToFeetLabel, feetInchesToCm } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import {
@@ -249,7 +249,10 @@ function PatientDetail() {
                 }
               />
               <Row k="Blood Group" v={patient.bg || "—"} />
-              <Row k="Height / Weight" v={`${patient.h || "—"} cm / ${patient.w || "—"} kg`} />
+              <Row
+                k="Height / Weight"
+                v={`${cmToFeetLabel(patient.h) || "—"} / ${patient.w || "—"} kg`}
+              />
               <Row k="Therapist" v={therapists.find((t) => t.id === patient.tId)?.name || "—"} />
             </Card>
             {canManage && (
@@ -685,12 +688,36 @@ function EditPatientDialog({
               <Input value={f.bg} onChange={(e) => setF({ ...f, bg: e.target.value })} />
             </div>
             <div>
-              <Label>Height (cm)</Label>
-              <Input
-                type="number"
-                value={f.h || ""}
-                onChange={(e) => setF({ ...f, h: +e.target.value })}
-              />
+              <Label>Height (ft / in)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  aria-label="Height in feet"
+                  placeholder="ft"
+                  value={cmToFeetInches(f.h).feet || ""}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      h: feetInchesToCm(+e.target.value, cmToFeetInches(f.h).inches),
+                    })
+                  }
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  max={11}
+                  aria-label="Height in inches"
+                  placeholder="in"
+                  value={cmToFeetInches(f.h).inches || ""}
+                  onChange={(e) =>
+                    setF({
+                      ...f,
+                      h: feetInchesToCm(cmToFeetInches(f.h).feet, +e.target.value),
+                    })
+                  }
+                />
+              </div>
             </div>
             <div>
               <Label>Weight (kg)</Label>
