@@ -324,6 +324,58 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSave = false;
 let saveInFlight = false;
 let lastSyncedPayload: string | null = null;
+
+/**
+ * Ids the user has EXPLICITLY deleted, per database table.
+ *
+ * The server used to infer deletions: any row in the database whose id was
+ * absent from the client's payload got deleted. "Absent" and "deleted" are
+ * not the same thing, and conflating them is what destroyed the clinic's
+ * records repeatedly — a client holding incomplete or empty state silently
+ * meant "delete everything I'm not holding".
+ *
+ * Deletion is now something the client STATES, not something the server
+ * guesses. An id lands here only when a user performs a delete action in the
+ * UI, and the server removes nothing else. A partial, stale or empty payload
+ * can no longer remove anything at all.
+ *
+ * Kept outside `state` deliberately: this is a queue of pending instructions,
+ * not clinic data, and it must never be part of the synced snapshot or the
+ * dirty-check payload.
+ */
+const pendingDeletes: Record<string, Set<string>> = {
+  users: new Set(),
+  patients: new Set(),
+  visits: new Set(),
+  clinical_notes: new Set(),
+  bookings: new Set(),
+  blocked_slots: new Set(),
+};
+
+/** Record an explicit, user-initiated deletion so the next sync applies it. */
+function markDeleted(table: keyof typeof pendingDeletes, ...ids: string[]) {
+  for (const id of ids) {
+    if (id) pendingDeletes[table].add(id);
+  }
+}
+
+/** Snapshot the queue for sending. */
+function snapshotPendingDeletes(): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [table, ids] of Object.entries(pendingDeletes)) {
+    if (ids.size > 0) out[table] = [...ids];
+  }
+  return out;
+}
+
+/** Drop only what the server confirmed it applied; anything else is retried. */
+function clearAppliedDeletes(applied: Record<string, string[]>) {
+  for (const [table, ids] of Object.entries(applied)) {
+    const set = pendingDeletes[table as keyof typeof pendingDeletes];
+    if (!set) continue;
+    for (const id of ids) set.delete(id);
+  }
+}
 export type SyncStatus = "idle" | "syncing" | "error" | "offline";
 let syncStatus: SyncStatus = "idle";
 const statusListeners = new Set<(s: SyncStatus) => void>();
@@ -383,19 +435,29 @@ async function flushToCloud() {
     // Session state is per-browser (sessionStorage) — never persist to cloud.
     const toSave = { ...state, session: { userId: null } };
     const payload = JSON.stringify(toSave);
+    // Explicitly user-deleted ids. Captured before the request so that
+    // anything the user deletes mid-flight stays queued for the next sync
+    // rather than being silently dropped.
+    const deletes = snapshotPendingDeletes();
+    const hasDeletes = Object.keys(deletes).length > 0;
     // Dirty check: if the serialized state is byte-identical to the last
-    // successful sync, skip the network write entirely.
-    if (payload === lastSyncedPayload) {
+    // successful sync, skip the network write entirely — unless there are
+    // deletions to apply, which are not part of the state snapshot and would
+    // otherwise never be sent.
+    if (payload === lastSyncedPayload && !hasDeletes) {
       setSyncStatus("idle");
       return;
     }
     setSyncStatus("syncing");
-    const res = await syncState({ data: { data: payload } });
+    const res = await syncState({ data: { data: payload, deletes } });
     const resFailures = Array.isArray(res?.failures) ? res.failures : ["sync:malformed-response"];
     if (resFailures.length > 0) {
       console.error("[store] some records failed to sync:", resFailures);
       setSyncStatus("error");
     } else {
+      // Only clear deletions the server actually applied; anything else stays
+      // queued and is retried on the next sync.
+      clearAppliedDeletes(deletes);
       lastSyncedPayload = payload;
       setSyncStatus("idle");
     }
@@ -658,6 +720,7 @@ export const store = {
     persist();
   },
   removeUser(id: string) {
+    markDeleted("users", id);
     state = { ...state, users: state.users.filter((u) => u.id !== id) };
     persist();
   },
@@ -694,6 +757,14 @@ export const store = {
     persist();
   },
   deletePatient(id: string) {
+    // Deleting a patient cascades to their visits and notes, so each removed
+    // row must be declared explicitly — the server no longer infers any of it.
+    markDeleted("patients", id);
+    markDeleted("visits", ...state.visits.filter((v) => v.patientId === id).map((v) => v.id));
+    markDeleted(
+      "clinical_notes",
+      ...state.notes.filter((n) => n.patientId === id).map((n) => n.id),
+    );
     state = {
       ...state,
       patients: state.patients.filter((p) => p.id !== id),
@@ -732,6 +803,10 @@ export const store = {
     persist();
   },
   clearClosedBookings() {
+    markDeleted(
+      "bookings",
+      ...state.bookings.filter((b) => b.status === "closed").map((b) => b.id),
+    );
     state = { ...state, bookings: state.bookings.filter((b) => b.status !== "closed") };
     persist();
   },
@@ -741,6 +816,7 @@ export const store = {
     persist();
   },
   removeBlocked(id: string) {
+    markDeleted("blocked_slots", id);
     state = { ...state, blocked: state.blocked.filter((b) => b.id !== id) };
     persist();
   },

@@ -30,9 +30,24 @@ export const loadSnapshot = createServerFn({ method: "GET" }).handler(async () =
  * logged with its data and skipped — the rest of the sync continues.
  */
 export const syncState = createServerFn({ method: "POST" })
-  .inputValidator((input: { data: string }) => {
+  .inputValidator((input: { data: string; deletes?: Record<string, string[]> }) => {
     if (!input || typeof input.data !== "string") throw new Error("Invalid payload");
     if (input.data.length > 8 * 1024 * 1024) throw new Error("State payload too large");
+    // `deletes` is optional so an older client (or a cached tab mid-deploy)
+    // still syncs correctly — it simply deletes nothing, which is the safe
+    // direction to fail in.
+    if (input.deletes !== undefined) {
+      if (
+        typeof input.deletes !== "object" ||
+        input.deletes === null ||
+        Array.isArray(input.deletes)
+      )
+        throw new Error("Invalid deletes");
+      for (const ids of Object.values(input.deletes)) {
+        if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string"))
+          throw new Error("Invalid deletes");
+      }
+    }
     return input;
   })
   .handler(async ({ data }) => {
@@ -158,16 +173,35 @@ export const syncState = createServerFn({ method: "POST" })
       else failures.push(`${item.label}:${meta.id}`);
     });
 
-    // 3. Deletes for rows the client removed (single batch). A row whose
-    //    upsert failed stays untouched — a bad payload must never wipe data.
+    // 3. Deletes — ONLY ids the client explicitly said the user deleted.
+    //
+    // This previously inferred deletions: every existing row whose id was
+    // absent from the payload was deleted. That treats "absent" and "deleted"
+    // as the same thing, and they are not. A client holding partial, stale or
+    // empty state therefore meant "remove everything I am not holding", which
+    // destroyed the clinic's live patient records on several occasions.
+    //
+    // Nothing is now removed unless the user removed it. An id reaches this
+    // list only from an explicit delete action in the UI. A payload that is
+    // simply missing records — for any reason, including bugs elsewhere —
+    // deletes nothing.
+    //
+    // Guarded further: an id is only deleted if it is genuinely absent from
+    // the records just sent, so a record that is both present and listed for
+    // deletion (which should never happen) is kept rather than removed.
+    const requestedDeletes = data.deletes ?? {};
     const deletes: Array<{ sql: string; args: import("@libsql/client/web").InArgs }> = [];
+    const appliedDeletes: string[] = [];
     for (let si = 0; si < specs.length; si++) {
       const sp = specs[si];
+      const requested = requestedDeletes[sp.table] ?? [];
+      if (requested.length === 0) continue;
       const sent = new Set((sp.records ?? []).map((r) => r.id));
-      for (const id of existingIds[si]) {
-        if (!okIds[si].has(id) && !sent.has(id)) {
-          deletes.push({ sql: `DELETE FROM ${sp.table} WHERE id = ?`, args: [id] });
-        }
+      for (const id of requested) {
+        if (!existingIds[si].has(id)) continue; // already gone — nothing to do
+        if (sent.has(id)) continue; // still present in state — do not delete
+        deletes.push({ sql: `DELETE FROM ${sp.table} WHERE id = ?`, args: [id] });
+        appliedDeletes.push(`${sp.table}:${id}`);
       }
     }
 
