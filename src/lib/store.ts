@@ -393,6 +393,69 @@ export function getSyncStatus() {
   return syncStatus;
 }
 
+/**
+ * Fingerprints of each record as it was at the last successful sync, per
+ * table. Used to send ONLY records that actually changed.
+ *
+ * Previously every save rewrote every record in the database. At ~1,500
+ * patients that is roughly 6,000 row writes per save, which on Turso's free
+ * tier (10M writes/month) is about 90% of the monthly quota from ordinary
+ * daily use — and it scales linearly, so it becomes unworkable well before
+ * the clinic is large. It is also why the payload had an 8MB ceiling at all.
+ *
+ * Changes are DERIVED by comparison rather than tracked with dirty flags on
+ * each mutation. That is deliberate: a dirty flag that some future mutation
+ * forgets to set would silently stop saving that record, which is exactly the
+ * class of silent data problem this app has suffered from. Comparison cannot
+ * miss a change, because it does not depend on anyone remembering anything.
+ *
+ * A short string hash is stored rather than the record itself, so memory stays
+ * small even with tens of thousands of records.
+ */
+const syncedFingerprints: Record<string, Map<string, number>> = {
+  users: new Map(),
+  patients: new Map(),
+  visits: new Map(),
+  clinical_notes: new Map(),
+  bookings: new Map(),
+  blocked_slots: new Map(),
+};
+
+/** Fast, non-cryptographic string hash (FNV-1a). Collision risk is negligible
+ *  here, and a collision would only mean one record syncs a moment later. */
+function fingerprint(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Records that are new or changed since the last successful sync. */
+function changedRecords<T extends { id: string }>(table: string, records: T[]): T[] {
+  const seen = syncedFingerprints[table];
+  if (!seen) return records;
+  const out: T[] = [];
+  for (const r of records) {
+    const fp = fingerprint(JSON.stringify(r));
+    if (seen.get(r.id) !== fp) out.push(r);
+  }
+  return out;
+}
+
+/** Commit fingerprints once the server has confirmed the write. */
+function commitFingerprints(table: string, records: { id: string }[]) {
+  const seen = syncedFingerprints[table];
+  if (!seen) return;
+  for (const r of records) seen.set(r.id, fingerprint(JSON.stringify(r)));
+}
+
+/** Forget a record's fingerprint (after deletion, or on a fresh hydrate). */
+function resetFingerprints() {
+  for (const m of Object.values(syncedFingerprints)) m.clear();
+}
+
 async function flushToCloud() {
   // HARD STOP 1: never write before a successful read has completed.
   //
@@ -448,8 +511,25 @@ async function flushToCloud() {
       setSyncStatus("idle");
       return;
     }
+
+    // Send ONLY records that changed, rather than the whole clinic.
+    //
+    // Settings stay whole: they are a single blob, already small, and the
+    // server has its own archive + wipe guard for them.
+    const delta = {
+      users: changedRecords("users", state.users),
+      patients: changedRecords("patients", state.patients),
+      visits: changedRecords("visits", state.visits),
+      notes: changedRecords("clinical_notes", state.notes),
+      bookings: changedRecords("bookings", state.bookings),
+      blocked: changedRecords("blocked_slots", state.blocked),
+      settings: state.settings,
+      session: { userId: null },
+    };
+    const deltaPayload = JSON.stringify(delta);
+
     setSyncStatus("syncing");
-    const res = await syncState({ data: { data: payload, deletes } });
+    const res = await syncState({ data: { data: deltaPayload, deletes } });
     const resFailures = Array.isArray(res?.failures) ? res.failures : ["sync:malformed-response"];
     if (resFailures.length > 0) {
       console.error("[store] some records failed to sync:", resFailures);
@@ -458,6 +538,15 @@ async function flushToCloud() {
       // Only clear deletions the server actually applied; anything else stays
       // queued and is retried on the next sync.
       clearAppliedDeletes(deletes);
+      // Record what is now safely stored, so the next sync sends only what
+      // changes after this point. Done ONLY on success — a failed sync leaves
+      // fingerprints untouched so every unsaved record is retried.
+      commitFingerprints("users", delta.users);
+      commitFingerprints("patients", delta.patients);
+      commitFingerprints("visits", delta.visits);
+      commitFingerprints("clinical_notes", delta.notes);
+      commitFingerprints("bookings", delta.bookings);
+      commitFingerprints("blocked_slots", delta.blocked);
       lastSyncedPayload = payload;
       setSyncStatus("idle");
     }
@@ -526,6 +615,18 @@ async function ensureHydrated() {
         blocked: snap.blocked,
         settings: snap.settings ?? undefined,
       });
+      // Seed fingerprints from what the database just gave us, so the first
+      // save sends only what the user actually changes rather than re-writing
+      // every record. Seeded from the NORMALIZED state, not the raw rows, so
+      // that shape-repair defaults applied by normalizeDb do not read as
+      // changes on every load.
+      resetFingerprints();
+      commitFingerprints("users", state.users);
+      commitFingerprints("patients", state.patients);
+      commitFingerprints("visits", state.visits);
+      commitFingerprints("clinical_notes", state.notes);
+      commitFingerprints("bookings", state.bookings);
+      commitFingerprints("blocked_slots", state.blocked);
     }
   } catch (err) {
     console.error("[store] cloud hydrate failed — database unreachable", err);
