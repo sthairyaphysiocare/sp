@@ -59,6 +59,24 @@ function PatientDetail() {
     s.visits.filter((v) => v.patientId === id).sort((a, b) => a.vN - b.vN),
   );
   const notes = useStore((s) => s.notes.filter((n) => n.patientId === id));
+  // The initial snapshot carries only a bounded window of patients, so an
+  // older record may not be loaded. Fetch it on demand exactly once, so every
+  // patient stays openable no matter how large the archive grows.
+  //
+  // Guarded on `patient` being absent, so for a patient already in the window
+  // this never runs and behaviour is unchanged. The fetch is read-only and the
+  // merge commits fingerprints, so simply viewing an old record cannot mark it
+  // as changed or rewrite it.
+  const [fetchState, setFetchState] = useState<"idle" | "fetching" | "done">("idle");
+  useEffect(() => {
+    if (patient || fetchState !== "idle" || !id) return;
+    setFetchState("fetching");
+    void import("@/lib/db.functions")
+      .then(({ fetchPatientBundle }) => fetchPatientBundle({ data: { id } }))
+      .then((bundle) => store.mergeFetchedPatient(bundle))
+      .catch((err) => console.error("[patient] on-demand fetch failed", err))
+      .finally(() => setFetchState("done"));
+  }, [patient, fetchState, id]);
   const branch = useStore((s) => branchById(s.settings, patient?.br));
   const branches = useStore((s) => enabledBranches(s.settings));
   const therapists = useStore((s) =>
@@ -85,6 +103,16 @@ function PatientDetail() {
   }
 
   if (!patient) {
+    // While the on-demand fetch is still in flight we do not yet know whether
+    // this patient exists, so show a loading state rather than briefly
+    // claiming "not found" for a record that is about to appear.
+    if (fetchState !== "done") {
+      return (
+        <div className="text-center py-20">
+          <p className="text-muted-foreground">Loading patient…</p>
+        </div>
+      );
+    }
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Patient not found.</p>

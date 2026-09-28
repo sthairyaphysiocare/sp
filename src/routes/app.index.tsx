@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useStore } from "@/lib/store";
+import { getDbCounts, useStore } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Users, Activity, CalendarCheck2, Inbox } from "lucide-react";
@@ -214,7 +214,10 @@ function Dashboard() {
       key: "patients" as KPIKey,
       icon: Users,
       label: "Total Patients",
-      value: patients.length,
+      // True database count, not the size of the loaded window — the snapshot
+      // is bounded, so patients.length under-reports once the archive grows
+      // past it.
+      value: getDbCounts().patients || patients.length,
       accent: "bg-brand",
       visible: true,
     },

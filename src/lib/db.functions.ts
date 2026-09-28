@@ -659,3 +659,44 @@ export const notifyBooking = createServerFn({ method: "POST" })
     }
     return res;
   });
+
+/**
+ * Fetch one patient with their visits and notes.
+ *
+ * The initial snapshot loads a bounded window of patients, so an older record
+ * would otherwise be unreachable once the archive grows past it. Read-only —
+ * it cannot create, modify or remove anything.
+ */
+export const fetchPatientBundle = createServerFn({ method: "GET" })
+  .inputValidator((input: { id: string }) => {
+    if (!input || typeof input.id !== "string" || !input.id) throw new Error("Invalid id");
+    return { id: input.id.slice(0, 120) };
+  })
+  .handler(async ({ data }) => {
+    const { readPatientBundle } = await import("./turso.server");
+    try {
+      return await readPatientBundle(data.id);
+    } catch (err) {
+      console.error("[fetchPatientBundle] failed:", err);
+      return { patient: null, visits: [], notes: [] };
+    }
+  });
+
+/**
+ * Search patients across the whole table rather than the loaded window, so
+ * search keeps finding older records at any archive size. Read-only.
+ */
+export const searchPatients = createServerFn({ method: "GET" })
+  .inputValidator((input: { q: string }) => {
+    if (!input || typeof input.q !== "string") throw new Error("Invalid query");
+    return { q: input.q.slice(0, 120) };
+  })
+  .handler(async ({ data }) => {
+    const { searchPatientsServer } = await import("./turso.server");
+    try {
+      return { patients: await searchPatientsServer(data.q) };
+    } catch (err) {
+      console.error("[searchPatients] failed:", err);
+      return { patients: [] };
+    }
+  });

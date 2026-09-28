@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { store, useStore } from "@/lib/store";
+import { store, useStore, getDbCounts, hasMorePatientsThanLoaded } from "@/lib/store";
+import type { Patient } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,17 +32,46 @@ function Patients() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const filtered = useMemo(
-    () =>
-      patients.filter(
-        (p) =>
-          !dq ||
-          p.sn.includes(dq.toLowerCase()) ||
-          p.pid.toLowerCase().includes(dq.toLowerCase()) ||
-          p.m.includes(dq),
-      ),
-    [patients, dq],
-  );
+  // Server-side search results, merged in ADDITIVELY.
+  //
+  // The local filter below only sees the bounded window the snapshot loaded,
+  // so once the archive grows past it, searching would silently stop finding
+  // older patients. This queries the whole table as well and merges the
+  // results, so search keeps working at any size. Read-only, and only runs
+  // when there actually are unloaded patients — so for a clinic that fits
+  // entirely in the window nothing changes and no request is made.
+  const [serverHits, setServerHits] = useState<Patient[]>([]);
+  useEffect(() => {
+    if (!dq || !hasMorePatientsThanLoaded()) {
+      setServerHits([]);
+      return;
+    }
+    let cancelled = false;
+    void import("@/lib/db.functions")
+      .then(({ searchPatients }) => searchPatients({ data: { q: dq } }))
+      .then((r) => {
+        if (!cancelled) setServerHits(r?.patients ?? []);
+      })
+      .catch((err) => console.error("[patients] server search failed", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [dq]);
+
+  const filtered = useMemo(() => {
+    const local = patients.filter(
+      (p) =>
+        !dq ||
+        p.sn.includes(dq.toLowerCase()) ||
+        p.pid.toLowerCase().includes(dq.toLowerCase()) ||
+        p.m.includes(dq),
+    );
+    if (serverHits.length === 0) return local;
+    // Merge by id, local first so an in-memory edit the user just made wins
+    // over the server's copy of the same record.
+    const seen = new Set(local.map((p) => p.id));
+    return [...local, ...serverHits.filter((p) => !seen.has(p.id))];
+  }, [patients, dq, serverHits]);
 
   const visible = filtered.slice(0, shown);
   const hasMore = filtered.length > visible.length;
@@ -64,7 +94,7 @@ function Patients() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Patients</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {patients.length} total · click to view
+            {getDbCounts().patients || patients.length} total · click to view
           </p>
         </div>
         {canCreate && (

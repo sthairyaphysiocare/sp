@@ -315,6 +315,24 @@ let hydrateError: string | null = null;
 export function getHydrateError(): string | null {
   return hydrateError;
 }
+
+/**
+ * True row counts from the database, independent of how much of it is
+ * currently loaded.
+ *
+ * The snapshot carries a bounded window of patients, so `state.patients.length`
+ * is the size of what is HELD, not what EXISTS. Anything showing a total to the
+ * user needs this instead, or it silently under-reports once the archive grows
+ * past the window.
+ */
+let dbCounts = { patients: 0, visits: 0, notes: 0 };
+export function getDbCounts() {
+  return dbCounts;
+}
+/** True when the database holds more patients than the loaded window. */
+export function hasMorePatientsThanLoaded(): boolean {
+  return dbCounts.patients > state.patients.length;
+}
 const listeners = new Set<() => void>();
 
 // Debounced persistence to Turso via server function. We keep the local
@@ -606,6 +624,12 @@ async function ensureHydrated() {
       // may be written to the cloud.
       hydrateFailed = false;
       hydrateError = null;
+      // True database totals, which may exceed the loaded window.
+      dbCounts = snap.counts ?? {
+        patients: snap.patients.length,
+        visits: snap.visits.length,
+        notes: snap.notes.length,
+      };
       state = normalizeDb({
         users: snap.users,
         patients: snap.patients,
@@ -856,6 +880,39 @@ export const store = {
       ),
     };
     persist();
+  },
+  /**
+   * Merge a patient (and their visits/notes) fetched on demand into state.
+   *
+   * Used when opening a patient that falls outside the loaded snapshot window.
+   * Their fingerprints are committed at the same time, because these rows came
+   * straight from the database and are therefore already in sync — without
+   * that, merely VIEWING an old patient would mark them as changed and rewrite
+   * them on the next save.
+   *
+   * Purely additive: existing records are replaced by id, nothing is removed,
+   * and no deletion is ever queued.
+   */
+  mergeFetchedPatient(bundle: { patient: Patient | null; visits: Visit[]; notes: ClinicalNote[] }) {
+    if (!bundle?.patient) return;
+    const p = bundle.patient;
+    const byId = <T extends { id: string }>(existing: T[], incoming: T[]) => {
+      const map = new Map(existing.map((r) => [r.id, r]));
+      for (const r of incoming) map.set(r.id, r);
+      return [...map.values()];
+    };
+    state = {
+      ...state,
+      patients: byId(state.patients, [p]),
+      visits: byId(state.visits, bundle.visits ?? []),
+      notes: byId(state.notes, bundle.notes ?? []),
+    };
+    commitFingerprints("patients", [p]);
+    commitFingerprints("visits", bundle.visits ?? []);
+    commitFingerprints("clinical_notes", bundle.notes ?? []);
+    // Notify subscribers WITHOUT scheduling a save: nothing changed, this is
+    // data we just read back.
+    listeners.forEach((l) => l());
   },
   deletePatient(id: string) {
     // Only the patient id is declared. The server cascades to that patient's
