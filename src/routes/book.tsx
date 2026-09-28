@@ -108,19 +108,26 @@ function BookPage() {
       br: form.br || branches[0]?.id,
     });
     // Silent internal notification to the clinic (fire-and-forget; the
-    // visitor sees nothing). Sent to the Global Email via EmailJS — browsers
-    // cannot send WhatsApp messages invisibly without the WhatsApp Business
-    // API, so email is the reliable silent channel.
-    void import("@/lib/emailOtp").then(({ sendBookingAlert }) =>
-      sendBookingAlert({
-        toEmail: settings.globalEmail || CLINIC.email,
-        name: form.name,
-        phone: form.phone,
-        email: form.email,
-        concern: form.concern,
-        when: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
-        branch: branch?.name || "",
-      }).catch((err) => console.error("[book] silent alert failed", err)),
+    // visitor sees nothing). Sent server-side via Resend, so the email
+    // provider's API key never reaches the browser — unlike the EmailJS path
+    // this replaced, whose credentials are necessarily exposed client-side
+    // and whose only template was built for password-reset codes.
+    //
+    // The booking is already stored by this point. If the email fails, or is
+    // not configured yet, the booking is unaffected and the visitor sees the
+    // normal confirmation.
+    void import("@/lib/db.functions").then(({ notifyBooking }) =>
+      notifyBooking({
+        data: {
+          toEmail: settings.globalEmail || CLINIC.email,
+          patientName: form.name,
+          phone: form.phone,
+          patientEmail: form.email,
+          concern: form.concern,
+          when: `${fmtDate(form.prefDate)} ${fmtTime12(form.prefTime)}`,
+          branch: branch?.name || "",
+        },
+      }).catch((err) => console.error("[book] booking notification failed", err)),
     );
     toast.success("Booking received — we'll contact you shortly.");
     setDone(true);

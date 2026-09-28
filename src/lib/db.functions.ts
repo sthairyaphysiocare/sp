@@ -507,3 +507,45 @@ export const savePrescription = createServerFn({ method: "POST" })
     await auditEvent("prescription.save", `${id}${receiptNo ? `:${receiptNo}` : ""}`);
     return { ok: true as const, id, receiptNo };
   });
+
+/**
+ * Notify the clinic that a public booking arrived.
+ *
+ * Server-side so the email provider's API key is never exposed in the browser.
+ * Always resolves — the booking is already saved by the time this runs, and a
+ * notification problem must never surface to the visitor or suggest their
+ * booking failed. Input is validated and length-capped so this cannot be used
+ * as an open relay for arbitrary content.
+ */
+export const notifyBooking = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      toEmail: string;
+      patientName: string;
+      phone: string;
+      patientEmail: string;
+      concern: string;
+      when: string;
+      branch: string;
+    }) => {
+      if (!input || typeof input !== "object") throw new Error("Invalid payload");
+      const cap = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+      return {
+        toEmail: cap(input.toEmail, 200),
+        patientName: cap(input.patientName, 120),
+        phone: cap(input.phone, 40),
+        patientEmail: cap(input.patientEmail, 200),
+        concern: cap(input.concern, 2000),
+        when: cap(input.when, 120),
+        branch: cap(input.branch, 120),
+      };
+    },
+  )
+  .handler(async ({ data }) => {
+    const { sendBookingNotification } = await import("./bookingEmail.server");
+    const res = await sendBookingNotification(data);
+    if (!res.ok && !res.skipped) {
+      console.error("[notifyBooking] failed:", res.error);
+    }
+    return res;
+  });
