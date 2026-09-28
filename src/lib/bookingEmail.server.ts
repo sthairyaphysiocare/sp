@@ -144,10 +144,24 @@ export async function sendBookingNotification(
       },
       body: JSON.stringify({
         from,
-        to: [n.toEmail],
+        // Addresses are lower-cased before sending.
+        //
+        // Resend compares the recipient against the account owner's address
+        // EXACTLY when using the shared test sender, so a capitalisation
+        // difference alone is rejected with a 403 — "SthairyaPhysiocare@
+        // gmail.com" was refused against an account owned by
+        // "sthairyaphysiocare@gmail.com", even though they are the same
+        // mailbox. Domains are case-insensitive by spec and every major
+        // provider treats the local part that way too, so normalising is safe
+        // and removes a failure that is invisible to anyone reading the
+        // settings.
+        to: [n.toEmail.trim().toLowerCase()],
         // So the clinic can reply straight to the patient when they gave an
         // address; otherwise replies go back to the clinic's own inbox.
-        reply_to: n.patientEmail && /.+@.+\..+/.test(n.patientEmail) ? n.patientEmail : n.toEmail,
+        reply_to:
+          n.patientEmail && /.+@.+\..+/.test(n.patientEmail)
+            ? n.patientEmail.trim().toLowerCase()
+            : n.toEmail.trim().toLowerCase(),
         subject: `New appointment request — ${n.patientName} (${n.when})`,
         text,
         html,
