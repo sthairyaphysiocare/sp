@@ -20,7 +20,7 @@ export const Route = createFileRoute("/gallery")({
       { title: `Gallery - ${CLINIC.name}` },
       {
         name: "description",
-        content: `Photographs and clips from inside ${CLINIC.name} — our treatment spaces, equipment and team.`,
+        content: `A closer look at your path to wellness - photographs and clips from inside ${CLINIC.name}.`,
       },
     ],
     links: [{ rel: "canonical", href: "/gallery" }],
@@ -40,7 +40,7 @@ function GalleryPage() {
         <div className="max-w-2xl">
           <h1 className="text-4xl sm:text-5xl font-bold">Gallery</h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            A look inside the clinic - our treatment spaces, equipment and the team who work here.
+            A Closer Look at Your Path to Wellness
           </p>
         </div>
 
@@ -50,10 +50,7 @@ function GalleryPage() {
             body="It may be switched off while we update it. Please check back soon."
           />
         ) : items.length === 0 ? (
-          <EmptyNote
-            title="Nothing here yet"
-            body="Photographs from the clinic will appear here shortly."
-          />
+          <EmptyNote title="Nothing here yet" />
         ) : (
           <div className="mt-12">
             <GalleryWall items={items} />
@@ -64,11 +61,11 @@ function GalleryPage() {
   );
 }
 
-function EmptyNote({ title, body }: { title: string; body: string }) {
+function EmptyNote({ title, body }: { title: string; body?: string }) {
   return (
     <div className="mt-12 rounded-2xl border bg-surface px-6 py-14 text-center soft-shadow">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">{body}</p>
+      {body && <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">{body}</p>}
       <Link
         to="/"
         className="mt-6 inline-block text-sm font-medium text-brand hover:underline underline-offset-4"

@@ -839,14 +839,16 @@ export const galleryUploadTicket = createServerFn({ method: "POST" })
       if (data.kind === "video" && (await galleryVideoCount()) >= MAX_VIDEOS) {
         return { ok: false as const, reason: "too-many-videos" };
       }
-      const publicId = `gal_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-      const ticket = await signUploadTicket({
-        folder: GALLERY_FOLDER,
-        publicId,
-        kind: data.kind,
-      });
+      // The full path goes in the public id itself, so the asset lands where
+      // it is named whichever folder mode the Cloudinary account uses.
+      const publicId = `${GALLERY_FOLDER}/gal_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+      const ticket = await signUploadTicket({ publicId, kind: data.kind });
       if (!ticket) return { ok: false as const, reason: "not-configured" };
-      return { ok: true as const, ticket, publicId: `${GALLERY_FOLDER}/${publicId}` };
+      // Returned so the browser knows what to expect, but the browser sends
+      // back the id Cloudinary actually assigned, and that is what is checked.
+      return { ok: true as const, ticket, publicId };
     } catch (err) {
       console.error("[galleryUploadTicket] failed:", err);
       return { ok: false as const, reason: "error" };

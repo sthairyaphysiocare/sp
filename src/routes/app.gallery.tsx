@@ -142,10 +142,16 @@ function GalleryAdmin() {
       form.append("signature", t.ticket.signature);
       for (const [k, v] of Object.entries(t.ticket.params)) form.append(k, String(v));
 
-      await uploadWithProgress(t.ticket.uploadUrl, form, setUploadPct);
+      const uploaded = await uploadWithProgress(t.ticket.uploadUrl, form, setUploadPct);
+
+      // Cloudinary's own answer for where the asset landed. Predicting it
+      // would mean assuming which folder mode this account uses, and a wrong
+      // guess makes the server's verification miss a file that uploaded
+      // perfectly well. The expected id is the fallback, not the source.
+      const publicId = uploaded.public_id || t.publicId;
 
       const added = await galleryAdd({
-        data: { token, publicId: t.publicId, kind, caption, description },
+        data: { token, publicId, kind, caption, description },
       });
       if (!added.ok) {
         toast.error(
@@ -155,8 +161,15 @@ function GalleryAdmin() {
               ? "That file type is not allowed."
               : added.reason === "duplicate"
                 ? "That file is already in the gallery."
-                : "The upload could not be saved.",
+                : added.reason === "not-verified"
+                  ? "The file uploaded, but it could not be confirmed with Cloudinary. Please try again."
+                  : added.reason === "not-configured"
+                    ? "Cloudinary is not configured on the server."
+                    : added.reason === "not-found"
+                      ? "The upload landed outside the gallery folder and was not saved."
+                      : "The upload could not be saved.",
         );
+        console.error("[gallery admin] could not record upload:", added.reason, publicId);
         return;
       }
       setCaption("");
@@ -165,7 +178,11 @@ function GalleryAdmin() {
       await refresh();
     } catch (err) {
       console.error("[gallery admin] upload failed:", err);
-      toast.error("The upload failed. Please try again.");
+      // Cloudinary explains its own refusals precisely ("Invalid Signature",
+      // "File size too large", and so on). Swallowing that behind "please try
+      // again" turns a fixable problem into a mystery, so it is shown.
+      const detail = err instanceof Error ? err.message : "";
+      toast.error(detail ? `Upload failed - ${detail}` : "The upload failed. Please try again.");
     } finally {
       setBusy(false);
       setUploadPct(null);
@@ -475,19 +492,29 @@ function uploadWithProgress(
   url: string,
   form: FormData,
   onProgress: (pct: number) => void,
-): Promise<void> {
+): Promise<{ public_id?: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(
-            new Error(`Cloudinary responded ${xhr.status}: ${xhr.responseText.slice(0, 300)}`),
-          );
+    xhr.onload = () => {
+      // Cloudinary returns JSON on success and on failure alike, and the
+      // failure body carries the reason. Parsed either way so the reason can
+      // be reported instead of a bare status code.
+      let body: { public_id?: string; error?: { message?: string } } = {};
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* non-JSON response; fall back to the status line below */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(body);
+        return;
+      }
+      reject(new Error(body.error?.message || `Cloudinary responded ${xhr.status}`.slice(0, 300)));
+    };
     xhr.onerror = () => reject(new Error("Network error while uploading"));
     xhr.send(form);
   });

@@ -31,7 +31,13 @@
 
 import { turso, auditEvent } from "./turso.server";
 import { ensureSchema } from "./schema.server";
-import { inspectAsset, destroyAsset, transformedUrl, type MediaKind } from "./cloudinary.server";
+import {
+  inspectAsset,
+  destroyAsset,
+  transformedUrl,
+  cloudinaryConfigured,
+  type MediaKind,
+} from "./cloudinary.server";
 
 /** Folder every gallery asset is confined to. */
 export const GALLERY_FOLDER = "sthairya/gallery";
@@ -212,6 +218,7 @@ export type AddResult =
       ok: false;
       reason:
         | "not-configured"
+        | "not-verified"
         | "not-found"
         | "too-large"
         | "bad-format"
@@ -266,8 +273,27 @@ export async function addGalleryItem(input: {
 
   // The authoritative description of the asset. Anything the client said
   // about size or format is ignored from here on.
-  const asset = await inspectAsset(publicId, kind);
-  if (!asset) return { ok: false, reason: "not-configured" };
+  //
+  // Retried briefly: an asset is occasionally not yet queryable through the
+  // Admin API in the instant after its upload returns, and treating that
+  // moment as "this file does not exist" would reject a perfectly good
+  // upload. Three quick attempts, then give up honestly.
+  let asset = await inspectAsset(publicId, kind);
+  for (let attempt = 0; !asset && attempt < 2; attempt++) {
+    await new Promise((r) => setTimeout(r, 400));
+    asset = await inspectAsset(publicId, kind);
+  }
+  if (!asset) {
+    // Distinguished from "not configured": the credentials may be perfectly
+    // fine and the asset simply not findable. Conflating the two sends
+    // whoever is debugging this to the wrong place entirely.
+    const configured = cloudinaryConfigured();
+    console.error(
+      `[gallery] could not verify ${kind} "${publicId}" with Cloudinary` +
+        (configured ? " (credentials are present)" : " — credentials are missing"),
+    );
+    return { ok: false, reason: configured ? "not-verified" : "not-configured" };
+  }
 
   const allowed = kind === "video" ? ALLOWED_VIDEO_FORMATS : ALLOWED_IMAGE_FORMATS;
   if (!allowed.has(asset.format.toLowerCase())) {

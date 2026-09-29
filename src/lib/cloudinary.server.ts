@@ -135,14 +135,31 @@ export interface UploadTicket {
 /**
  * Mint a ticket for one upload of one specific asset.
  *
- * The caller decides folder and public id; the browser cannot alter either,
- * because changing them invalidates the signature. `overwrite: false` means a
- * ticket can never be replayed to clobber an asset that already exists.
+ * The caller decides the full public id; the browser cannot alter it, because
+ * changing it invalidates the signature. `overwrite: false` means a ticket can
+ * never be replayed to clobber an asset that already exists.
+ *
+ * WHY THE FOLDER IS PART OF public_id AND NOT THE `folder` PARAMETER
+ *
+ * Cloudinary has two folder modes, and they disagree about what an upload's
+ * resulting public id will be. In fixed mode the `folder` parameter is
+ * prepended to the public id; in dynamic mode — the default for every account
+ * created since June 2024 — folders are decoupled from the public id, and
+ * whether the path ends up in it depends on account configuration.
+ *
+ * Predicting the result therefore means guessing, and a wrong guess makes the
+ * verification lookup miss an asset that uploaded perfectly well. Putting the
+ * whole path in `public_id` and sending no `folder` at all is unambiguous in
+ * both modes: the asset lands exactly where it is named. (Sending both would
+ * double up the prefix in fixed mode.)
+ *
+ * Callers must still not trust this value afterwards — the upload response
+ * carries the authoritative public id, and that is what gets verified.
  *
  * Returns null when Cloudinary is not configured.
  */
 export async function signUploadTicket(opts: {
-  folder: string;
+  /** The complete public id, folder path included. */
   publicId: string;
   kind: MediaKind;
 }): Promise<UploadTicket | null> {
@@ -156,15 +173,17 @@ export async function signUploadTicket(opts: {
     // Cloudinary rejects a timestamp far from its own clock, which caps how
     // long a leaked ticket stays usable.
     timestamp: Math.floor(Date.now() / 1000),
-    folder: opts.folder,
     public_id: opts.publicId,
     // Never let an upload replace an asset that already exists.
-    overwrite: "false",
+    //
+    // 0 rather than "false": Cloudinary's own SDK serializes every boolean
+    // upload parameter through as_safe_bool, which yields 0 or 1. The string
+    // "false" is not the same value — at best it is rejected, at worst it is
+    // read as truthy, which would turn this guard into its opposite.
+    overwrite: 0,
+    // Strip camera metadata, including any GPS coordinates, from photos.
+    exif: 0,
   };
-  // Camera metadata (including any GPS coordinates) is stripped from photos.
-  // The flag is image-only; sending it on a video upload changes the signed
-  // string and Cloudinary then rejects the whole upload.
-  if (opts.kind === "image") params.exif = "false";
 
   return {
     cloudName: cfg.cloudName,
