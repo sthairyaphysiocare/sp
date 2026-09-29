@@ -1,44 +1,39 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Play, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * The gallery wall: rows of images and short looping clips that slide
- * sideways, with adjacent rows travelling in opposite directions.
+ * The gallery: a three-dimensional coverflow.
  *
- * MOTION
+ * WHY NOT A MARQUEE
  *
- * Each row renders its items twice and slides by exactly half its own width,
- * so the second copy arrives where the first began and the loop has no
- * visible seam. Odd rows run the same animation in reverse, which is what
- * produces the counter-drift.
+ * This replaced a pair of rows that slid continuously sideways. With a clinic
+ * gallery of five or six photographs, a continuous strip has to repeat its
+ * contents to fill the width, and repetition at that scale is not subtle — it
+ * reads as the same pictures going past again, which is precisely what it is.
+ * Constant linear motion is also monotonous: nothing is ever emphasised, so
+ * nothing invites a look.
  *
- * A row holding only a few photos would be narrower than the frame and would
- * drag a gap across it, so each half repeats its items until there is enough
- * to fill. Both halves repeat identically, which is what keeps the loop
- * seamless.
+ * A coverflow shows each photograph exactly once. One is face-on and
+ * dominant, its neighbours recede in perspective, and the ring advances in
+ * unhurried steps rather than sliding without pause. Every step changes what
+ * is emphasised, which is what makes it worth watching.
  *
- * The slide only ever stops for a pointer: hovering, touching or
- * keyboard-focusing any card pauses every row at once, not just the one under
- * the finger — a card that stops while its neighbours keep moving reads as a
- * glitch, and the point of the pause is to let someone look at the thing they
- * reached for.
+ * NO PHOTOGRAPH IS EVER SHOWN TWICE AT ONCE
  *
- * BACKGROUND
+ * The ring wraps, so with few photographs a naive fixed depth would place the
+ * same item at both -2 and +2. The visible depth is therefore capped at
+ * floor((n-1)/2), which guarantees every visible slot holds a different
+ * photograph however few there are.
  *
- * The wall paints no background of its own: the page's own gradient shows
- * through. The edges are softened with a CSS mask rather than a gradient
- * overlay, because an overlay has to be painted in some colour and the page
- * behind it is a three-layer gradient that no flat colour can match. A mask
- * fades the cards themselves to transparent, so it is correct over any
- * background, in either theme.
+ * MOTION AND CONTROL
  *
- * CAPTIONS
- *
- * The caption is always on screen. It used to appear on hover, which meant it
- * was invisible on every phone and tablet, where no hover exists. The longer
- * description is the part that waits for a hover, and on a touch device it is
- * reached by tapping the photo, which opens the viewer.
+ * It advances on its own, and stops for any pointer — hover, touch or
+ * keyboard focus. It can be driven by arrow keys, by the buttons, by the
+ * dots, or by swiping. Anyone who has asked their system to reduce motion
+ * gets no automatic advance at all, and a plain responsive grid instead of
+ * the perspective stage.
  */
 
 export interface GalleryMedia {
@@ -56,19 +51,14 @@ export interface GalleryMedia {
   height: number;
 }
 
-/** A single item cannot slide against itself convincingly; it sits still. */
-const MIN_ITEMS_TO_ANIMATE = 2;
+/** How long each photograph holds the front position. */
+const ADVANCE_MS = 4200;
 
-/** Cards each half of a row aims for before it is wide enough to fill the frame. */
-const FILL_TARGET = 8;
+/** Deepest neighbour drawn on each side, before the wrap-around cap. */
+const MAX_DEPTH = 2;
 
-/** Seconds per full loop, per row. Deliberately slow, and varied so the rows
- *  never fall into lockstep with each other. */
-const ROW_SECONDS = [72, 88, 80];
-
-/** Fades the first and last few percent of each row to transparent. Works over
- *  any background because it removes pixels rather than painting over them. */
-const EDGE_MASK = "linear-gradient(to right, transparent 0, #000 7%, #000 93%, transparent 100%)";
+/** A swipe shorter than this is a tap, not a gesture. */
+const SWIPE_PX = 40;
 
 /**
  * Show a transformed URL, but fall back to the original if it will not load.
@@ -77,15 +67,12 @@ const EDGE_MASK = "linear-gradient(to right, transparent 0, #000 7%, #000 93%, t
  * an account with strict transformations enabled serves the original while
  * refusing every derived version — which reaches the page as nothing more
  * informative than a broken image. Falling back keeps the gallery working
- * whatever that account setting happens to be; the transformation is a
- * bandwidth saving, not something worth showing a broken photo over.
+ * whatever that account setting happens to be.
  */
 function useSrcWithFallback(preferred: string, original?: string) {
   const [src, setSrc] = useState(preferred || original || "");
   const [failed, setFailed] = useState(false);
 
-  // A different item can land in the same rendered slot, so the source has to
-  // follow the item rather than stay where the first render left it.
   useEffect(() => {
     setSrc(preferred || original || "");
     setFailed(false);
@@ -100,19 +87,12 @@ function useSrcWithFallback(preferred: string, original?: string) {
 }
 
 export function GalleryWall({ items }: { items: GalleryMedia[] }) {
+  const n = items.length;
+  const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
-  const [rowCount, setRowCount] = useState(3);
   const [reducedMotion, setReducedMotion] = useState(false);
-
-  // Fewer rows on a phone, where three bands of small photos would leave each
-  // one too short to see.
-  useEffect(() => {
-    const decide = () => setRowCount(window.innerWidth >= 640 ? 3 : 2);
-    decide();
-    window.addEventListener("resize", decide);
-    return () => window.removeEventListener("resize", decide);
-  }, []);
+  const touchX = useRef<number | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -122,79 +102,204 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  const rows = useMemo(() => {
-    const out: GalleryMedia[][] = Array.from({ length: rowCount }, () => []);
-    items.forEach((it, i) => out[i % rowCount].push(it));
-    return out;
-  }, [items, rowCount]);
+  const go = useCallback((delta: number) => setActive((i) => (i + delta + n) % n), [n]);
 
-  const animate = items.length >= MIN_ITEMS_TO_ANIMATE && !reducedMotion;
+  // Advance on its own, unless something is asking for attention: a pointer on
+  // the stage, the viewer being open, a single photograph, or a stated
+  // preference for less motion.
+  useEffect(() => {
+    if (paused || reducedMotion || n < 2 || lightbox !== null) return;
+    const t = setInterval(() => setActive((i) => (i + 1) % n), ADVANCE_MS);
+    return () => clearInterval(t);
+  }, [paused, reducedMotion, n, lightbox]);
 
-  // Position within the ORIGINAL list, so the viewer's next/previous walk the
-  // gallery in its real order rather than the shuffled row order.
-  const indexById = useMemo(() => {
-    const m = new Map<string, number>();
-    items.forEach((it, i) => m.set(it.id, i));
-    return m;
-  }, [items]);
+  // Arrow keys drive the ring whenever the viewer is closed.
+  useEffect(() => {
+    if (lightbox !== null || n < 2) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "ArrowRight") go(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, lightbox, n]);
+
+  // Capped so the wrap-around can never place one photograph in two slots.
+  const depth = Math.min(MAX_DEPTH, Math.floor((n - 1) / 2));
+
+  const slots = useMemo(() => {
+    return items.map((item, i) => {
+      // Shortest signed distance around the ring, so the nearest neighbours
+      // are the ones drawn regardless of where the indices wrap.
+      let off = i - active;
+      if (off > n / 2) off -= n;
+      if (off < -n / 2) off += n;
+      return { item, i, off, visible: Math.abs(off) <= depth };
+    });
+  }, [items, active, n, depth]);
+
+  const current = items[active];
+
+  // Reduced motion, or a single photograph: a plain grid, no perspective and
+  // nothing moving. Still fully browsable, and still opens the viewer.
+  if (reducedMotion || n === 1) {
+    return (
+      <>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item, i) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setLightbox(i)}
+              className="group relative aspect-[4/3] overflow-hidden rounded-2xl border bg-card cursor-pointer transition-shadow hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              <Media item={item} />
+              <CardCaption item={item} />
+            </button>
+          ))}
+        </div>
+        {lightbox !== null && (
+          <Lightbox
+            items={items}
+            index={lightbox}
+            onClose={() => setLightbox(null)}
+            onMove={setLightbox}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>
-      <style>{`
-        @keyframes sth-gallery-left  { from { transform: translateX(0); }    to { transform: translateX(-50%); } }
-        @keyframes sth-gallery-right { from { transform: translateX(-50%); } to { transform: translateX(0); } }
-      `}</style>
-
-      {/* No background of its own — the page's gradient shows through. */}
-      <div className="flex flex-col gap-4">
-        {rows.map((row, ri) => {
-          // Repeat the row until one half is wide enough to fill the frame;
-          // both halves repeat identically so the loop stays seamless.
-          const reps = row.length ? Math.max(1, Math.ceil(FILL_TARGET / row.length)) : 1;
-          const half = animate ? Array.from({ length: reps }, () => row).flat() : row;
-
-          return (
-            <div
-              key={ri}
-              className="overflow-hidden h-44 sm:h-52 lg:h-60"
-              style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
-            >
-              <div
-                className={cn("flex gap-4 h-full w-max will-change-transform")}
-                style={
-                  animate
-                    ? {
-                        animationName: ri % 2 === 0 ? "sth-gallery-left" : "sth-gallery-right",
-                        animationDuration: `${ROW_SECONDS[ri % ROW_SECONDS.length]}s`,
-                        animationTimingFunction: "linear",
-                        animationIterationCount: "infinite",
-                        animationPlayState: paused ? "paused" : "running",
-                      }
-                    : undefined
+      <div
+        className="select-none"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onFocusCapture={() => setPaused(true)}
+        onBlurCapture={() => setPaused(false)}
+        onTouchStart={(e) => {
+          setPaused(true);
+          touchX.current = e.touches[0]?.clientX ?? null;
+        }}
+        onTouchEnd={(e) => {
+          setPaused(false);
+          const start = touchX.current;
+          touchX.current = null;
+          if (start === null) return;
+          const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+          if (Math.abs(dx) > SWIPE_PX) go(dx < 0 ? 1 : -1);
+        }}
+      >
+        {/* The perspective stage. The page's own background shows through —
+            the gallery paints no panel of its own. */}
+        <div
+          className="relative h-[340px] sm:h-[440px] lg:h-[520px]"
+          style={{ perspective: "1400px", perspectiveOrigin: "50% 45%" }}
+          role="group"
+          aria-roledescription="carousel"
+          aria-label="Clinic gallery"
+        >
+          {slots.map(({ item, i, off, visible }) => {
+            const abs = Math.abs(off);
+            const sign = Math.sign(off);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => (off === 0 ? setLightbox(i) : go(off))}
+                aria-hidden={visible ? undefined : "true"}
+                tabIndex={visible ? 0 : -1}
+                aria-label={
+                  off === 0 ? `Open ${item.caption || "photo"}` : `Show ${item.caption || "photo"}`
                 }
-              >
-                {(animate ? [0, 1] : [0]).map((copy) =>
-                  half.map((item, i) => (
-                    <Card
-                      key={`${item.id}-${copy}-${i}`}
-                      item={item}
-                      // Only the very first appearance of each item is real to
-                      // assistive technology; the repeats exist purely to make
-                      // the loop seamless and would otherwise be read out over
-                      // and over.
-                      duplicate={!(copy === 0 && i < row.length)}
-                      onHoverChange={setPaused}
-                      onOpen={() => setLightbox(indexById.get(item.id) ?? 0)}
-                    />
-                  )),
+                className={cn(
+                  "absolute top-1/2 left-1/2 cursor-pointer rounded-2xl overflow-hidden",
+                  "border bg-card",
+                  "w-[76%] max-w-[420px] sm:w-[58%] h-[86%]",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                  // Only transform and opacity animate, so the whole stage
+                  // stays on the compositor and remains smooth on a phone.
+                  "transition-[transform,opacity,box-shadow] duration-700",
+                  "[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
+                  off === 0 ? "shadow-2xl shadow-foreground/25" : "shadow-lg shadow-foreground/10",
                 )}
-              </div>
-            </div>
-          );
-        })}
+                style={{
+                  transform: [
+                    "translate(-50%, -50%)",
+                    `translateX(${off * 38}%)`,
+                    `translateZ(${-abs * 240}px)`,
+                    `rotateY(${-sign * Math.min(abs, 2) * 32}deg)`,
+                    `scale(${1 - abs * 0.06})`,
+                  ].join(" "),
+                  opacity: visible ? 1 - abs * 0.3 : 0,
+                  zIndex: 20 - abs,
+                  pointerEvents: visible ? "auto" : "none",
+                  transformStyle: "preserve-3d",
+                }}
+              >
+                <Media item={item} />
+                {/* Neighbours are dimmed so the front photograph is plainly
+                    the subject rather than one of three competing for it. */}
+                {off !== 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-foreground/25 transition-opacity duration-700"
+                  />
+                )}
+                {off === 0 && <CardCaption item={item} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Controls sit below the stage rather than over the photographs. */}
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            aria-label="Previous photo"
+            className="grid size-10 place-items-center rounded-full border bg-card text-foreground/70 hover:text-brand hover:border-brand/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+
+          <div className="flex items-center gap-1.5">
+            {items.map((item, i) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActive(i)}
+                aria-label={`Show photo ${i + 1} of ${n}`}
+                aria-current={i === active ? "true" : undefined}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                  i === active ? "w-6 bg-brand" : "w-1.5 bg-foreground/25 hover:bg-foreground/40",
+                )}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => go(1)}
+            aria-label="Next photo"
+            className="grid size-10 place-items-center rounded-full border bg-card text-foreground/70 hover:text-brand hover:border-brand/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <ChevronRight className="size-5" />
+          </button>
+        </div>
+
+        {/* The description belongs under the stage on a phone, where there is
+            no hover to reveal it and the caption strip has no room for it. */}
+        {current?.description && (
+          <p className="mt-3 text-center text-sm text-muted-foreground max-w-xl mx-auto sm:hidden">
+            {current.description}
+          </p>
+        )}
       </div>
 
-      {lightbox !== null && lightbox >= 0 && (
+      {lightbox !== null && (
         <Lightbox
           items={items}
           index={lightbox}
@@ -206,65 +311,29 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
   );
 }
 
-function Card({
-  item,
-  duplicate,
-  onHoverChange,
-  onOpen,
-}: {
-  item: GalleryMedia;
-  duplicate: boolean;
-  onHoverChange: (v: boolean) => void;
-  onOpen: () => void;
-}) {
-  // Aspect ratio comes from the real dimensions, so a portrait photo stays a
-  // narrow card and a landscape one a wide card at the same row height. That
-  // unevenness is what makes it a bento wall rather than a row of identical
-  // tiles.
-  const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : 4 / 3;
+/** The photograph or clip itself, with its fallback behaviour. */
+function Media({ item }: { item: GalleryMedia }) {
   const media = useSrcWithFallback(
     item.kind === "video" ? item.url : item.thumbUrl,
     item.originalUrl,
   );
 
+  if (media.failed) {
+    // Never a broken-image icon: a tile carrying its own caption still reads
+    // as part of the gallery, where a torn-page glyph reads as a broken site.
+    return (
+      <span className="absolute inset-0 grid place-items-center bg-muted px-4 text-center">
+        <span className="text-xs text-muted-foreground">{item.caption || item.alt}</span>
+      </span>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      onMouseEnter={() => onHoverChange(true)}
-      onMouseLeave={() => onHoverChange(false)}
-      onFocus={() => onHoverChange(true)}
-      onBlur={() => onHoverChange(false)}
-      // Touch gets the same pause as a cursor. onTouchStart fires as the finger
-      // lands, before any tap is resolved, so the wall stops the instant it is
-      // touched rather than only once something is opened.
-      onTouchStart={() => onHoverChange(true)}
-      onTouchEnd={() => onHoverChange(false)}
-      onTouchCancel={() => onHoverChange(false)}
-      aria-hidden={duplicate ? "true" : undefined}
-      tabIndex={duplicate ? -1 : 0}
-      className={cn(
-        "group relative h-full shrink-0 overflow-hidden rounded-2xl cursor-pointer",
-        "bg-card border",
-        "transition-[transform,box-shadow] duration-300 ease-out",
-        "hover:scale-[1.03] hover:shadow-xl hover:shadow-foreground/15",
-        "focus:outline-none focus-visible:scale-[1.03] focus-visible:ring-2 focus-visible:ring-brand",
-      )}
-      style={{ aspectRatio: String(ratio) }}
-    >
-      {media.failed ? (
-        // Never a broken-image icon: a tile carrying its own caption still
-        // reads as part of the gallery, where a torn-page glyph reads as a
-        // broken site.
-        <span className="absolute inset-0 grid place-items-center bg-muted px-4 text-center">
-          <span className="text-xs text-muted-foreground">{item.caption || item.alt}</span>
-        </span>
-      ) : item.kind === "video" ? (
+    <>
+      {item.kind === "video" ? (
         <video
           src={media.src}
           poster={item.posterUrl || undefined}
-          // Silent, looping and inline: the three conditions every browser
-          // requires before it will start a video without a user gesture.
           autoPlay
           muted
           loop
@@ -277,57 +346,46 @@ function Card({
       ) : (
         <img
           src={media.src}
-          alt={duplicate ? "" : item.alt}
+          alt={item.alt}
           loading="lazy"
           decoding="async"
           onError={media.onError}
           className="h-full w-full object-cover"
         />
       )}
-
       {item.kind === "video" && (
         <span
           aria-hidden="true"
-          className="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm"
+          className="absolute top-3 right-3 grid size-7 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm"
         >
-          <Play className="size-3 fill-current" />
+          <Play className="size-3.5 fill-current" />
         </span>
       )}
+    </>
+  );
+}
 
-      {(item.caption || item.description) && (
+/** Caption always visible; description revealed on hover where one exists. */
+function CardCaption({ item }: { item: GalleryMedia }) {
+  if (!item.caption && !item.description) return null;
+  return (
+    <span className="absolute inset-x-0 bottom-0 p-3 text-left bg-gradient-to-t from-black/85 via-black/45 to-transparent">
+      {item.caption && (
+        <span className="block text-sm font-semibold text-white leading-snug">{item.caption}</span>
+      )}
+      {item.description && (
         <span
           className={cn(
-            "absolute inset-x-0 bottom-0 p-2.5 text-left",
-            // Sits over the photograph itself, so it stays dark regardless of
-            // the page behind it — that is what keeps the text readable on any
-            // image.
-            "bg-gradient-to-t from-black/85 via-black/45 to-transparent",
+            "hidden sm:block text-xs text-white/80 leading-snug",
+            "max-h-0 overflow-hidden opacity-0 transition-all duration-300 ease-out",
+            "group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100",
+            "[button:hover_&]:mt-1 [button:hover_&]:max-h-16 [button:hover_&]:opacity-100",
           )}
         >
-          {item.caption && (
-            <span className="block text-[13px] font-semibold text-white leading-snug line-clamp-2">
-              {item.caption}
-            </span>
-          )}
-          {item.description && (
-            <span
-              className={cn(
-                "block text-[11px] text-white/80 leading-snug",
-                // The description is the part that waits for a hover. On a
-                // touch device there is no hover, so tapping the photo opens
-                // the viewer, which shows it in full.
-                "max-h-0 overflow-hidden opacity-0",
-                "transition-all duration-300 ease-out",
-                "group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100",
-                "group-focus-visible:mt-1 group-focus-visible:max-h-16 group-focus-visible:opacity-100",
-              )}
-            >
-              {item.description}
-            </span>
-          )}
+          {item.description}
         </span>
       )}
-    </button>
+    </span>
   );
 }
 
@@ -343,9 +401,9 @@ function Lightbox({
   onMove: (i: number) => void;
 }) {
   const item = items[index];
-  // Hooks must run on every render, so this is read before the early return
-  // below; `item` can be undefined for one render while the index moves.
   const full = useSrcWithFallback(item?.url ?? "", item?.originalUrl);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const prev = useCallback(
     () => onMove((index - 1 + items.length) % items.length),
@@ -360,102 +418,158 @@ function Lightbox({
       else if (e.key === "ArrowRight") next();
     };
     document.addEventListener("keydown", onKey);
-    // The page behind must not scroll while a full-screen overlay is open.
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+
+    // Lock the page behind the viewer.
+    //
+    // `overflow: hidden` on <body> is not enough on mobile Safari and several
+    // Android browsers: the page keeps scrolling underneath, and because the
+    // viewer is the height of the visual viewport, scrolling the page moves
+    // the close button out of reach — which is exactly the trap reported here.
+    // Pinning the body at its current offset holds it still everywhere, and
+    // the offset is restored on close so nobody loses their place.
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prevStyles = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
+      body.style.position = prevStyles.position;
+      body.style.top = prevStyles.top;
+      body.style.left = prevStyles.left;
+      body.style.right = prevStyles.right;
+      body.style.width = prevStyles.width;
+      body.style.overflow = prevStyles.overflow;
+      window.scrollTo(0, scrollY);
     };
   }, [onClose, prev, next]);
 
-  if (!item) return null;
+  if (!item || !mounted) return null;
 
-  return (
+  const overlay = (
     <div
       role="dialog"
       aria-modal="true"
       aria-label={item.caption || "Gallery item"}
-      // A viewer is a different surface from a page: dimming everything behind
-      // it is what lets a single photograph be looked at properly, and it is
-      // what every image viewer does.
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/95 backdrop-blur-sm p-4 sm:p-8"
-      // Clicking the backdrop closes; clicking the media itself does not,
-      // which is why the inner wrapper stops the event.
+      className="fixed inset-0 z-[9999] flex flex-col bg-foreground/95 backdrop-blur-sm"
+      style={{
+        // dvh follows the mobile browser's collapsing toolbars; the vh value
+        // before it is the fallback for browsers that do not know dvh.
+        height: "100vh",
+        maxHeight: "100dvh",
+      }}
       onClick={onClose}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute top-4 right-4 grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
+      {/* A dedicated top bar, so the close control is part of the layout and
+          cannot be pushed off-screen or hidden under browser chrome. */}
+      <div
+        className="flex items-center justify-between gap-3 px-4 py-3 shrink-0"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+        onClick={(e) => e.stopPropagation()}
       >
-        <X className="size-5" />
-      </button>
+        <span className="text-xs text-background/60 tabular-nums">
+          {index + 1} / {items.length}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      {/* Scrolls on its own if a photograph and a long description do not fit,
+          rather than relying on the page behind it, which is locked. */}
+      <div
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="min-h-full flex flex-col items-center justify-center gap-4">
+          {item.kind === "video" ? (
+            <video
+              src={full.src}
+              poster={item.posterUrl || undefined}
+              controls
+              autoPlay
+              loop
+              muted
+              playsInline
+              onError={full.onError}
+              className="max-h-[70vh] w-auto max-w-full rounded-xl"
+            />
+          ) : (
+            <img
+              src={full.src}
+              alt={item.alt}
+              onError={full.onError}
+              className="max-h-[70vh] w-auto max-w-full rounded-xl object-contain"
+            />
+          )}
+
+          {(item.caption || item.description) && (
+            <div className="text-center max-w-2xl">
+              {item.caption && (
+                <h2 className="text-base font-semibold text-background">{item.caption}</h2>
+              )}
+              {item.description && (
+                <p className="mt-1 text-sm text-background/75 leading-relaxed">
+                  {item.description}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {items.length > 1 && (
-        <>
+        <div
+          className="flex items-center justify-center gap-6 px-4 py-3 shrink-0"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              prev();
-            }}
+            onClick={prev}
             aria-label="Previous"
-            className="absolute left-2 sm:left-5 grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
+            className="grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
           >
             <ChevronLeft className="size-6" />
           </button>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              next();
-            }}
+            onClick={next}
             aria-label="Next"
-            className="absolute right-2 sm:right-5 grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
+            className="grid size-11 place-items-center rounded-full bg-background/15 text-background hover:bg-background/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-background transition-colors"
           >
             <ChevronRight className="size-6" />
           </button>
-        </>
+        </div>
       )}
-
-      <div
-        className="max-w-5xl w-full max-h-full flex flex-col items-center gap-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {item.kind === "video" ? (
-          <video
-            src={full.src}
-            poster={item.posterUrl || undefined}
-            controls
-            autoPlay
-            loop
-            muted
-            playsInline
-            onError={full.onError}
-            className="max-h-[75vh] w-auto max-w-full rounded-xl"
-          />
-        ) : (
-          <img
-            src={full.src}
-            alt={item.alt}
-            onError={full.onError}
-            className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain"
-          />
-        )}
-
-        {(item.caption || item.description) && (
-          <div className="text-center max-w-2xl">
-            {item.caption && (
-              <h2 className="text-base font-semibold text-background">{item.caption}</h2>
-            )}
-            {item.description && (
-              <p className="mt-1 text-sm text-background/70 leading-relaxed">{item.description}</p>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
+
+  // Rendered at the end of <body>, deliberately.
+  //
+  // A `position: fixed` element is positioned against the viewport ONLY while
+  // no ancestor carries a transform, filter or perspective. This page's
+  // enhancement layer sets transforms on cards and buttons, and the stage
+  // above sets a perspective — any of which would silently turn the viewer
+  // into a box positioned inside the gallery instead of over the screen, with
+  // its close button wherever that box happened to land. A portal puts it
+  // beyond all of them.
+  return createPortal(overlay, document.body);
 }
