@@ -65,6 +65,9 @@ export const MAX_ITEMS = 60;
 /** Videos cost far more bandwidth per view than photos, so they are capped separately. */
 export const MAX_VIDEOS = 8;
 
+/** Used only when no caption exists to describe the media. */
+const DEFAULT_ALT = "Clinic gallery media";
+
 const ALLOWED_IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "webp"]);
 const ALLOWED_VIDEO_FORMATS = new Set(["mp4", "webm", "mov"]);
 
@@ -88,6 +91,17 @@ export interface GalleryItem {
   thumbUrl: string;
   /** First video frame, shown while the clip loads. Empty for images. */
   posterUrl: string;
+  /**
+   * The untransformed URL exactly as Cloudinary returned it.
+   *
+   * Every other URL here is a transformed one this code builds by rewriting
+   * that string, and transformed delivery is not guaranteed: an account with
+   * strict transformations enabled serves the original happily and refuses
+   * every derived version of it. That failure looks exactly like a broken
+   * image, so the page keeps this to fall back to. It is the one URL
+   * Cloudinary itself handed us, so it is the one most likely to work.
+   */
+  originalUrl: string;
   alt: string;
   caption: string;
   description: string;
@@ -113,6 +127,7 @@ function rowToItem(r: Record<string, unknown>): GalleryItem {
     thumbUrl: transformedUrl(raw, kind === "video" ? VID_CARD : IMG_CARD),
     posterUrl:
       kind === "video" ? transformedUrl(raw, VID_POSTER).replace(/\.(mp4|webm|mov)$/i, ".jpg") : "",
+    originalUrl: raw,
     alt: String(r.alt ?? ""),
     caption: String(r.caption ?? ""),
     description: String(r.description ?? ""),
@@ -314,7 +329,7 @@ export async function addGalleryItem(input: {
   const caption = input.caption.slice(0, 200);
   // Alt text falls back to the caption so a screen reader is never handed an
   // unlabelled image just because the admin left the field blank.
-  const alt = (input.alt?.trim() || caption || "Clinic gallery media").slice(0, 300);
+  const alt = (input.alt?.trim() || caption || DEFAULT_ALT).slice(0, 300);
 
   await db.execute({
     sql: `INSERT INTO gallery_items
@@ -366,10 +381,20 @@ export async function updateGalleryItem(
   const caption = patch.caption === undefined ? item.caption : patch.caption.slice(0, 200);
   const description =
     patch.description === undefined ? item.description : patch.description.slice(0, 500);
+  // Alt text follows the caption while it has never been set by hand.
+  //
+  // A photo uploaded before its caption was typed in kept the generic
+  // placeholder for ever, so a screen reader — and the text shown when an
+  // image fails to load — said "Clinic gallery media" even though the photo
+  // had a perfectly good caption sitting right beside it. An alt that someone
+  // actually wrote is still left alone.
+  const wasAutoAlt = !item.alt || item.alt === item.caption || item.alt === DEFAULT_ALT;
   const alt =
     patch.alt === undefined
-      ? item.alt
-      : (patch.alt.trim() || caption || "Clinic gallery media").slice(0, 300);
+      ? wasAutoAlt
+        ? (caption || DEFAULT_ALT).slice(0, 300)
+        : item.alt
+      : (patch.alt.trim() || caption || DEFAULT_ALT).slice(0, 300);
   const visible = patch.visible === undefined ? item.visible : patch.visible;
 
   await db.execute({

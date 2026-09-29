@@ -35,6 +35,8 @@ interface AdminItem {
   kind: "image" | "video";
   thumbUrl: string;
   posterUrl: string;
+  /** Untransformed URL, used when a transformed one will not load. */
+  originalUrl?: string;
   alt: string;
   caption: string;
   description: string;
@@ -388,6 +390,9 @@ function Row({
 }) {
   const [caption, setCaption] = useState(item.caption);
   const [description, setDescription] = useState(item.description);
+  const [thumb, setThumb] = useState(
+    item.kind === "video" ? item.posterUrl || item.thumbUrl : item.thumbUrl,
+  );
   const dirty = caption !== item.caption || description !== item.description;
 
   return (
@@ -399,10 +404,15 @@ function Row({
     >
       <div className="relative size-24 shrink-0 overflow-hidden rounded-lg bg-muted">
         <img
-          src={item.kind === "video" ? item.posterUrl || item.thumbUrl : item.thumbUrl}
+          src={thumb}
           alt={item.alt}
           className="size-full object-cover"
           loading="lazy"
+          // Same fallback as the public wall: if a transformed URL will not
+          // load, show the original rather than a broken tile.
+          onError={() => {
+            if (item.originalUrl && thumb !== item.originalUrl) setThumb(item.originalUrl);
+          }}
         />
         {item.kind === "video" && (
           <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded-full bg-black/60 text-white">

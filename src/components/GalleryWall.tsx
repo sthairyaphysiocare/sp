@@ -40,11 +40,42 @@ export interface GalleryMedia {
   url: string;
   thumbUrl: string;
   posterUrl: string;
+  /** Untransformed URL, used when a transformed one will not load. */
+  originalUrl?: string;
   alt: string;
   caption: string;
   description: string;
   width: number;
   height: number;
+}
+
+/**
+ * Show a transformed URL, but fall back to the original if it will not load.
+ *
+ * The transformed URLs are built by rewriting the one Cloudinary gave us, and
+ * an account with strict transformations enabled serves the original while
+ * refusing every derived version — which reaches the page as nothing more
+ * informative than a broken image. Falling back keeps the gallery working
+ * whatever that account setting happens to be; the transformation is a
+ * bandwidth saving, not something worth showing a broken photo over.
+ */
+function useSrcWithFallback(preferred: string, original?: string) {
+  const [src, setSrc] = useState(preferred || original || "");
+  const [failed, setFailed] = useState(false);
+
+  // A different item can land in the same rendered slot, so the source has to
+  // follow the item rather than stay where the first render left it.
+  useEffect(() => {
+    setSrc(preferred || original || "");
+    setFailed(false);
+  }, [preferred, original]);
+
+  const onError = useCallback(() => {
+    if (original && src !== original) setSrc(original);
+    else setFailed(true);
+  }, [original, src]);
+
+  return { src, failed, onError };
 }
 
 /** A single item cannot slide against itself convincingly; it sits still. */
@@ -201,6 +232,10 @@ function Card({
   // and landscape stays landscape — that unevenness is what makes it a bento
   // wall rather than a grid of identical tiles.
   const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : 4 / 3;
+  const media = useSrcWithFallback(
+    item.kind === "video" ? item.url : item.thumbUrl,
+    item.originalUrl,
+  );
 
   return (
     <button
@@ -227,9 +262,16 @@ function Card({
       )}
       style={{ aspectRatio: String(ratio) }}
     >
-      {item.kind === "video" ? (
+      {media.failed ? (
+        // Never a broken-image icon: a tile carrying its own caption still
+        // reads as part of the gallery, where a torn-page glyph reads as a
+        // broken site.
+        <span className="absolute inset-0 grid place-items-center bg-muted px-4 text-center">
+          <span className="text-xs text-muted-foreground">{item.caption || item.alt}</span>
+        </span>
+      ) : item.kind === "video" ? (
         <video
-          src={item.url}
+          src={media.src}
           poster={item.posterUrl || undefined}
           // Silent, looping and inline: the three conditions every browser
           // requires before it will start a video without a user gesture.
@@ -239,14 +281,16 @@ function Card({
           playsInline
           preload="metadata"
           aria-label={item.alt}
+          onError={media.onError}
           className="h-full w-full object-cover"
         />
       ) : (
         <img
-          src={item.thumbUrl}
+          src={media.src}
           alt={duplicate ? "" : item.alt}
           loading="lazy"
           decoding="async"
+          onError={media.onError}
           className="h-full w-full object-cover"
         />
       )}
@@ -301,6 +345,9 @@ function Lightbox({
   onMove: (i: number) => void;
 }) {
   const item = items[index];
+  // Hooks must run on every render, so this is read before the early return
+  // below; `item` can be undefined for one render while the index moves.
+  const full = useSrcWithFallback(item?.url ?? "", item?.originalUrl);
 
   const prev = useCallback(
     () => onMove((index - 1 + items.length) % items.length),
@@ -381,19 +428,21 @@ function Lightbox({
       >
         {item.kind === "video" ? (
           <video
-            src={item.url}
+            src={full.src}
             poster={item.posterUrl || undefined}
             controls
             autoPlay
             loop
             muted
             playsInline
+            onError={full.onError}
             className="max-h-[75vh] w-auto max-w-full rounded-xl"
           />
         ) : (
           <img
-            src={item.url}
+            src={full.src}
             alt={item.alt}
+            onError={full.onError}
             className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain"
           />
         )}
