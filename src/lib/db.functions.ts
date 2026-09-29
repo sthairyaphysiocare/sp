@@ -766,7 +766,7 @@ const capStr = (v: unknown, max: number) => String(v ?? "").slice(0, max);
  * Returns `enabled` so the nav link and the page can agree with each other
  * without a second round trip.
  */
-export const fetchGallery = createServerFn({ method: "GET" }).handler(async () => {
+export const fetchGallery = createServerFn({ method: "POST" }).handler(async () => {
   try {
     const { listGallery, galleryEnabled } = await import("./gallery.server");
     const enabled = await galleryEnabled();
@@ -786,8 +786,14 @@ export const fetchGallery = createServerFn({ method: "GET" }).handler(async () =
  * The header asks this on every public page to decide whether to show the
  * Gallery link, so it deliberately returns one boolean rather than the item
  * list — a nav link should not cost sixty rows.
+ *
+ * POST, not GET, and the same is true of fetchGallery above. A server
+ * function called over GET is an ordinary cacheable HTTP GET: the browser and
+ * anything between it and us may reuse an earlier answer, so switching the
+ * gallery off left visitors being told it was still on. This answer must
+ * always come from the database.
  */
-export const fetchGalleryStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const fetchGalleryStatus = createServerFn({ method: "POST" }).handler(async () => {
   try {
     const { galleryEnabled } = await import("./gallery.server");
     return { enabled: await galleryEnabled() };

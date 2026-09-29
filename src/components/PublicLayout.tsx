@@ -35,27 +35,61 @@ const NAV = [
 /**
  * Whether the Gallery link belongs in the menu.
  *
- * Asked once per browser session and shared by every page, rather than on
- * each navigation: the answer changes only when an admin flips the switch,
- * and a nav link is not worth a request per page. A failure resolves to
- * "hidden", so a hiccup never advertises a page that may not render.
+ * This was previously asked once and then cached for the whole browser
+ * session, on the reasoning that a nav link is not worth a request per page.
+ * That reasoning was wrong: the entire purpose of the switch is that an admin
+ * can turn the gallery off, and a link cached until the next full reload goes
+ * on advertising a page that is no longer meant to exist.
+ *
+ * It is now re-read whenever the answer is older than TTL_MS, whenever the
+ * tab is brought back to the front, and on a slow timer — while still sharing
+ * one in-flight request between every page, so navigating around does not
+ * cause a request per page. A failure keeps whatever was last known and
+ * otherwise resolves to "hidden", so a hiccup never advertises a page that
+ * may not render.
  */
-let galleryEnabledPromise: Promise<boolean> | null = null;
+const GALLERY_FLAG_TTL_MS = 30_000;
+let galleryFlag: { value: boolean; at: number } | null = null;
+let galleryFlagInFlight: Promise<boolean> | null = null;
+
+function readGalleryEnabled(force = false): Promise<boolean> {
+  if (!force && galleryFlag && Date.now() - galleryFlag.at < GALLERY_FLAG_TTL_MS) {
+    return Promise.resolve(galleryFlag.value);
+  }
+  if (galleryFlagInFlight) return galleryFlagInFlight;
+  galleryFlagInFlight = import("@/lib/db.functions")
+    .then(({ fetchGalleryStatus }) => fetchGalleryStatus())
+    .then((r) => r?.enabled === true)
+    .catch(() => galleryFlag?.value ?? false)
+    .then((v) => {
+      galleryFlag = { value: v, at: Date.now() };
+      galleryFlagInFlight = null;
+      return v;
+    });
+  return galleryFlagInFlight;
+}
+
 function useGalleryEnabled(): boolean {
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(() => galleryFlag?.value ?? false);
   useEffect(() => {
     let cancelled = false;
-    if (!galleryEnabledPromise) {
-      galleryEnabledPromise = import("@/lib/db.functions")
-        .then(({ fetchGalleryStatus }) => fetchGalleryStatus())
-        .then((r) => r?.enabled === true)
-        .catch(() => false);
-    }
-    void galleryEnabledPromise.then((v) => {
+    const apply = (v: boolean) => {
       if (!cancelled) setEnabled(v);
-    });
+    };
+    void readGalleryEnabled().then(apply);
+
+    const timer = setInterval(() => void readGalleryEnabled(true).then(apply), 60_000);
+    // Coming back to the tab is the moment someone is most likely to have
+    // changed the setting in another one.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void readGalleryEnabled(true).then(apply);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
   return enabled;

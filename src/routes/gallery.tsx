@@ -27,6 +27,10 @@ export const Route = createFileRoute("/gallery")({
     links: [{ rel: "canonical", href: "/gallery" }],
   }),
   loader: async () => await fetchGallery(),
+  // Never reuse a previous answer. The gallery can be switched off at any
+  // moment, and a cached loader result would keep showing it afterwards.
+  staleTime: 0,
+  shouldReload: true,
   component: GalleryPage,
 });
 
