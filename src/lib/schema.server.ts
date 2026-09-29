@@ -168,6 +168,33 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     at     INTEGER NOT NULL
   )`,
 
+  // Clinic gallery — one row per photo.
+  //
+  // Deliberately OUTSIDE the sync path. syncState() reconciles exactly six
+  // tables (users, patients, visits, clinical_notes, bookings, blocked_slots);
+  // this is not one of them, so no client sync can add, alter or remove a
+  // gallery row no matter what it sends. The only way in or out is an
+  // admin-authenticated server function.
+  //
+  // `public_id` is the Cloudinary asset. It is UNIQUE so the same photo cannot
+  // be recorded twice, and it is what lets an orphaned Cloudinary asset be
+  // matched back to its row.
+  `CREATE TABLE IF NOT EXISTS gallery_items (
+    id          TEXT PRIMARY KEY,
+    public_id   TEXT NOT NULL UNIQUE,
+    url         TEXT NOT NULL,
+    alt         TEXT NOT NULL DEFAULT '',
+    caption     TEXT NOT NULL DEFAULT '',
+    width       INTEGER NOT NULL DEFAULT 0,
+    height      INTEGER NOT NULL DEFAULT 0,
+    bytes       INTEGER NOT NULL DEFAULT 0,
+    format      TEXT NOT NULL DEFAULT '',
+    position    INTEGER NOT NULL DEFAULT 0,
+    visible     INTEGER NOT NULL DEFAULT 1,
+    created_at  INTEGER NOT NULL DEFAULT 0,
+    created_by  TEXT NOT NULL DEFAULT ''
+  )`,
+
   // Legacy single-blob table. Kept ONLY as a read source for the one-time
   // migration into the tables above. Never written to after cutover.
   `CREATE TABLE IF NOT EXISTS app_state (
@@ -181,6 +208,9 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
   `CREATE INDEX IF NOT EXISTS idx_notes_patient ON clinical_notes (patient_id)`,
   `CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status)`,
   `CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions (patient_id)`,
+  // The public carousel reads visible photos in display order on every page
+  // view, so that exact query gets its own index.
+  `CREATE INDEX IF NOT EXISTS idx_gallery_visible ON gallery_items (visible, position, id)`,
 ];
 
 /**
