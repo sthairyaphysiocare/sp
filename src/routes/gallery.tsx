@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { PublicLayout } from "@/components/PublicLayout";
 import { CLINIC } from "@/lib/logo";
 import { fetchGallery } from "@/lib/db.functions";
@@ -30,7 +31,35 @@ export const Route = createFileRoute("/gallery")({
 });
 
 function GalleryPage() {
-  const data = Route.useLoaderData();
+  const initial = Route.useLoaderData();
+  const [data, setData] = useState(initial);
+
+  // Re-read the gallery on arrival, every time.
+  //
+  // The server-rendered HTML carries whatever the gallery held at the moment
+  // that HTML was produced. Any cache between here and the database — the
+  // edge, the browser's own back/forward store — can therefore serve a page
+  // that predates a newly added photo, which is exactly how a photo ends up
+  // visible on the device that uploaded it and nowhere else. The SSR payload
+  // stays responsible for first paint and for search engines; this reconciles
+  // it with what is actually stored.
+  //
+  // Failure is deliberately silent: the rendered page is already a valid view,
+  // so a refresh that cannot complete should leave it alone rather than
+  // replace it with an error.
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/lib/db.functions")
+      .then(({ fetchGallery: refetch }) => refetch())
+      .then((fresh) => {
+        if (!cancelled && fresh) setData(fresh);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const items = (data?.items ?? []) as GalleryMedia[];
   const enabled = data?.enabled === true;
 
