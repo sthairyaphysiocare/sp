@@ -3,35 +3,42 @@ import { cn } from "@/lib/utils";
 import { Play, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * The gallery wall: a bento/masonry of images and short looping clips that
- * slides continuously, with adjacent columns moving in opposite directions.
+ * The gallery wall: rows of images and short looping clips that slide
+ * sideways, with adjacent rows travelling in opposite directions.
  *
  * MOTION
  *
- * Each column renders its items twice and slides by exactly half its own
- * height, so the second copy arrives where the first began and the loop has no
- * visible seam. Odd columns run the same animation in reverse, which is what
- * produces the organic counter-drift.
+ * Each row renders its items twice and slides by exactly half its own width,
+ * so the second copy arrives where the first began and the loop has no
+ * visible seam. Odd rows run the same animation in reverse, which is what
+ * produces the counter-drift.
  *
- * A column with only one or two photos would be shorter than the frame and
- * would leave a gap scrolling through it, so each half repeats its items until
- * there is enough to fill. Both halves repeat identically, which is what keeps
- * the loop seamless.
+ * A row holding only a few photos would be narrower than the frame and would
+ * drag a gap across it, so each half repeats its items until there is enough
+ * to fill. Both halves repeat identically, which is what keeps the loop
+ * seamless.
  *
  * The slide only ever stops for a pointer: hovering, touching or
- * keyboard-focusing any card pauses every column at once, not just the one
- * under the finger — a card that stops while its neighbours keep moving reads
- * as a glitch, and the point of the pause is to let someone look at the thing
- * they reached for.
+ * keyboard-focusing any card pauses every row at once, not just the one under
+ * the finger — a card that stops while its neighbours keep moving reads as a
+ * glitch, and the point of the pause is to let someone look at the thing they
+ * reached for.
  *
- * The animation is CSS, so it runs on the compositor and costs nothing per
- * frame. It is switched off for anyone whose system asks for reduced motion.
+ * BACKGROUND
  *
- * COLOUR
+ * The wall paints no background of its own: the page's own gradient shows
+ * through. The edges are softened with a CSS mask rather than a gradient
+ * overlay, because an overlay has to be painted in some colour and the page
+ * behind it is a three-layer gradient that no flat colour can match. A mask
+ * fades the cards themselves to transparent, so it is correct over any
+ * background, in either theme.
  *
- * The wall sits on the same --surface the rest of the site uses for panels, so
- * it reads as part of the page. Both tokens here are theme-aware, so this
- * follows dark mode on its own rather than imposing a dark block of its own.
+ * CAPTIONS
+ *
+ * The caption is always on screen. It used to appear on hover, which meant it
+ * was invisible on every phone and tablet, where no hover exists. The longer
+ * description is the part that waits for a hover, and on a touch device it is
+ * reached by tapping the photo, which opens the viewer.
  */
 
 export interface GalleryMedia {
@@ -48,6 +55,20 @@ export interface GalleryMedia {
   width: number;
   height: number;
 }
+
+/** A single item cannot slide against itself convincingly; it sits still. */
+const MIN_ITEMS_TO_ANIMATE = 2;
+
+/** Cards each half of a row aims for before it is wide enough to fill the frame. */
+const FILL_TARGET = 8;
+
+/** Seconds per full loop, per row. Deliberately slow, and varied so the rows
+ *  never fall into lockstep with each other. */
+const ROW_SECONDS = [72, 88, 80];
+
+/** Fades the first and last few percent of each row to transparent. Works over
+ *  any background because it removes pixels rather than painting over them. */
+const EDGE_MASK = "linear-gradient(to right, transparent 0, #000 7%, #000 93%, transparent 100%)";
 
 /**
  * Show a transformed URL, but fall back to the original if it will not load.
@@ -78,29 +99,16 @@ function useSrcWithFallback(preferred: string, original?: string) {
   return { src, failed, onError };
 }
 
-/** A single item cannot slide against itself convincingly; it sits still. */
-const MIN_ITEMS_TO_ANIMATE = 2;
-
-/** Items each half of a column aims for before it is tall enough to fill the frame. */
-const FILL_TARGET = 5;
-
-/** Seconds per full loop, per column. Deliberately slow, and varied so the
- *  columns never fall into lockstep with each other. */
-const COLUMN_SECONDS = [64, 78, 70, 86];
-
 export function GalleryWall({ items }: { items: GalleryMedia[] }) {
   const [paused, setPaused] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
-  const [columnCount, setColumnCount] = useState(3);
+  const [rowCount, setRowCount] = useState(3);
   const [reducedMotion, setReducedMotion] = useState(false);
 
-  // Column count follows the viewport: four columns on a phone would make
-  // every card a postage stamp.
+  // Fewer rows on a phone, where three bands of small photos would leave each
+  // one too short to see.
   useEffect(() => {
-    const decide = () => {
-      const w = window.innerWidth;
-      setColumnCount(w >= 1024 ? 4 : w >= 640 ? 3 : 2);
-    };
+    const decide = () => setRowCount(window.innerWidth >= 640 ? 3 : 2);
     decide();
     window.addEventListener("resize", decide);
     return () => window.removeEventListener("resize", decide);
@@ -114,16 +122,16 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  const columns = useMemo(() => {
-    const cols: GalleryMedia[][] = Array.from({ length: columnCount }, () => []);
-    items.forEach((it, i) => cols[i % columnCount].push(it));
-    return cols;
-  }, [items, columnCount]);
+  const rows = useMemo(() => {
+    const out: GalleryMedia[][] = Array.from({ length: rowCount }, () => []);
+    items.forEach((it, i) => out[i % rowCount].push(it));
+    return out;
+  }, [items, rowCount]);
 
   const animate = items.length >= MIN_ITEMS_TO_ANIMATE && !reducedMotion;
 
-  // Position within the ORIGINAL list, so the lightbox's next/previous walk
-  // the gallery in its real order rather than the shuffled column order.
+  // Position within the ORIGINAL list, so the viewer's next/previous walk the
+  // gallery in its real order rather than the shuffled row order.
   const indexById = useMemo(() => {
     const m = new Map<string, number>();
     items.forEach((it, i) => m.set(it.id, i));
@@ -133,76 +141,57 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
   return (
     <>
       <style>{`
-        @keyframes sth-gallery-up   { from { transform: translateY(0); }      to { transform: translateY(-50%); } }
-        @keyframes sth-gallery-down { from { transform: translateY(-50%); }   to { transform: translateY(0); } }
+        @keyframes sth-gallery-left  { from { transform: translateX(0); }    to { transform: translateX(-50%); } }
+        @keyframes sth-gallery-right { from { transform: translateX(-50%); } to { transform: translateX(0); } }
       `}</style>
 
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-3xl",
-          // The site's own panel surface, the same one used elsewhere on the
-          // public pages — not a dark block dropped into a light page.
-          "bg-surface border soft-shadow",
-          "px-4 py-4 sm:px-5 sm:py-5",
-        )}
-      >
-        {/* Soft fades so cards enter and leave the wall rather than being
-            sliced off by a hard edge. Drawn from the panel's own colour. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-16 bg-gradient-to-b from-surface to-transparent"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-16 bg-gradient-to-t from-surface to-transparent"
-        />
+      {/* No background of its own — the page's gradient shows through. */}
+      <div className="flex flex-col gap-4">
+        {rows.map((row, ri) => {
+          // Repeat the row until one half is wide enough to fill the frame;
+          // both halves repeat identically so the loop stays seamless.
+          const reps = row.length ? Math.max(1, Math.ceil(FILL_TARGET / row.length)) : 1;
+          const half = animate ? Array.from({ length: reps }, () => row).flat() : row;
 
-        <div
-          className="grid gap-4 h-[72vh] min-h-[520px] max-h-[860px]"
-          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
-        >
-          {columns.map((col, ci) => {
-            // Repeat the column until one half is tall enough to fill the
-            // frame; both halves repeat identically so the loop stays seamless.
-            const reps = col.length ? Math.max(1, Math.ceil(FILL_TARGET / col.length)) : 1;
-            const half = animate ? Array.from({ length: reps }, () => col).flat() : col;
-
-            return (
-              <div key={ci} className="overflow-hidden">
-                <div
-                  className="flex flex-col gap-4 will-change-transform"
-                  style={
-                    animate
-                      ? {
-                          animationName: ci % 2 === 0 ? "sth-gallery-up" : "sth-gallery-down",
-                          animationDuration: `${COLUMN_SECONDS[ci % COLUMN_SECONDS.length]}s`,
-                          animationTimingFunction: "linear",
-                          animationIterationCount: "infinite",
-                          animationPlayState: paused ? "paused" : "running",
-                        }
-                      : undefined
-                  }
-                >
-                  {(animate ? [0, 1] : [0]).map((copy) =>
-                    half.map((item, i) => (
-                      <Card
-                        key={`${item.id}-${copy}-${i}`}
-                        item={item}
-                        // Only the very first appearance of each item is real
-                        // to assistive technology; the repeats exist purely to
-                        // make the loop seamless and would otherwise be read
-                        // out over and over.
-                        duplicate={!(copy === 0 && i < col.length)}
-                        onHoverChange={setPaused}
-                        onOpen={() => setLightbox(indexById.get(item.id) ?? 0)}
-                      />
-                    )),
-                  )}
-                </div>
+          return (
+            <div
+              key={ri}
+              className="overflow-hidden h-44 sm:h-52 lg:h-60"
+              style={{ maskImage: EDGE_MASK, WebkitMaskImage: EDGE_MASK }}
+            >
+              <div
+                className={cn("flex gap-4 h-full w-max will-change-transform")}
+                style={
+                  animate
+                    ? {
+                        animationName: ri % 2 === 0 ? "sth-gallery-left" : "sth-gallery-right",
+                        animationDuration: `${ROW_SECONDS[ri % ROW_SECONDS.length]}s`,
+                        animationTimingFunction: "linear",
+                        animationIterationCount: "infinite",
+                        animationPlayState: paused ? "paused" : "running",
+                      }
+                    : undefined
+                }
+              >
+                {(animate ? [0, 1] : [0]).map((copy) =>
+                  half.map((item, i) => (
+                    <Card
+                      key={`${item.id}-${copy}-${i}`}
+                      item={item}
+                      // Only the very first appearance of each item is real to
+                      // assistive technology; the repeats exist purely to make
+                      // the loop seamless and would otherwise be read out over
+                      // and over.
+                      duplicate={!(copy === 0 && i < row.length)}
+                      onHoverChange={setPaused}
+                      onOpen={() => setLightbox(indexById.get(item.id) ?? 0)}
+                    />
+                  )),
+                )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
       {lightbox !== null && lightbox >= 0 && (
@@ -228,9 +217,10 @@ function Card({
   onHoverChange: (v: boolean) => void;
   onOpen: () => void;
 }) {
-  // Aspect ratio comes from the real dimensions, so portrait stays portrait
-  // and landscape stays landscape — that unevenness is what makes it a bento
-  // wall rather than a grid of identical tiles.
+  // Aspect ratio comes from the real dimensions, so a portrait photo stays a
+  // narrow card and a landscape one a wide card at the same row height. That
+  // unevenness is what makes it a bento wall rather than a row of identical
+  // tiles.
   const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : 4 / 3;
   const media = useSrcWithFallback(
     item.kind === "video" ? item.url : item.thumbUrl,
@@ -245,16 +235,16 @@ function Card({
       onMouseLeave={() => onHoverChange(false)}
       onFocus={() => onHoverChange(true)}
       onBlur={() => onHoverChange(false)}
-      // Touch gets the same pause as a cursor. onTouchStart fires as the
-      // finger lands, before any tap is resolved, so the wall stops the
-      // instant it is touched rather than only once something is opened.
+      // Touch gets the same pause as a cursor. onTouchStart fires as the finger
+      // lands, before any tap is resolved, so the wall stops the instant it is
+      // touched rather than only once something is opened.
       onTouchStart={() => onHoverChange(true)}
       onTouchEnd={() => onHoverChange(false)}
       onTouchCancel={() => onHoverChange(false)}
       aria-hidden={duplicate ? "true" : undefined}
       tabIndex={duplicate ? -1 : 0}
       className={cn(
-        "group relative block w-full overflow-hidden rounded-2xl cursor-pointer",
+        "group relative h-full shrink-0 overflow-hidden rounded-2xl cursor-pointer",
         "bg-card border",
         "transition-[transform,box-shadow] duration-300 ease-out",
         "hover:scale-[1.03] hover:shadow-xl hover:shadow-foreground/15",
@@ -298,32 +288,40 @@ function Card({
       {item.kind === "video" && (
         <span
           aria-hidden="true"
-          className="absolute top-3 right-3 grid size-7 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm"
+          className="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm"
         >
-          <Play className="size-3.5 fill-current" />
+          <Play className="size-3 fill-current" />
         </span>
       )}
 
       {(item.caption || item.description) && (
         <span
           className={cn(
-            "absolute inset-x-0 bottom-0 p-3 text-left",
+            "absolute inset-x-0 bottom-0 p-2.5 text-left",
             // Sits over the photograph itself, so it stays dark regardless of
-            // the panel behind it — that is what keeps the text readable on
-            // any image.
-            "bg-gradient-to-t from-black/80 via-black/40 to-transparent",
-            "opacity-0 translate-y-1 transition-all duration-300",
-            "group-hover:opacity-100 group-hover:translate-y-0",
-            "group-focus-visible:opacity-100 group-focus-visible:translate-y-0",
+            // the page behind it — that is what keeps the text readable on any
+            // image.
+            "bg-gradient-to-t from-black/85 via-black/45 to-transparent",
           )}
         >
           {item.caption && (
-            <span className="block text-sm font-semibold text-white leading-snug">
+            <span className="block text-[13px] font-semibold text-white leading-snug line-clamp-2">
               {item.caption}
             </span>
           )}
           {item.description && (
-            <span className="mt-0.5 block text-xs text-white/75 leading-snug line-clamp-2">
+            <span
+              className={cn(
+                "block text-[11px] text-white/80 leading-snug",
+                // The description is the part that waits for a hover. On a
+                // touch device there is no hover, so tapping the photo opens
+                // the viewer, which shows it in full.
+                "max-h-0 overflow-hidden opacity-0",
+                "transition-all duration-300 ease-out",
+                "group-hover:mt-1 group-hover:max-h-16 group-hover:opacity-100",
+                "group-focus-visible:mt-1 group-focus-visible:max-h-16 group-focus-visible:opacity-100",
+              )}
+            >
               {item.description}
             </span>
           )}
