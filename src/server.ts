@@ -58,7 +58,14 @@ const SECURITY_HEADERS: Record<string, string> = {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://api.emailjs.com",
+    // api.cloudinary.com is where gallery uploads go. The browser posts the
+    // file directly there, so without this origin the request is blocked
+    // before it leaves the page and surfaces only as a network error.
+    "connect-src 'self' https://api.emailjs.com https://api.cloudinary.com",
+    // Gallery videos are served from Cloudinary's delivery host. Without an
+    // explicit media-src this falls back to default-src 'self' and every clip
+    // is blocked — images are unaffected because img-src already allows https.
+    "media-src 'self' blob: https://res.cloudinary.com",
     "frame-src https://www.google.com https://maps.google.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
