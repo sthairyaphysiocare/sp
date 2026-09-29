@@ -11,6 +11,7 @@ import {
   UserCog,
   Menu,
   FileBarChart2,
+  Images,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,12 @@ const NAV: NavItem[] = [
     roles: ["admin", "therapist", "reception", "other"],
   },
   { to: "/app/staff", label: "Staff", icon: <UserCog className="size-4" />, roles: ["admin"] },
+  {
+    to: "/app/gallery",
+    label: "Gallery",
+    icon: <Images className="size-4" />,
+    roles: ["admin"],
+  },
   {
     to: "/app/settings",
     label: "Settings",

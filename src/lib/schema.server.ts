@@ -192,7 +192,10 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
     position    INTEGER NOT NULL DEFAULT 0,
     visible     INTEGER NOT NULL DEFAULT 1,
     created_at  INTEGER NOT NULL DEFAULT 0,
-    created_by  TEXT NOT NULL DEFAULT ''
+    created_by  TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL DEFAULT 'image',
+    description TEXT NOT NULL DEFAULT '',
+    duration    REAL NOT NULL DEFAULT 0
   )`,
 
   // Legacy single-blob table. Kept ONLY as a read source for the one-time
@@ -221,6 +224,14 @@ export const SCHEMA_STATEMENTS: ReadonlyArray<string> = [
 const ADDITIVE_MIGRATIONS: ReadonlyArray<string> = [
   `ALTER TABLE users ADD COLUMN locked INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`,
+  // gallery_items shipped before it carried video, a description or a
+  // duration. CREATE TABLE IF NOT EXISTS is a no-op on a database that
+  // already has the table, so these columns can only reach an existing
+  // deployment as ALTER statements. Each has a DEFAULT, so existing rows
+  // stay valid and nothing needs backfilling.
+  `ALTER TABLE gallery_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'`,
+  `ALTER TABLE gallery_items ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE gallery_items ADD COLUMN duration REAL NOT NULL DEFAULT 0`,
 ];
 
 let initPromise: Promise<void> | null = null;

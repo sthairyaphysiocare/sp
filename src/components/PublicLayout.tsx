@@ -33,6 +33,35 @@ const NAV = [
 ];
 
 /**
+ * Whether the Gallery link belongs in the menu.
+ *
+ * Asked once per browser session and shared by every page, rather than on
+ * each navigation: the answer changes only when an admin flips the switch,
+ * and a nav link is not worth a request per page. A failure resolves to
+ * "hidden", so a hiccup never advertises a page that may not render.
+ */
+let galleryEnabledPromise: Promise<boolean> | null = null;
+function useGalleryEnabled(): boolean {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!galleryEnabledPromise) {
+      galleryEnabledPromise = import("@/lib/db.functions")
+        .then(({ fetchGalleryStatus }) => fetchGalleryStatus())
+        .then((r) => r?.enabled === true)
+        .catch(() => false);
+    }
+    void galleryEnabledPromise.then((v) => {
+      if (!cancelled) setEnabled(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return enabled;
+}
+
+/**
  * Loads the standalone visual-enhancement layer (public/ui-enhancements.css
  * + .js) exactly once per browser session, regardless of how many times
  * PublicLayout mounts across client-side navigations. The script exposes
@@ -145,6 +174,13 @@ export function PublicLayout({ children }: { children: ReactNode }) {
           icon: x.icon,
         }))
     : [];
+  // The Gallery sits after Specialities when it is switched on, and the menu
+  // is exactly as it was before when it is not.
+  const galleryOn = useGalleryEnabled();
+  const nav = galleryOn
+    ? [...NAV.slice(0, 3), { to: "/gallery", label: "Gallery" }, ...NAV.slice(3)]
+    : NAV;
+
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -239,7 +275,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <Logo size={52} />
           </Link>
           <nav className="hidden md:flex items-center gap-1">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <Link
                 key={n.to}
                 to={n.to}
@@ -285,7 +321,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               "menu-panel-in",
             )}
           >
-            {NAV.map((n, i) => (
+            {nav.map((n, i) => (
               <Link
                 key={n.to}
                 to={n.to}
@@ -322,7 +358,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             <Link
               to={signedIn ? "/app" : "/auth"}
               onClick={() => handleMenuTap(signedIn ? "/app" : "/auth")}
-              style={{ animationDelay: `${NAV.length * 35}ms` }}
+              style={{ animationDelay: `${nav.length * 35}ms` }}
               className="menu-item menu-item-in block pt-1"
             >
               <Button className="w-full brand-gradient text-white border-0 transition-transform duration-150 active:scale-[0.985]">

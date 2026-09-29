@@ -737,3 +737,243 @@ export const fetchPatientsPage = createServerFn({ method: "GET" })
       return { patients: [], total: -1 };
     }
   });
+
+// ---------------------------------------------------------------------------
+// Gallery
+//
+// Every function that changes anything requires a signed session token
+// belonging to an admin. The token is minted server-side at login and
+// verified here against SESSION_SECRET, so a caller cannot forge one or
+// promote themselves by editing what the browser stores. A UI check alone
+// would be decoration: these endpoints are reachable directly.
+//
+// Reads are public by design — the gallery is published to visitors — but the
+// public read returns only items marked visible, and only when the gallery is
+// switched on.
+// ---------------------------------------------------------------------------
+
+/** Shared guard. Returns the admin's claims, or null to deny. */
+async function requireAdmin(token: unknown) {
+  const { verifyAdmin } = await import("./sessionToken.server");
+  return verifyAdmin(token);
+}
+
+const capStr = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+
+/**
+ * What the public site shows: visible items, and only when the gallery is on.
+ *
+ * Returns `enabled` so the nav link and the page can agree with each other
+ * without a second round trip.
+ */
+export const fetchGallery = createServerFn({ method: "GET" }).handler(async () => {
+  try {
+    const { listGallery, galleryEnabled } = await import("./gallery.server");
+    const enabled = await galleryEnabled();
+    if (!enabled) return { enabled: false, items: [] };
+    return { enabled: true, items: await listGallery(false) };
+  } catch (err) {
+    console.error("[fetchGallery] failed:", err);
+    // A gallery that cannot be read simply does not appear; it must never
+    // take the page down with it.
+    return { enabled: false, items: [] };
+  }
+});
+
+/**
+ * Just the on/off flag.
+ *
+ * The header asks this on every public page to decide whether to show the
+ * Gallery link, so it deliberately returns one boolean rather than the item
+ * list — a nav link should not cost sixty rows.
+ */
+export const fetchGalleryStatus = createServerFn({ method: "GET" }).handler(async () => {
+  try {
+    const { galleryEnabled } = await import("./gallery.server");
+    return { enabled: await galleryEnabled() };
+  } catch {
+    return { enabled: false };
+  }
+});
+
+/** Everything, hidden items included. Admin only. */
+export const fetchGalleryAdmin = createServerFn({ method: "POST" })
+  .inputValidator((input: { token?: string }) => ({ token: capStr(input?.token, 4096) }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.token))) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { listGallery, galleryEnabled } = await import("./gallery.server");
+      return {
+        ok: true as const,
+        enabled: await galleryEnabled(),
+        items: await listGallery(true),
+      };
+    } catch (err) {
+      console.error("[fetchGalleryAdmin] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/**
+ * A one-shot, server-signed permission slip for a single upload.
+ *
+ * The server chooses the folder and the filename; both are covered by the
+ * signature, so the browser cannot redirect the upload elsewhere in the
+ * account or overwrite an existing asset.
+ */
+export const galleryUploadTicket = createServerFn({ method: "POST" })
+  .inputValidator((input: { token?: string; kind?: string }) => ({
+    token: capStr(input?.token, 4096),
+    kind: input?.kind === "video" ? ("video" as const) : ("image" as const),
+  }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.token))) return { ok: false as const, reason: "forbidden" };
+    const { signUploadTicket } = await import("./cloudinary.server");
+    const { GALLERY_FOLDER, galleryCount, galleryVideoCount, MAX_ITEMS, MAX_VIDEOS } =
+      await import("./gallery.server");
+    try {
+      // Checked before the upload as well as after it, so a full gallery
+      // fails immediately instead of after the file has been sent and then
+      // deleted again.
+      if ((await galleryCount()) >= MAX_ITEMS) return { ok: false as const, reason: "full" };
+      if (data.kind === "video" && (await galleryVideoCount()) >= MAX_VIDEOS) {
+        return { ok: false as const, reason: "too-many-videos" };
+      }
+      const publicId = `gal_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const ticket = await signUploadTicket({
+        folder: GALLERY_FOLDER,
+        publicId,
+        kind: data.kind,
+      });
+      if (!ticket) return { ok: false as const, reason: "not-configured" };
+      return { ok: true as const, ticket, publicId: `${GALLERY_FOLDER}/${publicId}` };
+    } catch (err) {
+      console.error("[galleryUploadTicket] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/** Record an upload after verifying with Cloudinary what was actually stored. */
+export const galleryAdd = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      token?: string;
+      publicId?: string;
+      kind?: string;
+      caption?: string;
+      description?: string;
+    }) => ({
+      token: capStr(input?.token, 4096),
+      publicId: capStr(input?.publicId, 300),
+      kind: input?.kind === "video" ? ("video" as const) : ("image" as const),
+      caption: capStr(input?.caption, 200),
+      description: capStr(input?.description, 500),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const claims = await requireAdmin(data.token);
+    if (!claims) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { addGalleryItem } = await import("./gallery.server");
+      return await addGalleryItem({
+        publicId: data.publicId,
+        kind: data.kind,
+        caption: data.caption,
+        description: data.description,
+        createdBy: claims.uid,
+      });
+    } catch (err) {
+      console.error("[galleryAdd] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/** Edit caption, description or visibility of one item. */
+export const galleryUpdate = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      token?: string;
+      id?: string;
+      caption?: string;
+      description?: string;
+      visible?: boolean;
+    }) => ({
+      token: capStr(input?.token, 4096),
+      id: capStr(input?.id, 120),
+      caption: input?.caption === undefined ? undefined : capStr(input.caption, 200),
+      description: input?.description === undefined ? undefined : capStr(input.description, 500),
+      visible: typeof input?.visible === "boolean" ? input.visible : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.token))) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { updateGalleryItem } = await import("./gallery.server");
+      const done = await updateGalleryItem(data.id, {
+        caption: data.caption,
+        description: data.description,
+        visible: data.visible,
+      });
+      return done ? { ok: true as const } : { ok: false as const, reason: "not-found" };
+    } catch (err) {
+      console.error("[galleryUpdate] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/** Remove one item, and its Cloudinary asset with it. */
+export const galleryDelete = createServerFn({ method: "POST" })
+  .inputValidator((input: { token?: string; id?: string }) => ({
+    token: capStr(input?.token, 4096),
+    id: capStr(input?.id, 120),
+  }))
+  .handler(async ({ data }) => {
+    const claims = await requireAdmin(data.token);
+    if (!claims) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { deleteGalleryItem } = await import("./gallery.server");
+      const done = await deleteGalleryItem(data.id, claims.uid);
+      return done ? { ok: true as const } : { ok: false as const, reason: "not-found" };
+    } catch (err) {
+      console.error("[galleryDelete] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/** Set the display order. Ids not listed keep their current position. */
+export const galleryReorder = createServerFn({ method: "POST" })
+  .inputValidator((input: { token?: string; ids?: unknown }) => ({
+    token: capStr(input?.token, 4096),
+    ids: Array.isArray(input?.ids)
+      ? input.ids.slice(0, 200).map((v) => String(v).slice(0, 120))
+      : [],
+  }))
+  .handler(async ({ data }) => {
+    if (!(await requireAdmin(data.token))) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { reorderGallery } = await import("./gallery.server");
+      return { ok: true as const, moved: await reorderGallery(data.ids) };
+    } catch (err) {
+      console.error("[galleryReorder] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });
+
+/** The master switch: whether the gallery appears on the public site at all. */
+export const gallerySetEnabled = createServerFn({ method: "POST" })
+  .inputValidator((input: { token?: string; enabled?: boolean }) => ({
+    token: capStr(input?.token, 4096),
+    enabled: input?.enabled === true,
+  }))
+  .handler(async ({ data }) => {
+    const claims = await requireAdmin(data.token);
+    if (!claims) return { ok: false as const, reason: "forbidden" };
+    try {
+      const { setGalleryEnabled } = await import("./gallery.server");
+      await setGalleryEnabled(data.enabled, claims.uid);
+      return { ok: true as const, enabled: data.enabled };
+    } catch (err) {
+      console.error("[gallerySetEnabled] failed:", err);
+      return { ok: false as const, reason: "error" };
+    }
+  });

@@ -16,9 +16,11 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BookRouteImport } from './routes/book'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DeveloperRouteImport } from './routes/developer'
+import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as SpecialitiesRouteImport } from './routes/specialities'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppBookingsRouteImport } from './routes/app.bookings'
+import { Route as AppGalleryRouteImport } from './routes/app.gallery'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppStaffRouteImport } from './routes/app.staff'
@@ -62,6 +64,11 @@ const DeveloperRoute = DeveloperRouteImport.update({
   path: '/developer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SpecialitiesRoute = SpecialitiesRouteImport.update({
   id: '/specialities',
   path: '/specialities',
@@ -75,6 +82,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppBookingsRoute = AppBookingsRouteImport.update({
   id: '/bookings',
   path: '/bookings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGalleryRoute = AppGalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
   getParentRoute: () => AppRoute,
 } as any)
 const AppReportsRoute = AppReportsRouteImport.update({
@@ -121,8 +133,10 @@ export interface FileRoutesByFullPath {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/developer': typeof DeveloperRoute
+  '/gallery': typeof GalleryRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/gallery': typeof AppGalleryRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
@@ -139,8 +153,10 @@ export interface FileRoutesByTo {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/developer': typeof DeveloperRoute
+  '/gallery': typeof GalleryRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/gallery': typeof AppGalleryRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
@@ -159,8 +175,10 @@ export interface FileRoutesById {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/developer': typeof DeveloperRoute
+  '/gallery': typeof GalleryRoute
   '/specialities': typeof SpecialitiesRoute
   '/app/bookings': typeof AppBookingsRoute
+  '/app/gallery': typeof AppGalleryRoute
   '/app/reports': typeof AppReportsRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/staff': typeof AppStaffRoute
@@ -180,8 +198,10 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/developer'
+    | '/gallery'
     | '/specialities'
     | '/app/bookings'
+    | '/app/gallery'
     | '/app/reports'
     | '/app/settings'
     | '/app/staff'
@@ -198,8 +218,10 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/developer'
+    | '/gallery'
     | '/specialities'
     | '/app/bookings'
+    | '/app/gallery'
     | '/app/reports'
     | '/app/settings'
     | '/app/staff'
@@ -217,8 +239,10 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/developer'
+    | '/gallery'
     | '/specialities'
     | '/app/bookings'
+    | '/app/gallery'
     | '/app/reports'
     | '/app/settings'
     | '/app/staff'
@@ -237,6 +261,7 @@ export interface RootRouteChildren {
   BookRoute: typeof BookRoute
   ContactRoute: typeof ContactRoute
   DeveloperRoute: typeof DeveloperRoute
+  GalleryRoute: typeof GalleryRoute
   SpecialitiesRoute: typeof SpecialitiesRoute
 }
 
@@ -291,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeveloperRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/specialities': {
       id: '/specialities'
       path: '/specialities'
@@ -310,6 +342,13 @@ declare module '@tanstack/react-router' {
       path: '/bookings'
       fullPath: '/app/bookings'
       preLoaderRoute: typeof AppBookingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/gallery': {
+      id: '/app/gallery'
+      path: '/gallery'
+      fullPath: '/app/gallery'
+      preLoaderRoute: typeof AppGalleryRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/reports': {
@@ -366,6 +405,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBookingsRoute: typeof AppBookingsRoute
+  AppGalleryRoute: typeof AppGalleryRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppStaffRoute: typeof AppStaffRoute
@@ -378,6 +418,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppBookingsRoute: AppBookingsRoute,
+  AppGalleryRoute: AppGalleryRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppStaffRoute: AppStaffRoute,
@@ -398,6 +439,7 @@ const rootRouteChildren: RootRouteChildren = {
   BookRoute: BookRoute,
   ContactRoute: ContactRoute,
   DeveloperRoute: DeveloperRoute,
+  GalleryRoute: GalleryRoute,
   SpecialitiesRoute: SpecialitiesRoute,
 }
 export const routeTree = rootRouteImport

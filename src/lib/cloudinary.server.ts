@@ -114,10 +114,19 @@ async function sign(
   return hex(await crypto.subtle.digest(algo, data));
 }
 
+/**
+ * Cloudinary keeps images and videos in separate resource types, and every
+ * endpoint — upload, inspect, delete — is addressed by type. Getting this
+ * wrong does not error loudly; it quietly looks in the wrong place, which is
+ * why it is threaded through explicitly rather than inferred from a filename.
+ */
+export type MediaKind = "image" | "video";
+
 export interface UploadTicket {
   cloudName: string;
   apiKey: string;
   uploadUrl: string;
+  kind: MediaKind;
   /** Exactly the fields that were signed — the browser must post these verbatim. */
   params: Record<string, string | number>;
   signature: string;
@@ -127,15 +136,15 @@ export interface UploadTicket {
  * Mint a ticket for one upload of one specific asset.
  *
  * The caller decides folder and public id; the browser cannot alter either,
- * because changing them invalidates the signature. `overwrite: false` and
- * `invalidate: false` mean a ticket can never be replayed to clobber an
- * existing image.
+ * because changing them invalidates the signature. `overwrite: false` means a
+ * ticket can never be replayed to clobber an asset that already exists.
  *
  * Returns null when Cloudinary is not configured.
  */
 export async function signUploadTicket(opts: {
   folder: string;
   publicId: string;
+  kind: MediaKind;
 }): Promise<UploadTicket | null> {
   const cfg = cloudinaryConfig();
   if (!cfg) {
@@ -151,14 +160,17 @@ export async function signUploadTicket(opts: {
     public_id: opts.publicId,
     // Never let an upload replace an asset that already exists.
     overwrite: "false",
-    // Strip camera metadata (including any GPS coordinates) from clinic photos.
-    exif: "false",
   };
+  // Camera metadata (including any GPS coordinates) is stripped from photos.
+  // The flag is image-only; sending it on a video upload changes the signed
+  // string and Cloudinary then rejects the whole upload.
+  if (opts.kind === "image") params.exif = "false";
 
   return {
     cloudName: cfg.cloudName,
     apiKey: cfg.apiKey,
-    uploadUrl: `${API_BASE}/${cfg.cloudName}/image/upload`,
+    uploadUrl: `${API_BASE}/${cfg.cloudName}/${opts.kind}/upload`,
+    kind: opts.kind,
     params,
     signature: await sign(params, cfg),
   };
@@ -172,6 +184,8 @@ export interface AssetInfo {
   height: number;
   secureUrl: string;
   version: number;
+  /** Videos only; seconds. 0 for images. */
+  duration: number;
 }
 
 function basicAuth(cfg: CloudinaryConfig): string {
@@ -186,11 +200,21 @@ function basicAuth(cfg: CloudinaryConfig): string {
  * asset does not exist, the credentials are missing, or the call fails —
  * callers treat null as "do not record this".
  */
-export async function inspectAsset(publicId: string): Promise<AssetInfo | null> {
+export async function inspectAsset(
+  publicId: string,
+  kind: MediaKind = "image",
+): Promise<AssetInfo | null> {
   const cfg = cloudinaryConfig();
   if (!cfg || !publicId) return null;
   try {
-    const url = `${API_BASE}/${cfg.cloudName}/resources/image/upload/${encodeURIComponent(publicId)}`;
+    // The public id may contain slashes (it includes the folder), and those
+    // are path separators here — encoding them would ask Cloudinary for an
+    // asset whose name literally contains "%2F", which does not exist.
+    const path = publicId
+      .split("/")
+      .map((seg) => encodeURIComponent(seg))
+      .join("/");
+    const url = `${API_BASE}/${cfg.cloudName}/resources/${kind}/upload/${path}`;
     const res = await fetch(url, { headers: { Authorization: basicAuth(cfg) } });
     if (!res.ok) return null;
     const j = (await res.json()) as Record<string, unknown>;
@@ -203,6 +227,7 @@ export async function inspectAsset(publicId: string): Promise<AssetInfo | null> 
       height: Number(j.height ?? 0),
       secureUrl: String(j.secure_url ?? ""),
       version: Number(j.version ?? 0),
+      duration: Number(j.duration ?? 0),
     };
   } catch (err) {
     console.error("[cloudinary] inspectAsset failed:", err);
@@ -218,7 +243,7 @@ export async function inspectAsset(publicId: string): Promise<AssetInfo | null> 
  * one — can clear a folder. Patient records live in Turso and are untouched
  * by anything here.
  */
-export async function destroyAsset(publicId: string): Promise<boolean> {
+export async function destroyAsset(publicId: string, kind: MediaKind = "image"): Promise<boolean> {
   const cfg = cloudinaryConfig();
   if (!cfg || !publicId) return false;
   try {
@@ -229,7 +254,7 @@ export async function destroyAsset(publicId: string): Promise<boolean> {
       api_key: cfg.apiKey,
       signature: await sign(params, cfg),
     });
-    const res = await fetch(`${API_BASE}/${cfg.cloudName}/image/destroy`, {
+    const res = await fetch(`${API_BASE}/${cfg.cloudName}/${kind}/destroy`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
@@ -246,3 +271,30 @@ export async function destroyAsset(publicId: string): Promise<boolean> {
 
 /** Seconds a freshly issued ticket stays plausible; exported for tests. */
 export const TICKET_TTL = TICKET_TTL_SECONDS;
+
+/**
+ * Rewrite a Cloudinary URL to request a transformed version.
+ *
+ * Serving originals is what actually exhausts the free tier: the allowance is
+ * shared across storage, transformations and delivery, and delivery is by far
+ * the largest of the three for a gallery. Asking for a width cap plus
+ * automatic format and quality typically cuts the bytes several-fold, and
+ * Cloudinary caches each derived asset so the transformation is charged once,
+ * not per view.
+ *
+ * Returns the URL unchanged if it is not a Cloudinary delivery URL, so a
+ * malformed or foreign URL degrades to "show the original" rather than
+ * breaking the image.
+ */
+export function transformedUrl(secureUrl: string, transform: string): string {
+  if (!secureUrl || !transform) return secureUrl;
+  const marker = "/upload/";
+  const i = secureUrl.indexOf(marker);
+  if (i === -1) return secureUrl;
+  const head = secureUrl.slice(0, i + marker.length);
+  const tail = secureUrl.slice(i + marker.length);
+  // Already transformed (a previous call, or a URL that arrived with one):
+  // leave it alone rather than stacking transformations on top of each other.
+  if (/^[a-z]{1,3}_[^/]+\//.test(tail)) return secureUrl;
+  return `${head}${transform}/${tail}`;
+}
