@@ -24,6 +24,7 @@ import {
   registerLoginFailure,
   clearLoginFailures,
   lockoutRemainingMs,
+  saveAuthToken as sessSaveToken,
 } from "./session";
 
 const KEY = "sthairya.db.v2";
@@ -761,8 +762,13 @@ export const store = {
     try {
       const { verifyLogin } = await import("./db.functions");
       const res = await verifyLogin({ data: { username, password } });
-      if (res.ok) serverOk = res.userId;
-      else if (res.reason === "no-state")
+      if (res.ok) {
+        serverOk = res.userId;
+        // Keep the server-issued signed token; this is what actually proves
+        // identity to protected server functions. Null when the server has no
+        // SESSION_SECRET configured, in which case protected actions deny.
+        sessSaveToken("token" in res ? (res.token as string | null) : null);
+      } else if (res.reason === "no-state")
         serverReachable = false; // fall through to local
       else if (res.reason === "account-locked") {
         return { ok: false, reason: "account-locked" };

@@ -10,6 +10,8 @@
 const SESSION_KEY = "sthairya.session";
 const LOCK_KEY = "sthairya.lockouts";
 const OTP_KEY = "sthairya.otp";
+/** Server-issued signed session token; see saveAuthToken below. */
+const TOKEN_KEY = "sthairya.token";
 
 // Sessions live ONLY in sessionStorage: destroyed automatically when the
 // browser window/tab closes, and after 5 minutes of inactivity below.
@@ -79,6 +81,9 @@ export function scrubLegacyAuthStorage() {
 export function purgeSession() {
   safeDel(SESSION_KEY);
   safeDel(OTP_KEY);
+  // The signed token must die with the session; otherwise a credential the
+  // server still honours outlives the logout that was meant to end it.
+  safeDel(TOKEN_KEY);
 }
 
 export function loadSession(): StoredSession | null {
@@ -99,8 +104,45 @@ export function touchSession() {
   const s = loadSession();
   if (s) safeSet(SESSION_KEY, { ...s, expiresAt: Date.now() + IDLE_MS });
 }
+/**
+ * The server-issued session token, kept beside the session itself.
+ *
+ * Held in sessionStorage for the same reasons the session is: it dies with
+ * the tab and is never synced to the cloud. Unlike the session object, this
+ * token is signed by the server and is what actually proves identity to
+ * protected server functions — the client cannot mint or alter one.
+ */
+export function saveAuthToken(token: string | null | undefined) {
+  if (typeof window === "undefined") return;
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable — protected actions will simply be denied */
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearAuthToken() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* nothing to do */
+  }
+}
+
 export function clearSession() {
   safeDel(SESSION_KEY);
+  safeDel(TOKEN_KEY);
 }
 
 // ---- lockouts ----

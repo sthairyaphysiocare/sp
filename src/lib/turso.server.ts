@@ -355,7 +355,9 @@ export async function listPatientsPage(opts: {
     ? `WHERE lower(full_name) LIKE :like OR lower(search_name) LIKE :like
          OR lower(patient_id) LIKE :like OR mobile LIKE :like`
     : "";
-  const args = q ? { like: `%${q}%` } : {};
+  // Typed explicitly: a bare `q ? {like} : {}` narrows to a union whose empty
+  // branch is not assignable to the driver's named-argument type.
+  const args: Record<string, string> = q ? { like: `%${q}%` } : {};
 
   const [rowsRes, countRes] = await db.batch(
     [

@@ -503,7 +503,13 @@ export const verifyLogin = createServerFn({ method: "POST" })
       });
     }
     await auditEvent("auth.ok", userId);
-    return { ok: true as const, userId };
+    // Issue a signed token the SERVER can verify on later requests. Purely
+    // additive: login behaves exactly as before and still succeeds if no
+    // SESSION_SECRET is configured — the token is simply null, and protected
+    // actions then deny rather than allow.
+    const { issueSessionToken } = await import("./sessionToken.server");
+    const token = await issueSessionToken(userId, String(row.role ?? "other"));
+    return { ok: true as const, userId, token };
   });
 
 /**
