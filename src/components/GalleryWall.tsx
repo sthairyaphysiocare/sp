@@ -194,8 +194,14 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
         {/* The perspective stage. The page's own background shows through —
             the gallery paints no panel of its own. */}
         <div
-          className="relative h-[340px] sm:h-[440px] lg:h-[520px]"
-          style={{ perspective: "1400px", perspectiveOrigin: "50% 45%" }}
+          // overflow-hidden matters on a phone: the receding neighbours reach
+          // past the screen edge, and without clipping they give the whole
+          // page a sideways scrollbar.
+          className="relative overflow-hidden h-[380px] sm:h-[480px] lg:h-[580px]"
+          // perspectiveOrigin is centred. Moving it off-centre makes every
+          // receding card drift towards the vanishing point, so the row of
+          // cards stops sharing a baseline and reads as misaligned.
+          style={{ perspective: "1600px", perspectiveOrigin: "50% 50%" }}
           role="group"
           aria-roledescription="carousel"
           aria-label="Clinic gallery"
@@ -204,51 +210,84 @@ export function GalleryWall({ items }: { items: GalleryMedia[] }) {
             const abs = Math.abs(off);
             const sign = Math.sign(off);
             return (
-              <button
+              /*
+               * POSITIONING LIVES ON THIS WRAPPER, NOT ON THE CARD.
+               *
+               * The site's enhancement script binds a hover tilt to every
+               * `main .bg-card` and writes an inline `transform` on mousemove
+               * and again on mouseleave. Anything holding its position in
+               * `transform` therefore loses that position the moment a mouse
+               * touches it — including the translate(-50%, -50%) that centres
+               * it, which is what threw the hovered card down and to the
+               * right and later stacked every card on one spot.
+               *
+               * A plain div carries no `.bg-card` and is not a button, so the
+               * script leaves it alone and the geometry holds. The card
+               * inside is free to be hovered, lifted and tilted; whatever it
+               * does to its own transform cannot move the frame it sits in.
+               */
+              <div
                 key={item.id}
-                type="button"
-                onClick={() => (off === 0 ? setLightbox(i) : go(off))}
-                aria-hidden={visible ? undefined : "true"}
-                tabIndex={visible ? 0 : -1}
-                aria-label={
-                  off === 0 ? `Open ${item.caption || "photo"}` : `Show ${item.caption || "photo"}`
-                }
                 className={cn(
-                  "absolute top-1/2 left-1/2 cursor-pointer rounded-2xl overflow-hidden",
-                  "border bg-card",
-                  "w-[76%] max-w-[420px] sm:w-[58%] h-[86%]",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                  "absolute top-1/2 left-1/2",
+                  "w-[82%] max-w-[320px] sm:w-[62%] sm:max-w-[480px] lg:max-w-[600px] h-[88%]",
                   // Only transform and opacity animate, so the whole stage
                   // stays on the compositor and remains smooth on a phone.
-                  "transition-[transform,opacity,box-shadow] duration-700",
+                  "transition-[transform,opacity] duration-700",
                   "[transition-timing-function:cubic-bezier(0.22,1,0.36,1)]",
-                  off === 0 ? "shadow-2xl shadow-foreground/25" : "shadow-lg shadow-foreground/10",
                 )}
                 style={{
                   transform: [
                     "translate(-50%, -50%)",
-                    `translateX(${off * 38}%)`,
-                    `translateZ(${-abs * 240}px)`,
-                    `rotateY(${-sign * Math.min(abs, 2) * 32}deg)`,
-                    `scale(${1 - abs * 0.06})`,
+                    // Not a straight multiple of the depth: perspective
+                    // already pulls a receding card towards the centre, so a
+                    // linear step leaves the second neighbour almost entirely
+                    // hidden behind the first. These two values place each
+                    // one where a usable strip of it stays visible.
+                    `translateX(${sign * (abs === 1 ? 56 : abs >= 2 ? 94 : 0)}%)`,
+                    `translateZ(${-abs * 260}px)`,
+                    `rotateY(${-sign * Math.min(abs, 2) * 30}deg)`,
+                    `scale(${1 - abs * 0.05})`,
                   ].join(" "),
                   opacity: visible ? 1 - abs * 0.3 : 0,
                   zIndex: 20 - abs,
                   pointerEvents: visible ? "auto" : "none",
-                  transformStyle: "preserve-3d",
                 }}
               >
-                <Media item={item} />
-                {/* Neighbours are dimmed so the front photograph is plainly
-                    the subject rather than one of three competing for it. */}
-                {off !== 0 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-0 bg-foreground/25 transition-opacity duration-700"
-                  />
-                )}
-                {off === 0 && <CardCaption item={item} />}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => (off === 0 ? setLightbox(i) : go(off))}
+                  aria-hidden={visible ? undefined : "true"}
+                  tabIndex={visible ? 0 : -1}
+                  aria-label={
+                    off === 0
+                      ? `Open ${item.caption || "photo"}`
+                      : `Show ${item.caption || "photo"}`
+                  }
+                  className={cn(
+                    "group relative block h-full w-full cursor-pointer overflow-hidden rounded-2xl",
+                    // Deliberately not `bg-card`: that class is what the tilt
+                    // script looks for. The colour only shows if an image
+                    // fails to load.
+                    "border bg-muted",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                    off === 0
+                      ? "shadow-2xl shadow-foreground/25"
+                      : "shadow-lg shadow-foreground/10",
+                  )}
+                >
+                  <Media item={item} />
+                  {/* Neighbours are dimmed so the front photograph is plainly
+                      the subject rather than one of three competing for it. */}
+                  {off !== 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-0 bg-foreground/25 transition-opacity duration-700"
+                    />
+                  )}
+                  {off === 0 && <CardCaption item={item} />}
+                </button>
+              </div>
             );
           })}
         </div>
